@@ -74,6 +74,20 @@ scheletro di 19 ossa, con **cloth simulation** (cappotti, gonne, sciarpe, code d
 animazioni a keyframe con easing, **IK a due ossa** guidata dall'arma (le traiettorie della lama sono
 autorate e le braccia seguono), scie delle lame, inclinazione/banking in volo e mira che segue la camera.
 
+### Stile e animazioni
+- **Occhi anime** a strati (sclera, iride bicolore, pupilla, riflessi, ciglia) visibili attraverso
+  maschere e visori, con battito di ciglia; capelli con l'"anello di luce" anime.
+- **Tutto a tempo di musica**: neon delle armi, equalizzatori e schermi delle arene pulsano su cassa e
+  rullante della colonna sonora procedurale.
+- **Immagini residue olografiche** delle armi durante i fendenti; durante l'**ultimate** l'arma si
+  trasforma in un ologramma gigante (lo spadone di Kaiser diventa una colonna di luce).
+- **Cut-in stile Persona** all'attivazione dell'ultimate (primo piano degli occhi + nome della mossa);
+  le ultimate nemiche mostrano una striscia d'avviso.
+- In volo il corpo segue la tensione delle corde come un pendolo; lasciando i rampini mentre sali parte
+  un **salto mortale** (o un avvitamento dopo uno swing laterale), anche nel doppio salto a gas.
+- Reazioni ai colpi **direzionali** (più forti con i colpi pesanti), avvitamento all'indietro quando
+  vieni lanciato in aria, provocazioni personali (**T**) e inquadratura del vincitore a fine partita.
+
 ## Arene
 - **SHIBUYA VELVET** — città notturna rosso/nera stile Persona 5, incrocio "scramble", cavalcavia e ferrovia sopraelevata.
 - **TRUE NOTE ARENA** — stadio-concerto: palco con muro LED, torri di casse, un enorme anello di luci sospeso su cui fare swing.
