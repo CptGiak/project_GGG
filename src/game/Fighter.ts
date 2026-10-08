@@ -81,6 +81,8 @@ export class Fighter {
   private flipDur = 0.6;
   private flipKind = 0;
   private flipCd = 0;
+  /** launched by a big hit: backward somersault time left */
+  tumbleT = 0;
   /** height the tucked body spins around (landing roll / aerial flip) */
   private tuckCentre = 0.95;
   private wasAttached = false;
@@ -269,6 +271,13 @@ export class Fighter {
     if (!act.active || act.name === 'roll') this.anim.play('roll', { fadeIn: 0.08, fadeOut: 0.16, speed: 0.5 / this.flipDur });
   }
 
+  /** knocked into the air: flailing backward somersault (visual only) */
+  startTumble(): void {
+    this.tumbleT = 0.9;
+    this.flipT = 0;
+    this.anim.tumble = 1;
+  }
+
   private timers(dt: number): void {
     this.invuln = Math.max(0, this.invuln - dt);
     this.stun = Math.max(0, this.stun - dt);
@@ -282,6 +291,7 @@ export class Fighter {
     this.rollT = Math.max(0, this.rollT - dt);
     this.flipT = Math.max(0, this.flipT - dt);
     this.flipCd = Math.max(0, this.flipCd - dt);
+    this.tumbleT = Math.max(0, this.tumbleT - dt);
     if (this.wallRun > 0) this.wallRunTotal += dt;
     else if (this.hooked) this.wallRunTotal = 0;
     this.wallRun = Math.max(0, this.wallRun - dt);
@@ -913,6 +923,12 @@ export class Fighter {
       const a = u * u * (3 - 2 * u) * Math.PI * 2;
       if (this.flipKind === 0) rx += a;
       else rz += a * this.flipKind;
+    }
+    if (this.tumbleT > 0) {
+      // touched down mid-spin: finish the rotation in a few frames instead of snapping
+      if (this.grounded) this.tumbleT = Math.max(0, this.tumbleT - dt * 4);
+      const u = 1 - this.tumbleT / 0.9;
+      rx -= (1 - (1 - u) * (1 - u)) * Math.PI * 2;
     }
     v.pivot.rotation.set(rx, 0, rz, 'YXZ');
 

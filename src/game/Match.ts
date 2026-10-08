@@ -12,7 +12,7 @@ import { Projectiles } from '../combat/Projectiles';
 import { createKit } from '../combat/kits';
 import { buildVisual } from '../champions';
 import { CameraRig } from './CameraRig';
-import { Fighter, rightOf } from './Fighter';
+import { Fighter, rightOf, wrapAngle } from './Fighter';
 import { LocalController } from './LocalController';
 import { BotController } from './BotController';
 import { clearEdges, type ActionEvent, type HitInfo, type MatchContext } from './types';
@@ -56,6 +56,11 @@ export class Match implements MatchContext {
   readonly trails = new Map<Fighter, SlashTrail[]>();
   readonly ghosts = new Map<Fighter, WeaponGhosts>();
   private portraits = new Map<ChampionId, string>();
+  /** winner showcased by the end-of-match camera */
+  private victor: Fighter | null = null;
+  private victorT = 0;
+  /** victory camera start: angle, distance, height relative to the winner */
+  private vcStart = new THREE.Vector3();
   local!: Fighter;
   time = 0;
   /** match clock (seconds remaining) */
@@ -325,7 +330,20 @@ export class Match implements MatchContext {
       }
       if (info.slow) target.slow = Math.max(target.slow, info.slow);
     }
-    if (!blocked) target.anim.playFlinch('hit');
+    if (!blocked) {
+      // directional flinch: the body snaps the way the blow drives it
+      _v.set(0, 0, 0);
+      if (info.kb) _v.copy(info.kb);
+      else if (attacker) _v.subVectors(target.pos, attacker.pos);
+      _v.y = 0;
+      if (_v.lengthSq() < 1e-6) _v.set(-Math.sin(target.facing), 0, -Math.cos(target.facing));
+      _v.normalize();
+      const fy = target.facing;
+      const lx = _v.x * Math.cos(fy) - _v.z * Math.sin(fy);
+      const lz = _v.x * Math.sin(fy) + _v.z * Math.cos(fy);
+      target.anim.hitReact(lx, lz, THREE.MathUtils.clamp(amount / 110, 0.35, 1.3) * (info.crit ? 1.2 : 1));
+      if (info.kb && info.kb.y > 6) target.startTumble();
+    }
     // feedback
     if (blocked) {
       _v.subVectors(at, target.chest(_r)).normalize();
@@ -394,7 +412,15 @@ export class Match implements MatchContext {
   end(winner: Fighter | null): void {
     if (this.state === 'ended') return;
     this.state = 'ended';
+    this.celebrate(winner);
     this.onEnd?.(winner);
+  }
+
+  /** match point: the winner strikes their taunt while the camera circles them */
+  celebrate(winner: Fighter | null): void {
+    this.victor = winner && winner.alive ? winner : null;
+    this.victorT = 0;
+    if (this.victor && this.victor.grounded) this.victor.startTaunt();
   }
 
   // ===========================================================================================
@@ -477,6 +503,7 @@ export class Match implements MatchContext {
 
     // camera
     this.cam.update(dt, this.local, this.world);
+    if (this.state === 'ended' && this.victor) this.victoryCam(dt, this.victor);
     this.camPos.copy(this.cam.camera.position);
     rightOf(this.cam.yaw, _r);
     this.audio.setListener(this.camPos, _r);
@@ -511,6 +538,30 @@ export class Match implements MatchContext {
 
     this.hud?.update(dt, this);
     this.input.endFrame();
+  }
+
+  private victoryCam(dt: number, v: Fighter): void {
+    const cam = this.cam.camera;
+    if (this.victorT === 0) {
+      // remember where the gameplay camera was, relative to the winner
+      this.vcStart.set(Math.atan2(cam.position.x - v.pos.x, cam.position.z - v.pos.z), Math.hypot(cam.position.x - v.pos.x, cam.position.z - v.pos.z), cam.position.y - v.pos.y);
+    }
+    this.victorT += dt;
+    // swing around (never through) the winner to a slow orbit in front of them
+    const k = Math.min(1, this.victorT * 1.1);
+    const e = k * k * (3 - 2 * k);
+    const orbit = v.facing + 0.45 - this.victorT * 0.2;
+    const a = this.vcStart.x + wrapAngle(orbit - this.vcStart.x) * e;
+    const r = THREE.MathUtils.lerp(this.vcStart.y, 2.9, e);
+    const y = THREE.MathUtils.lerp(this.vcStart.z, 1.45, e);
+    const eye = _r.copy(v.pos).setY(v.pos.y + 1.3);
+    const target = _v.set(v.pos.x + Math.sin(a) * r, v.pos.y + y, v.pos.z + Math.cos(a) * r);
+    const dir = target.clone().sub(eye);
+    const len = dir.length();
+    const hit = len > 0.01 ? this.world.raycast(eye, dir.divideScalar(len), len) : null;
+    if (hit) target.copy(eye).addScaledVector(dir, Math.max(0.8, hit.distance - 0.3));
+    cam.position.copy(target);
+    cam.lookAt(v.pos.x, v.pos.y + 1.1, v.pos.z);
   }
 
   private freezeIntent(f: Fighter): void {

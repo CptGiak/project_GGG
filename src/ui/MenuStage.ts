@@ -8,10 +8,10 @@ import { setKeyLight, ToonEnv } from '../render/toon';
 import { SlashTrail } from '../vfx/Trails';
 
 const PREVIEWS: Record<ChampionId, string[]> = {
-  kaiser: ['atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
-  nova: ['c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
-  rex: ['aim', 'charge', 'throw', 'ult'],
-  sera: ['cast', 'wave', 'ult', 'cast'],
+  kaiser: ['taunt', 'atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
+  nova: ['taunt', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
+  rex: ['taunt', 'aim', 'charge', 'throw', 'ult'],
+  sera: ['taunt', 'cast', 'wave', 'ult', 'cast'],
 };
 
 const BEAM_VERT = /* glsl */ `
@@ -125,7 +125,9 @@ export class MenuStage {
     if (this.focus !== id) {
       const c = this.champs.get(id);
       if (c) {
+        // greet with the taunt, then cycle the moves
         c.nextPreview = 0.35;
+        c.previewIdx = 0;
         c.anim.st.time = 0;
       }
     }
@@ -161,8 +163,9 @@ export class MenuStage {
         const name = list[c.previewIdx % list.length];
         c.previewIdx++;
         c.anim.play(name, { fadeIn: 0.08 });
-        c.nextPreview = focused ? 2.4 : 3.5 + Math.random() * 2.5;
-        if (c.id === 'rex' || c.id === 'sera') c.anim.st.aim = 1;
+        const clipLen = c.visual.anims.clips[name]?.duration ?? 1;
+        c.nextPreview = focused ? Math.max(2.4, clipLen + 0.4) : 3.5 + Math.random() * 2.5;
+        if ((c.id === 'rex' || c.id === 'sera') && name !== 'taunt') c.anim.st.aim = 1;
       }
       if (!c.anim.action.active) c.anim.st.aim *= Math.exp(-dt * 3);
       c.anim.update(dt, false);

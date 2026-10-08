@@ -310,7 +310,10 @@ export class OnlineSession implements NetBridge {
         break;
       case 'end':
         for (const p of msg.players) this.players.set(p.id, p);
-        if (m) m.state = 'ended';
+        if (m && m.state !== 'ended') {
+          m.state = 'ended';
+          m.celebrate(msg.winner ? m.getFighter(msg.winner) ?? null : null);
+        }
         this.onEnd?.(msg.winner, msg.players, msg.next);
         break;
       case 'start':
