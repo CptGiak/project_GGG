@@ -65,15 +65,15 @@ export class CameraRig {
     if (!this.initialized) this.snapTo(f);
     // follow: tight on the ground, slightly springy in flight
     const speed = f.speed;
-    const follow = f.grounded ? 30 : THREE.MathUtils.lerp(22, 11, Math.min(1, speed / 50));
+    const follow = f.grounded ? 30 : THREE.MathUtils.lerp(26, 17, Math.min(1, speed / 50));
     this.pivot.lerp(_target, 1 - Math.exp(-follow * dt));
     if (this.pivot.distanceToSquared(_target) > 100) this.pivot.copy(_target);
 
     // distance & fov react to speed
     const sp = THREE.MathUtils.clamp((speed - 8) / 45, 0, 1);
-    const targetDist = (this.distance + sp * 1.4 + (this.orbit ? 3 : 0)) * (1 - this.zoom * 0.45);
+    const targetDist = (this.distance + sp * 0.8 + (this.orbit ? 3 : 0)) * (1 - this.zoom * 0.45);
     this.dist += (targetDist - this.dist) * (1 - Math.exp(-6 * dt));
-    const targetFov = this.baseFov + sp * 20 - this.zoom * 34;
+    const targetFov = this.baseFov + sp * 12 - this.zoom * 34;
     this.fov += (targetFov - this.fov) * (1 - Math.exp(-5 * dt));
 
     this.forward(_fwd);

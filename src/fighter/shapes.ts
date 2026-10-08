@@ -31,14 +31,14 @@ export interface LimbOpts {
 
 /** A tapered, rounded limb hanging from y=0 down to y=-len. */
 export function limb(len: number, r0: number, r1: number, o: LimbOpts = {}): THREE.BufferGeometry {
-  const steps = o.steps ?? 10;
+  const steps = o.steps ?? 8;
   const bulge = o.bulge ?? 0;
   const at = o.bulgeAt ?? 0.35;
   const capT = o.capTop ?? 1;
   const capB = o.capBottom ?? 1;
   const prof: [number, number][] = [];
   // top cap (top -> bottom order, lathe needs consistent order: we go bottom->top later)
-  const capSteps = 4;
+  const capSteps = 3;
   for (let i = 0; i <= capSteps; i++) {
     const a = (i / capSteps) * (Math.PI / 2);
     prof.push([Math.sin(a) * r0, Math.cos(a) * r0 * 0.75 * capT]);
@@ -55,16 +55,16 @@ export function limb(len: number, r0: number, r1: number, o: LimbOpts = {}): THR
     prof.push([Math.cos(a) * r1, -len - Math.sin(a) * r1 * 0.75 * capB]);
   }
   prof.reverse();
-  return lathe(prof, o.segments ?? 14, o.sx ?? 1, o.sz ?? 1);
+  return lathe(prof, o.segments ?? 12, o.sx ?? 1, o.sz ?? 1);
 }
 
-export function ellipsoid(rx: number, ry: number, rz: number, w = 18, h = 14): THREE.BufferGeometry {
+export function ellipsoid(rx: number, ry: number, rz: number, w = 14, h = 10): THREE.BufferGeometry {
   const g = new THREE.SphereGeometry(1, w, h);
   g.scale(rx, ry, rz);
   return g;
 }
 
-export function rbox(w: number, h: number, d: number, r = 0.02, seg = 2): THREE.BufferGeometry {
+export function rbox(w: number, h: number, d: number, r = 0.02, seg = 1): THREE.BufferGeometry {
   return new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4));
 }
 
@@ -72,11 +72,11 @@ export function box(w: number, h: number, d: number): THREE.BufferGeometry {
   return new THREE.BoxGeometry(w, h, d);
 }
 
-export function cyl(rTop: number, rBot: number, h: number, seg = 14, open = false): THREE.BufferGeometry {
+export function cyl(rTop: number, rBot: number, h: number, seg = 12, open = false): THREE.BufferGeometry {
   return new THREE.CylinderGeometry(rTop, rBot, h, seg, 1, open);
 }
 
-export function torus(r: number, tube: number, rSeg = 8, tSeg = 24, arc = Math.PI * 2): THREE.BufferGeometry {
+export function torus(r: number, tube: number, rSeg = 6, tSeg = 18, arc = Math.PI * 2): THREE.BufferGeometry {
   return new THREE.TorusGeometry(r, tube, rSeg, tSeg, arc);
 }
 
@@ -155,7 +155,7 @@ export function poly(points: number[]): THREE.Shape {
 }
 
 /** Tapered tube swept along points. radius(t) defines the profile. */
-export function sweep(points: THREE.Vector3[], radius: (t: number) => number, radial = 8, tubular = 24, closedEnds = true, flat = 1): THREE.BufferGeometry {
+export function sweep(points: THREE.Vector3[], radius: (t: number) => number, radial = 6, tubular = 16, closedEnds = true, flat = 1): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
   const frames = curve.computeFrenetFrames(tubular, false);
   const verts: number[] = [];
@@ -206,7 +206,7 @@ export function sweep(points: THREE.Vector3[], radius: (t: number) => number, ra
 
 /** Anime head: sphere with a tapered V-shaped jaw. */
 export function animeHead(r: number, jaw = 0.35, chinForward = 0.12, female = false): THREE.BufferGeometry {
-  const g = new THREE.SphereGeometry(r, 26, 20);
+  const g = new THREE.SphereGeometry(r, 22, 16);
   const p = g.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i);

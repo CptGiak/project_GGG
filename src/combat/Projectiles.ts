@@ -193,11 +193,16 @@ export class Projectiles {
       }
       // homing
       if (p.homing && p.homing.target && p.homing.target.alive && p.age > (p.homing.delay ?? 0)) {
+        // exponential seek toward the target's chest; guidance tightens as it closes in
         p.homing.target.chest(_p);
-        _d.subVectors(_p, p.pos).normalize();
+        _d.subVectors(_p, p.pos);
+        const dist = _d.length();
+        _d.divideScalar(dist || 1);
         const spd = p.vel.length();
-        _n.copy(p.vel).normalize().lerp(_d, Math.min(1, p.homing.strength * dt)).normalize();
-        p.vel.copy(_n).multiplyScalar(spd);
+        const k = p.homing.strength * (dist < 10 ? 1.8 : 1);
+        _n.copy(_d).multiplyScalar(spd);
+        p.vel.lerp(_n, 1 - Math.exp(-k * dt));
+        p.vel.setLength(spd);
       }
       if (p.gravity) p.vel.y -= p.gravity * dt;
       const from = _p.copy(p.pos);

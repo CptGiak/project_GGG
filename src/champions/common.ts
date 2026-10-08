@@ -24,6 +24,21 @@ export function assembleVisual(args: {
 }): ChampionVisual {
   const { rig } = args;
   args.builder.build();
+  // champions read better against dark arenas: brighter shadow tone + stronger rim
+  const seen = new Set<THREE.Material>();
+  const boost = (m: THREE.Material) => {
+    if (seen.has(m)) return;
+    seen.add(m);
+    const t = (m as THREE.Material & { userData: { toon?: { shadeMat: { value: THREE.Color }; rim: { value: number } } } }).userData.toon;
+    if (!t) return;
+    t.shadeMat.value.multiplyScalar(1.22);
+    t.rim.value = Math.min(1.2, t.rim.value + 0.25);
+  };
+  args.materials.forEach(boost);
+  for (const c of args.cloth) {
+    const mats = (c.mesh.material as THREE.Material | THREE.Material[]);
+    (Array.isArray(mats) ? mats : [mats]).forEach(boost);
+  }
   const root = new THREE.Group();
   root.name = 'champion';
   const pivot = new THREE.Group();

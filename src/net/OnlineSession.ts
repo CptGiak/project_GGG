@@ -170,7 +170,7 @@ export class OnlineSession implements NetBridge {
       const f = m.getFighter(id);
       if (!f || f.kind !== 'remote' || !buf.length) continue;
       while (buf.length > 2 && buf[1].t <= rt) buf.shift();
-      let s0 = buf[0];
+      const s0 = buf[0];
       let s1 = buf[buf.length > 1 ? 1 : 0];
       let k = 0;
       if (buf.length > 1 && s1.t > s0.t) k = THREE.MathUtils.clamp((rt - s0.t) / (s1.t - s0.t), 0, 1.25);
@@ -190,7 +190,6 @@ export class OnlineSession implements NetBridge {
       f.net.vel.lerpVectors(_a, _b, Math.min(k, 1));
       f.net.facing = a.f + wrapAngle(b.f - a.f) * Math.min(k, 1);
       f.net.has = true;
-      f.facing = f.facing + wrapAngle(f.net.facing - f.facing) * 0.5;
       f.aimYaw = a.ay + wrapAngle(b.ay - a.ay) * Math.min(k, 1);
       f.aimPitch = a.ap + (b.ap - a.ap) * Math.min(k, 1);
       const fl = b.fl;
@@ -205,9 +204,6 @@ export class OnlineSession implements NetBridge {
         const anchor = i === 0 ? b.ha : b.hb;
         f.applyRemoteHook(i, code, anchor);
       }
-      // keep cloth-friendly velocity sign for remote animation
-      void s0;
-      s0 = buf[0];
     }
   }
 

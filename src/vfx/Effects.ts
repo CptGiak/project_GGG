@@ -212,11 +212,11 @@ export class Effects {
 
   /** continuous gas jet while boosting (call every frame) */
   gasTrail(pos: THREE.Vector3, vel: THREE.Vector3, color: THREE.ColorRepresentation, dt: number): void {
-    const n = Math.ceil(dt * 36);
+    const n = Math.ceil(dt * 30);
     for (let i = 0; i < n; i++) {
-      _v.copy(vel).multiplyScalar(-0.1).add(randDir(_u).multiplyScalar(1.0));
+      _v.copy(vel).multiplyScalar(-0.08).add(randDir(_u).multiplyScalar(0.8));
       _w.copy(pos).addScaledVector(vel, -dt * Math.random());
-      this.alpha.emit({ pos: _w.clone(), vel: _v.clone(), life: rnd(0.25, 0.45), size: rnd(0.06, 0.1), size1: rnd(0.25, 0.4), color: 0xf2eef8, shape: Shape.puff, drag: 2.5, alpha: 0.85 });
+      this.alpha.emit({ pos: _w.clone(), vel: _v.clone(), life: rnd(0.18, 0.32), size: rnd(0.04, 0.07), size1: rnd(0.14, 0.24), color: 0xf2eef8, shape: Shape.puff, drag: 2.5, alpha: 0.6 });
     }
     if (Math.random() < 0.6) this.add.emit({ pos: pos.clone(), vel: _v.copy(vel).multiplyScalar(-0.05).clone(), life: 0.25, size: 0.2, size1: 0.05, color, shape: Shape.glow, alpha: 0.9 });
   }

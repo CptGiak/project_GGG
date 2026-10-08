@@ -163,8 +163,11 @@ export class RexKit extends BaseKit {
   private throwBomb(f: Fighter, m: MatchContext): void {
     const from = f.chest(new THREE.Vector3()).addScaledVector(f.intent.aimDir, 0.6);
     from.y += 0.3;
-    const vel = f.intent.aimDir.clone().multiplyScalar(26);
-    vel.y += 5;
+    // aim at the point under the crosshair (the camera is offset over the shoulder)
+    const { point } = this.aimPoint(f, m, 80);
+    const dir = point.sub(from).normalize();
+    const vel = dir.multiplyScalar(26);
+    vel.y += 4;
     vel.add(f.vel.clone().multiplyScalar(0.5));
     m.projectiles.spawn({ owner: f, kind: 'grenade', pos: from, vel, radius: 0.22, life: 1.3, gravity: 22, bounce: 2, explode: 4.6, kb: 14, slot: 'abi', part: 'blast', color: f.champ.colors[0], color2: f.champ.colors[1] });
     m.audio.play('swing', from, 0.6);
@@ -183,7 +186,7 @@ export class RexKit extends BaseKit {
         const live = this.ultTargets.filter((t) => t.alive);
         const target = live.length ? live[this.ultShots % live.length] : null;
         const up = new THREE.Vector3((Math.random() - 0.5) * 0.8, 1, (Math.random() - 0.5) * 0.8).add(f.intent.aimDir.clone().multiplyScalar(0.8)).normalize();
-        m.projectiles.spawn({ owner: f, kind: 'note', pos: from, vel: up.multiplyScalar(34), radius: 0.3, life: 3, slot: 'ult', part: 'note', color: this.ultShots % 2 ? f.champ.colors[0] : f.champ.colors[1], color2: 0xffffff, homing: { target, strength: 4.2, delay: 0.25 }, kb: 4 });
+        m.projectiles.spawn({ owner: f, kind: 'note', pos: from, vel: up.multiplyScalar(34), radius: 0.3, life: 3, slot: 'ult', part: 'note', color: this.ultShots % 2 ? f.champ.colors[0] : f.champ.colors[1], color2: 0xffffff, homing: { target, strength: 7, delay: 0.22 }, kb: 4 });
         m.vfx.muzzle(from, up, f.champ.colors[1]);
         m.audio.play('note', from, 0.8);
         m.broadcastAction(f, { a: 'note', p: [from.x, from.y, from.z], d: [up.x, up.y, up.z], t: target?.id });
@@ -240,7 +243,7 @@ export class RexKit extends BaseKit {
         break;
       case 'note': {
         const target = e.t ? m.fighters.find((x) => x.id === e.t) ?? null : null;
-        m.projectiles.spawn({ owner: f, kind: 'note', pos: p, vel: new THREE.Vector3(...(e.d ?? [0, 1, 0])).multiplyScalar(34), radius: 0.3, life: 3, slot: 'ult', part: 'note', color: f.champ.colors[1], color2: 0xffffff, homing: { target, strength: 4.2, delay: 0.25 }, visualOnly: true });
+        m.projectiles.spawn({ owner: f, kind: 'note', pos: p, vel: new THREE.Vector3(...(e.d ?? [0, 1, 0])).multiplyScalar(34), radius: 0.3, life: 3, slot: 'ult', part: 'note', color: f.champ.colors[1], color2: 0xffffff, homing: { target, strength: 7, delay: 0.22 }, visualOnly: true });
         m.audio.play('note', p, 0.8);
         break;
       }

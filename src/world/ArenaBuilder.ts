@@ -37,9 +37,13 @@ export interface Arena {
 }
 
 interface Batch {
+  mat: THREE.Material;
   geos: THREE.BufferGeometry[];
   outline: THREE.BufferGeometry[];
 }
+
+/** static geometry is batched per material AND per spatial chunk so frustum culling works */
+const CHUNK = 56;
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -56,7 +60,8 @@ export class ArenaBuilder {
   readonly world = new CollisionWorld();
   readonly spawns: SpawnPoint[] = [];
   readonly rng: Rng;
-  private batches = new Map<THREE.Material, Batch>();
+  private batches = new Map<string, Batch>();
+  private matIds = new Map<THREE.Material, number>();
   readonly tickers: Array<(dt: number, t: number) => void> = [];
 
   constructor(seed: number) {
@@ -72,8 +77,16 @@ export class ArenaBuilder {
     else _s.set(scale[0], scale[1], scale[2]);
     _m.compose(p, _q, _s);
     const g = geo.clone().applyMatrix4(_m);
-    let b = this.batches.get(mat);
-    if (!b) this.batches.set(mat, (b = { geos: [], outline: [] }));
+    g.computeBoundingBox();
+    const c = g.boundingBox!.getCenter(_p);
+    const size = g.boundingBox!.getSize(_s);
+    // very large pieces (floors, rails) get their own chunk key so they don't bloat a cell
+    const big = Math.max(size.x, size.z) > CHUNK * 1.5;
+    let mid = this.matIds.get(mat);
+    if (mid === undefined) this.matIds.set(mat, (mid = this.matIds.size));
+    const key = big ? `${mid}:big` : `${mid}:${Math.floor(c.x / CHUNK)}:${Math.floor(c.z / CHUNK)}`;
+    let b = this.batches.get(key);
+    if (!b) this.batches.set(key, (b = { mat, geos: [], outline: [] }));
     b.geos.push(g);
     if (outline > 0) {
       const o = smoothNormalGeometry(geo).clone().applyMatrix4(_m);
@@ -160,7 +173,8 @@ export class ArenaBuilder {
 
   /** Merge every batch into meshes and return the finished arena. */
   finish(args: { id: string; name: string; mood: ArenaMood; sky: THREE.Material; extraTick?: (dt: number, t: number) => void; sunColor?: THREE.ColorRepresentation }): Arena {
-    for (const [mat, b] of this.batches) {
+    for (const b of this.batches.values()) {
+      const mat = b.mat;
       const merged = mergeNonIndexed(b.geos);
       merged.computeBoundingSphere();
       const mesh = new THREE.Mesh(merged, mat);
@@ -171,6 +185,7 @@ export class ArenaBuilder {
       if (b.outline.length) {
         const og = mergeGeometries(b.outline, false);
         if (og) {
+          og.computeBoundingSphere();
           const om = new THREE.Mesh(og, outlineMaterial(0x05030a, 2.0, 30));
           om.matrixAutoUpdate = false;
           this.root.add(om);
