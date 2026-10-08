@@ -38,7 +38,8 @@ void main() {
   vUv = uv;
   vColor = iColor;
   float camDist = length( ( modelViewMatrix * vec4( iPos, 1.0 ) ).xyz );
-  vColor.a *= smoothstep( 0.6, 2.2, camDist );
+  // fade out near the lens; big particles (dust, smoke) start fading further away
+  vColor.a *= smoothstep( 0.6 + iData.x * 1.3, 2.2 + iData.x * 3.0, camDist );
   vShape = iData.z;
   vec4 mvCenter = modelViewMatrix * vec4( iPos, 1.0 );
   vec2 corner = position.xy;

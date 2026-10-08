@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { holoMaterial } from '../render/toon';
+import { Beat } from '../core/Beat';
 
 interface Ghost {
   mesh: THREE.Mesh;
@@ -72,6 +73,10 @@ export class WeaponGhosts {
   private sources: WeaponSource[] = [];
   private pool: Ghost[] = [];
   private timer = 0;
+  /** ultimate "transformation": an oversized hologram of each weapon riding on it */
+  private shells: Array<{ mesh: THREE.Mesh; mat: THREE.ShaderMaterial }> = [];
+  private ultW = 0;
+  private ultT = 0;
 
   constructor(private scene: THREE.Scene, weapons: Array<THREE.Object3D | null>, colorA: THREE.Color, colorB: THREE.Color) {
     for (const w of weapons) {
@@ -89,9 +94,38 @@ export class WeaponGhosts {
       scene.add(mesh);
       this.pool.push({ mesh, mat, life: 0, max: 0.2, drift: new THREE.Vector3() });
     }
+    for (const src of this.sources) {
+      const mat = holoMaterial(colorB, colorA, { intensity: 0, scan: 34, glitch: 2.2 });
+      const mesh = new THREE.Mesh(src.geo, mat);
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 4;
+      src.obj.add(mesh);
+      this.shells.push({ mesh, mat });
+    }
   }
 
-  update(dt: number, emitting: boolean): void {
+  /** grow / pulse / fade the hologram weapon while the ultimate runs */
+  private updateShells(dt: number, ulting: boolean): void {
+    if (!this.shells.length) return;
+    const was = this.ultW;
+    this.ultW = ulting ? Math.min(1, this.ultW + dt * 5) : Math.max(0, this.ultW - dt * 3);
+    if (ulting && was === 0) this.ultT = 0;
+    this.ultT += dt;
+    const w = this.ultW;
+    // overshooting pop on the way in
+    const u = ulting ? Math.min(1, this.ultT / 0.28) : w;
+    const pop = ulting ? 1 + 2.70158 * Math.pow(u - 1, 3) + 1.70158 * Math.pow(u - 1, 2) : w;
+    for (const s of this.shells) {
+      s.mesh.visible = w > 0.01;
+      if (!s.mesh.visible) continue;
+      s.mesh.scale.set(1 + 0.35 * pop, 1 + 0.35 * pop, 1 + 1.1 * pop);
+      s.mat.uniforms.uIntensity.value = (0.55 + Beat.pulse * 0.7) * w;
+    }
+  }
+
+  update(dt: number, emitting: boolean, ulting = false): void {
+    this.updateShells(dt, ulting);
     for (const g of this.pool) {
       if (g.life <= 0) continue;
       g.life -= dt;
@@ -132,6 +166,10 @@ export class WeaponGhosts {
     for (const g of this.pool) {
       this.scene.remove(g.mesh);
       g.mat.dispose();
+    }
+    for (const s of this.shells) {
+      s.mesh.removeFromParent();
+      s.mat.dispose();
     }
     for (const s of this.sources) s.geo.dispose();
   }

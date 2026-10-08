@@ -247,7 +247,7 @@ export class Effects {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
       _v.set(Math.cos(a), 0.15, Math.sin(a)).multiplyScalar(rnd(3, 7) * (0.5 + strength));
-      this.alpha.emit({ pos: _w.copy(pos).setY(pos.y + 0.15), vel: _v.clone(), life: rnd(0.4, 0.7), size: 0.25, size1: 0.8, color: 0x9a8a96, shape: Shape.puff, drag: 4 });
+      this.alpha.emit({ pos: _w.copy(pos).setY(pos.y + 0.15), vel: _v.clone(), life: rnd(0.35, 0.6), size: 0.18, size1: 0.5, color: 0xb9aab6, shape: Shape.puff, drag: 4.5, alpha: 0.8 });
     }
     this.ring(_w.copy(pos).setY(pos.y + 0.06), _u.set(0, 1, 0), color, 0.3, 2.5 + strength * 3, 0.45);
   }
@@ -289,11 +289,12 @@ export class Effects {
   shockwave(pos: THREE.Vector3, radius: number, color: THREE.ColorRepresentation): void {
     this.ring(_w.copy(pos).setY(pos.y + 0.1), _u.set(0, 1, 0), color, 0.5, radius, 0.5);
     this.ring(_w.copy(pos).setY(pos.y + 0.12), _u.set(0, 1, 0), 0xffffff, 0.3, radius * 0.7, 0.35);
-    const n = 28;
+    const n = 24;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      _v.set(Math.cos(a), rnd(0.2, 0.8), Math.sin(a)).multiplyScalar(rnd(8, 16));
-      this.alpha.emit({ pos: _w.copy(pos).setY(pos.y + 0.2), vel: _v.clone(), life: rnd(0.5, 0.9), size: 0.3, size1: 1.1, color: 0x7d6c78, shape: Shape.puff, drag: 3.5 });
+      _v.set(Math.cos(a), rnd(0.15, 0.5), Math.sin(a)).multiplyScalar(rnd(7, 13));
+      // low dust ring hugging the ground, light enough to read as dust, not smoke
+      this.alpha.emit({ pos: _w.copy(pos).setY(pos.y + 0.2), vel: _v.clone(), life: rnd(0.4, 0.7), size: 0.22, size1: 0.6, color: 0xb3a2b0, shape: Shape.puff, drag: 4.5, alpha: 0.75 });
       this.add.emit({ pos: _w.clone(), vel: _v.clone().multiplyScalar(1.4), life: rnd(0.2, 0.4), size: 0.12, color, shape: Shape.streak, drag: 3, stretch: 2 });
     }
     for (let i = 0; i < 14; i++) {

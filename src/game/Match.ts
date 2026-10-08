@@ -129,8 +129,11 @@ export class Match implements MatchContext {
       return t;
     });
     this.trails.set(f, trails);
+    // weapon afterimages / ultimate hologram (ranged champions use their palette)
     const bl = visual.blades[0];
-    if (bl) this.ghosts.set(f, new WeaponGhosts(this.scene, [visual.weaponR, visual.weaponL], bl.colorA, bl.colorB));
+    const ca = bl?.colorA ?? new THREE.Color(f.champ.colors[0]);
+    const cb = bl?.colorB ?? new THREE.Color(f.champ.colors[1]);
+    this.ghosts.set(f, new WeaponGhosts(this.scene, [visual.weaponR, visual.weaponL], ca, cb));
     this.fighters.push(f);
     return f;
   }
@@ -510,7 +513,7 @@ export class Match implements MatchContext {
     this.audio.updateLoops(this.local.alive ? this.local.speed : 0, this.local.boosting);
 
     // weapon afterimages + trails
-    for (const [f, g] of this.ghosts) g.update(simDt, f.trailOn && f.alive && f.visual.root.visible);
+    for (const [f, g] of this.ghosts) g.update(simDt, f.trailOn && f.alive && f.visual.root.visible, f.alive && f.ulting);
     for (const [f, trails] of this.trails) {
       f.visual.blades.forEach((bl, i) => {
         trails[i].emitting = f.trailOn && f.alive;

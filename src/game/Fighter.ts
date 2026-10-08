@@ -149,6 +149,14 @@ export class Fighter {
     return this.hooks[0].attached || this.hooks[1].attached;
   }
 
+  /** an ultimate is playing (local kit state or the replicated animation) */
+  get ulting(): boolean {
+    const act = (this.kit as unknown as { act: string | null } | null)?.act;
+    if (act === 'ult' || act === 'ultRemote') return true;
+    const a = this.anim.action;
+    return a.active && (a.name === 'ult' || a.name === 'ultRise' || a.name === 'ultSlam');
+  }
+
   get speed(): number {
     return this.vel.length();
   }
