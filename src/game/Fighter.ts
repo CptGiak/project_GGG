@@ -17,6 +17,7 @@ const _c = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _g = new THREE.Vector3();
+const _u = new THREE.Vector3();
 const _acc = new THREE.Vector3();
 const _hit: RayHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), distance: 0, box: null };
 const _q = new THREE.Quaternion();
@@ -75,7 +76,14 @@ export class Fighter {
   tauntT = 0;
   /** landing roll time left */
   rollT = 0;
-  private rollK = 0;
+  /** aerial flip (hook release / gas jump): time left; kind 0 = front flip, +-1 = barrel roll */
+  flipT = 0;
+  private flipDur = 0.6;
+  private flipKind = 0;
+  private flipCd = 0;
+  /** height the tucked body spins around (landing roll / aerial flip) */
+  private tuckCentre = 0.95;
+  private wasAttached = false;
   /** continuous wall-run time (capped so you eventually slide off) */
   private wallRunTotal = 0;
   /** velocity at the previous visual update (banking / lateral acceleration) */
@@ -196,6 +204,12 @@ export class Fighter {
         this.kit?.update(this, it, dt, m);
         this.updateTaunt(it, m);
         this.movement(dt, m);
+        // letting go of the ropes while flying upward: release flip
+        const attachedNow = this.hooked;
+        if (this.wasAttached && !attachedNow) this.maybeFlip(m, 'release');
+        this.wasAttached = attachedNow;
+        // an attack started or a rope caught mid-flip: finish the rotation quickly
+        if (this.flipT > 0 && (attachedNow || (this.kit as unknown as { act: string | null } | null)?.act)) this.flipT = Math.max(0, this.flipT - dt * 1.5);
       } else {
         // dead: drift with gravity a little, no control
         this.vel.multiplyScalar(Math.exp(-3 * dt));
@@ -235,6 +249,26 @@ export class Fighter {
     this.trailOn = false;
   }
 
+  private maybeFlip(m: MatchContext, why: 'release' | 'jump'): void {
+    if (this.flipCd > 0 || this.grounded || !this.alive || this.stun > 0 || this.dashTime > 0 || this.guard) return;
+    if ((this.kit as unknown as { act: string | null } | null)?.act || this.kit?.facesAim(this)) return;
+    if (why === 'release' && (this.vel.y < 2 || this.speed < 12)) return;
+    // leaving a hard sideways swing: barrel roll toward the lean, otherwise a front flip
+    const kind = why === 'release' && Math.abs(this.bank) > 0.45 ? Math.sign(this.bank) : 0;
+    this.startFlip(kind);
+    m.broadcastAction(this, { a: 'flip', n: kind });
+  }
+
+  startFlip(kind: number): void {
+    this.flipKind = kind;
+    this.flipDur = kind === 0 ? 0.62 : 0.55;
+    this.flipT = this.flipDur;
+    this.flipCd = 0.9;
+    this.tuckCentre = 0.95;
+    const act = this.anim.action;
+    if (!act.active || act.name === 'roll') this.anim.play('roll', { fadeIn: 0.08, fadeOut: 0.16, speed: 0.5 / this.flipDur });
+  }
+
   private timers(dt: number): void {
     this.invuln = Math.max(0, this.invuln - dt);
     this.stun = Math.max(0, this.stun - dt);
@@ -246,6 +280,8 @@ export class Fighter {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.tauntT = Math.max(0, this.tauntT - dt);
     this.rollT = Math.max(0, this.rollT - dt);
+    this.flipT = Math.max(0, this.flipT - dt);
+    this.flipCd = Math.max(0, this.flipCd - dt);
     if (this.wallRun > 0) this.wallRunTotal += dt;
     else if (this.hooked) this.wallRunTotal = 0;
     this.wallRun = Math.max(0, this.wallRun - dt);
@@ -301,6 +337,7 @@ export class Fighter {
         this.vel.addScaledVector(wish, 3);
         m.vfx.gasBurst(this.nozzleWorld(_c), this.champ.colors[0]);
         m.audio.play('gasBurst', this.pos, 0.6);
+        this.maybeFlip(m, 'jump');
       }
     }
 
@@ -375,6 +412,8 @@ export class Fighter {
       if (impact > 14 && hs > 11 && !(this.kit as unknown as { act: string | null } | null)?.act) {
         // fast landing with momentum: stylish forward roll instead of a crouch
         this.rollT = 0.42;
+        this.flipT = 0;
+        this.tuckCentre = 0.62;
         this.anim.play('roll', { fadeIn: 0.04, fadeOut: 0.12 });
         m.audio.play('land', this.pos, 0.6);
         m.vfx.landing(this.pos, this.champ.colors[0], 0.4);
@@ -833,11 +872,21 @@ export class Fighter {
       const vyN = speed > 0.1 ? this.vel.y / speed : 0;
       const sf = THREE.MathUtils.clamp((speed - 6) / 30, 0, 1);
       pitchT = THREE.MathUtils.clamp(0.45 - vyN * 0.7, -0.5, 1.15) * sf;
-      // lateral acceleration (centripetal) relative to facing
+      // lean into the curve: lateral (centripetal) acceleration relative to facing
       _v.subVectors(this.vel, this.visPrevVel).divideScalar(Math.max(dt, 1e-4));
       rightOf(this.facing, _r);
       this.lateral = damp(this.lateral, _v.dot(_r), 6, dt);
-      bankT = THREE.MathUtils.clamp(-this.lateral * 0.022 - turnRate * 0.12, -1.0, 1.0) * sf;
+      bankT = THREE.MathUtils.clamp(this.lateral * 0.022 - turnRate * 0.12, -1.0, 1.0) * sf;
+      // hanging from taut ropes the body lines up with the pull, like a pendulum
+      const ropeW = hooked ? this.ropePull(_u) : 0;
+      if (ropeW > 0) {
+        _u.lerp(UP, 0.15).normalize();
+        forwardOf(this.facing, _f);
+        const rp = THREE.MathUtils.clamp(Math.atan2(_u.dot(_f), _u.y), -1.0, 1.35);
+        const rb = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(_u.dot(_r), -1, 1)), -1.1, 1.1);
+        pitchT = THREE.MathUtils.lerp(pitchT, rp, ropeW);
+        bankT = THREE.MathUtils.lerp(bankT, rb, ropeW);
+      }
     } else if (this.grounded && hspeed > 3 && !faceAim) {
       // slight lean when turning on the ground
       bankT = THREE.MathUtils.clamp(-turnRate * 0.06, -0.3, 0.3);
@@ -850,13 +899,22 @@ export class Fighter {
     }
     this.pitch = damp(this.pitch, pitchT, 8, dt);
     this.bank = damp(this.bank, bankT, 7, dt);
-    // landing roll: somersault around the hip centre
-    this.rollK = damp(this.rollK, this.rollT > 0 ? 1 : 0, 20, dt);
+    // tuck (landing roll / aerial flip): the 'roll' clip drops the hips 0.35 m, so re-centre the
+    // body on the pivot by exactly the clip weight and spin around the tucked hips
     const hipH = v.rig.hipHeight;
-    v.pivot.position.y = THREE.MathUtils.lerp(hipH, 0.62, this.rollK);
-    v.rig.root.position.y = -THREE.MathUtils.lerp(hipH, hipH - 0.35, this.rollK);
-    const rollAngle = this.rollT > 0 ? (1 - this.rollT / 0.42) * Math.PI * 2 : 0;
-    v.pivot.rotation.set(this.pitch + rollAngle, 0, this.bank, 'YXZ');
+    const tw = this.anim.action.name === 'roll' ? this.anim.action.weight : 0;
+    v.pivot.position.y = THREE.MathUtils.lerp(hipH, this.tuckCentre, tw);
+    v.rig.root.position.y = -(hipH - 0.35 * tw);
+    let rx = this.pitch;
+    let rz = this.bank;
+    if (this.rollT > 0) rx += (1 - this.rollT / 0.42) * Math.PI * 2;
+    if (this.flipT > 0) {
+      const u = 1 - this.flipT / this.flipDur;
+      const a = u * u * (3 - 2 * u) * Math.PI * 2;
+      if (this.flipKind === 0) rx += a;
+      else rz += a * this.flipKind;
+    }
+    v.pivot.rotation.set(rx, 0, rz, 'YXZ');
 
     // animation state
     const wallRunning = this.wallRun > 0;
@@ -950,6 +1008,28 @@ export class Fighter {
       }
       m.audio.play('note', this.pos, 0.6);
     }
+  }
+
+  /**
+   * Direction of the combined rope pull (unit, written to out) and how taut the ropes are (0..1).
+   */
+  private ropePull(out: THREE.Vector3): number {
+    out.set(0, 0, 0);
+    this.ropeOrigin(_c);
+    let taut = 0;
+    for (const hk of this.hooks) {
+      if (hk.state !== 'attached') continue;
+      _d.subVectors(hk.anchor, _c);
+      const dist = _d.length();
+      if (dist < 0.6) continue;
+      const k = THREE.MathUtils.clamp(1 - (hk.ropeLen - dist) / 1.2, 0, 1);
+      out.addScaledVector(_d, k / dist);
+      taut = Math.max(taut, k);
+    }
+    const l = out.length();
+    if (l < 1e-3) return 0;
+    out.divideScalar(l);
+    return taut;
   }
 
   isMovingBack(): boolean {

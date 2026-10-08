@@ -249,6 +249,8 @@ export class OnlineSession implements NetBridge {
         if (!f || !m) break;
         if (msg.e.a === 'taunt') {
           f.startTaunt();
+        } else if (msg.e.a === 'flip') {
+          f.startFlip(Math.sign(msg.e.n ?? 0));
         } else if (msg.e.a === 'hookL' || msg.e.a === 'hookR') {
           f.applyRemoteHook(msg.e.a === 'hookL' ? 0 : 1, 'flying', msg.e.p);
           m.audio.play('hookFire', f.pos, 0.6);

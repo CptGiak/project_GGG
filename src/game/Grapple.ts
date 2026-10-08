@@ -72,7 +72,7 @@ void main() {
   float core = 1.0 - smoothstep( 0.0, 1.0, abs( vSide ) );
   float pulse = 0.8 + 0.2 * step( 0.5, fract( vAlong * 9.0 - uTime * 8.0 ) );
   vec3 col = mix( uColor * 2.2, vec3( 1.6 ), pow( core, 6.0 ) * 0.8 ) * pulse;
-  gl_FragColor = vec4( col * ( 0.5 + core * 1.8 ), 0.4 + core * 0.6 );
+  gl_FragColor = vec4( col * ( 0.45 + core * 1.5 ), 0.4 + core * 0.6 );
   #include <fog_fragment>
 }
 `;
@@ -176,13 +176,15 @@ export class HookVisual {
     }
     const pos = this.geo.getAttribute('position') as THREE.BufferAttribute;
     const arr = pos.array as Float32Array;
-    const width = 0.055 + Math.min(len, 80) * 0.0012;
     for (let i = 0; i < ROPE_POINTS; i++) {
       const p = this.pts[i];
       const q = this.pts[Math.min(i + 1, ROPE_POINTS - 1)];
       const pp = this.pts[Math.max(i - 1, 0)];
       _a.subVectors(q, pp).normalize();
-      _view.subVectors(camPos, p).normalize();
+      _view.subVectors(camPos, p);
+      // roughly constant on-screen thickness: a thin cable up close, still readable far away
+      const width = THREE.MathUtils.clamp(_view.length() * 0.0045, 0.014, 0.17);
+      _view.normalize();
       _side.crossVectors(_a, _view).normalize().multiplyScalar(width);
       arr[i * 6] = p.x - _side.x;
       arr[i * 6 + 1] = p.y - _side.y;

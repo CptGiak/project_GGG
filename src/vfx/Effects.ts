@@ -199,10 +199,10 @@ export class Effects {
   }
 
   gasBurst(pos: THREE.Vector3, color: THREE.ColorRepresentation): void {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 8; i++) {
       randDir(_v).multiplyScalar(rnd(1.5, 4));
-      _v.y -= 1.5;
-      this.alpha.emit({ pos: _w.copy(pos).addScaledVector(randDir(_u), 0.2), vel: _v.clone(), life: rnd(0.4, 0.7), size: rnd(0.15, 0.3), size1: rnd(0.6, 1.0), color: 0xf6f2fa, shape: Shape.puff, drag: 3.5 });
+      _v.y -= 2;
+      this.alpha.emit({ pos: _w.copy(pos).addScaledVector(randDir(_u), 0.15), vel: _v.clone(), life: rnd(0.3, 0.5), size: rnd(0.12, 0.22), size1: rnd(0.38, 0.62), color: 0xf6f2fa, shape: Shape.puff, drag: 3.5, alpha: 0.8 });
     }
     for (let i = 0; i < 6; i++) {
       this.add.emit({ pos, vel: randDir(_v).multiplyScalar(rnd(4, 9)).clone(), life: rnd(0.15, 0.3), size: 0.12, color, shape: Shape.streak, drag: 6, stretch: 2 });
