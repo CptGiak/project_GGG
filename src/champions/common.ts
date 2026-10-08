@@ -5,6 +5,7 @@ import type { BodySphere, ClothChain, ClothSheet } from '../fighter/Cloth';
 import type { ModelBuilder } from '../fighter/ModelBuilder';
 import type { ChampionAnimSet } from '../fighter/locomotion';
 import type { BladeRef, ChampionVisual } from './types';
+import { blinker } from './face';
 
 /** Wraps a built rig into the pivot hierarchy the game expects. */
 export function assembleVisual(args: {
@@ -21,6 +22,8 @@ export function assembleVisual(args: {
   materials: THREE.Material[];
   anims: ChampionAnimSet;
   tick?: ChampionVisual['tick'];
+  /** blinking eye mesh (face.ts) */
+  eyes?: THREE.Object3D | null;
 }): ChampionVisual {
   const { rig } = args;
   args.builder.build();
@@ -48,6 +51,8 @@ export function assembleVisual(args: {
   root.add(pivot);
   const worldObjects: THREE.Object3D[] = [];
   for (const c of args.cloth) worldObjects.push(...c.objects);
+  const baseTick: ChampionVisual['tick'] = args.tick ?? (() => {});
+  const blink = args.eyes ? blinker(args.eyes) : null;
   return {
     rig,
     root,
@@ -64,7 +69,7 @@ export function assembleVisual(args: {
     offhandGrip: args.offhandGrip,
     muzzle: args.muzzle,
     materials: args.materials,
-    tick: args.tick ?? (() => {}),
+    tick: blink ? (dt, t, e) => { baseTick(dt, t, e); blink(dt); } : baseTick,
     anims: args.anims,
   };
 }

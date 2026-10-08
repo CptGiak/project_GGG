@@ -73,6 +73,17 @@ const TOON_RIM = /* glsl */ `
   float rw = max( fwidth( ndv ), 0.002 );
   float rim = smoothstep( uRimCut - rw, uRimCut + rw, ndv ) * uRim;
   outgoingLight += uRimColor * rim * ( 1.0 - 0.65 * gToonLit ) * mix( vec3( 1.0 ), diffuseColor.rgb, 0.3 );
+  if ( uHairBand > 0.0 ) {
+    // anime "angel ring": a band at a fixed view-space latitude of the hair, smooth on top and
+    // breaking into downward spikes underneath
+    float tri = abs( fract( normal.x * 6.5 + 0.3 ) - 0.5 ) * 2.0;
+    float tri2 = abs( fract( normal.x * 15.0 + 0.1 ) - 0.5 ) * 2.0;
+    float lo = 0.4 - pow( tri, 3.0 ) * 0.1 - tri2 * 0.025;
+    float bw = max( fwidth( normal.y ), 0.002 );
+    float ring = smoothstep( lo - bw, lo + bw, normal.y ) * ( 1.0 - smoothstep( 0.47 - bw, 0.47 + bw, normal.y ) );
+    ring *= smoothstep( 0.12, 0.38, normal.z );
+    outgoingLight += mix( diffuseColor.rgb, vec3( 1.0 ), 0.55 ) * ring * uHairBand * ( 0.45 + 0.55 * gToonLit ) * uLit;
+  }
 }
 #include <opaque_fragment>
 `;
@@ -92,6 +103,8 @@ export interface ToonOptions {
   rimCut?: number;
   /** Shifts the lit/shade terminator (positive = more shade). */
   band?: number;
+  /** Anime hair "angel ring" highlight strength (0 = off). */
+  hairBand?: number;
   side?: THREE.Side;
   vertexColors?: boolean;
   map?: THREE.Texture | null;
@@ -121,6 +134,7 @@ export function toon(opts: ToonOptions): ToonMaterial {
   const rim = { value: opts.rim ?? 0.45 };
   const rimCut = { value: opts.rimCut ?? 0.68 };
   const band = { value: opts.band ?? 0.0 };
+  const hairBand = { value: opts.hairBand ?? 0.0 };
   mat.userData.toon = { shadeMat, rim };
 
   mat.onBeforeCompile = (shader) => {
@@ -134,12 +148,13 @@ export function toon(opts: ToonOptions): ToonMaterial {
     shader.uniforms.uRim = rim;
     shader.uniforms.uRimCut = rimCut;
     shader.uniforms.uBandOffset = band;
+    shader.uniforms.uHairBand = hairBand;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <lights_toon_pars_fragment>', TOON_LIGHTS)
       .replace('#include <opaque_fragment>', TOON_RIM)
-      .replace('void main() {', 'uniform vec3 uRimColor;\nuniform float uRim;\nuniform float uRimCut;\nvoid main() {');
+      .replace('void main() {', 'uniform vec3 uRimColor;\nuniform float uRim;\nuniform float uRimCut;\nuniform float uHairBand;\nvoid main() {');
   };
-  mat.customProgramCacheKey = () => 'ggg-toon-v1';
+  mat.customProgramCacheKey = () => 'ggg-toon-v2';
   return mat;
 }
 
@@ -163,7 +178,7 @@ export function gradientToon(opts: ToonOptions & { colorB: THREE.ColorRepresenta
       .replace('#include <common>', '#include <common>\nvarying float vT;\nuniform vec3 uColorB;\nuniform vec2 uGradRange;')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix( diffuseColor.rgb, uColorB, smoothstep( uGradRange.x, uGradRange.y, vT ) );');
   };
-  mat.customProgramCacheKey = () => 'ggg-toon-gradient-v1';
+  mat.customProgramCacheKey = () => 'ggg-toon-gradient-v2';
   return mat;
 }
 

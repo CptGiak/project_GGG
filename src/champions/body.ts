@@ -160,8 +160,11 @@ export function makeBodySpheres(rig: Rig): BodySphere[] {
 // Face pieces
 // ---------------------------------------------------------------------------------------------
 
-/** Persona-style domino mask wrapped on the face, with glowing eye slits. */
-export function addDominoMask(b: ModelBuilder, head: THREE.Object3D, maskMat: string, eyeMat: string, style: 'sharp' | 'wing' | 'elegant' = 'sharp', female = false): void {
+/**
+ * Persona-style domino mask wrapped on the face. With `eyeMat` it gets glowing eye slits; with
+ * null the eye holes open wider for real eyes (see face.ts).
+ */
+export function addDominoMask(b: ModelBuilder, head: THREE.Object3D, maskMat: string, eyeMat: string | null, style: 'sharp' | 'wing' | 'elegant' = 'sharp', female = false): void {
   const r = female ? 0.108 : 0.114;
   let shape: THREE.Shape;
   if (style === 'wing') {
@@ -180,13 +183,15 @@ export function addDominoMask(b: ModelBuilder, head: THREE.Object3D, maskMat: st
     shape = poly([-0.115, 0.022, -0.07, 0.042, -0.025, 0.028, 0, 0.012, 0.025, 0.028, 0.07, 0.042, 0.115, 0.022, 0.095, -0.012, 0.055, -0.03, 0.018, -0.02, 0, -0.006, -0.018, -0.02, -0.055, -0.03, -0.095, -0.012]);
   }
   // eye holes
+  const [hx, hy] = eyeMat ? [0.026, 0.012] : female ? [0.029, 0.0175] : [0.028, 0.0152];
   for (const sx of [1, -1]) {
     const hole = new THREE.Path();
-    hole.absellipse(sx * 0.048, 0.008, 0.026, 0.012, 0, Math.PI * 2, false, sx * 0.18);
+    hole.absellipse(sx * 0.047, eyeMat ? 0.008 : 0.0075, hx, hy, 0, Math.PI * 2, false, sx * 0.14);
     shape.holes.push(hole);
   }
   const g = wrapAroundY(extrude(shape, 0.008, 0.002, 12), r + 0.006);
   b.add(head, xf(g, [0, 0.112, 0.012]), maskMat, 0.8);
+  if (!eyeMat) return;
   // eyes (glowing slits behind the holes)
   for (const sx of [1, -1]) {
     const eye = wrapAroundY(xf(ellipsoid(0.022, 0.0085, 0.004, 12, 6), [sx * 0.048, 0.007, 0], [0, 0, sx * 10]), r + 0.003);

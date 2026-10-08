@@ -9,6 +9,12 @@ import { cyl, ellipsoid, lathe, limb, noteGeometry, rbox, sweep, torus, xf } fro
 import { addFace, addODMGear, addSpikyHair, addVisor, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
+import { addAnimeEyes, eyeMaterial, type EyeStyle } from './face';
+
+const REX_EYES: EyeStyle = {
+  sclera: 0xf6f2fa, irisTop: 0x0a5a5a, irisBottom: 0x3ff0dc, pupil: 0x031a1a, lash: 0x08080c, brow: 0x17151d,
+  glow: 0.3, female: false, y: 0.114, h: 0.023, tilt: 0.08, gaze: 0.04, browFierce: 0.05,
+};
 
 /**
  * REX — "The Headliner". Sharpshooter / producer.
@@ -20,7 +26,8 @@ export function buildRex(): ChampionVisual {
   const M: Record<string, THREE.Material> = {
     skin: toon({ color: 0xb47a56, shade: 0xffb8a8, rim: 0.35 }),
     skinDark: toon({ color: 0x5e3426, rim: 0 }),
-    hair: toon({ color: 0x1c1a24, shade: 0xb0a8ff, spec: 0.35, specSize: 0.92, rim: 0.6 }),
+    hair: toon({ color: 0x1c1a24, shade: 0xb0a8ff, hairBand: 0.42, rim: 0.6 }),
+    eyes: eyeMaterial(REX_EYES),
     teal: toon({ color: 0x2ad6c8, shade: 0x9fd8ff, spec: 0.2, rim: 0.4 }),
     hoodie: toon({ color: 0x5b2fb4, shade: 0xc0a0ff, rim: 0.7, rimCut: 0.62 }),
     hoodieIn: toon({ color: 0x1a1622, side: THREE.BackSide, rim: 0.2 }),
@@ -118,6 +125,7 @@ export function buildRex(): ChampionVisual {
   // --- head ----------------------------------------------------------------------------------------
   addVisor(b, B.head, 'gold', 'lens', false, 0.036);
   addFace(b, B.head, 'skinDark', false);
+  const eyes = addAnimeEyes(b, B.head, 'eyes', REX_EYES);
   // teal undercut sides
   for (const sx of [1, -1]) b.add(B.head, xf(ellipsoid(0.03, 0.06, 0.085), [sx * 0.095, 0.15, -0.02], [0, 0, sx * 8]), 'teal', 0.6);
   const spikes: SpikeSpec[] = [
@@ -191,6 +199,7 @@ export function buildRex(): ChampionVisual {
     muzzle,
     materials: Object.values(M),
     anims,
+    eyes,
   });
 }
 

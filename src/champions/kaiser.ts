@@ -9,6 +9,12 @@ import { cyl, ellipsoid, extrude, hairLock, lathe, poly, rbox, sweep, torus, xf 
 import { addDominoMask, addFace, addODMGear, addSpikyHair, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
+import { addAnimeEyes, eyeMaterial, type EyeStyle } from './face';
+
+const KAISER_EYES: EyeStyle = {
+  sclera: 0xf7f3ff, irisTop: 0x8a4a00, irisBottom: 0xffc94a, pupil: 0x2a1200, lash: 0x0c0810, brow: null,
+  glow: 0.5, female: false, x: 0.047, y: 0.1195, tilt: 0.2, gaze: 0.05,
+};
 
 /**
  * KAISER — "Bass Drop" greatsword idol. Melee bruiser.
@@ -25,7 +31,8 @@ export function buildKaiser(): ChampionVisual {
   const M: Record<string, THREE.Material> = {
     skin: toon({ color: 0xf4cdb4, shade: 0xffc8c0, rim: 0.3 }),
     skinDark: toon({ color: 0x9a5a52, rim: 0 }),
-    hair: toon({ color: 0xe2e7f4, shade: 0xb4aee8, spec: 0.3, specSize: 0.9, rim: 0.5 }),
+    hair: toon({ color: 0xe2e7f4, shade: 0xb4aee8, hairBand: 0.45, rim: 0.5 }),
+    eyes: eyeMaterial(KAISER_EYES),
     coat: toon({ color: 0x2b2738, rim: 0.85, rimCut: 0.62 }),
     lining: toon({ color: 0xb8195f, side: THREE.BackSide, rim: 0.2 }),
     liningFront: toon({ color: 0xb8195f, rim: 0.2 }),
@@ -41,7 +48,6 @@ export function buildKaiser(): ChampionVisual {
     gearBody: toon({ color: 0x1d1c25, spec: 0.4, rim: 0.5 }),
     neonGold: neon(0xffc24a, 2.6),
     gearGlow: neon(0xffc24a, 1.7),
-    eyeGlow: neon(0xffd060, 2.2),
     neonPink: neon(0xff2e88, 2.6),
     eq: equalizerMaterial(0xff2e88, 0xffd34a, 18, 3.2),
   };
@@ -114,8 +120,9 @@ export function buildKaiser(): ChampionVisual {
   const gear = addODMGear(b, rig, { body: 'gearBody', accent: 'gold', glow: 'gearGlow' });
 
   // --- head: mask, hair --------------------------------------------------------------------------
-  addDominoMask(b, B.head, 'mask', 'eyeGlow', 'sharp');
+  addDominoMask(b, B.head, 'mask', null, 'sharp');
   addFace(b, B.head, 'skinDark', false);
+  const eyes = addAnimeEyes(b, B.head, 'eyes', KAISER_EYES);
   const spikes: SpikeSpec[] = [
     { at: [0, 1, 0.25], len: 0.17, r: 0.048, bend: [0, -0.01, -0.13] },
     { at: [0.32, 0.9, -0.05], len: 0.19, r: 0.046, bend: [0.06, -0.03, -0.13] },
@@ -251,6 +258,7 @@ export function buildKaiser(): ChampionVisual {
     muzzle: bladeTip,
     materials,
     anims,
+    eyes,
     tick: (_dt, _t, energy) => {
       const eq = M.eq as THREE.ShaderMaterial;
       eq.uniforms.uEnergy.value = 0.6 + energy * 0.9;

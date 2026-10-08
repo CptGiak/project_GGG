@@ -9,6 +9,12 @@ import { cyl, ellipsoid, extrude, hairLock, lathe, limb, rbox, sweep, torus, xf 
 import { addFace, addODMGear, addSpikyHair, addVisor, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
+import { addAnimeEyes, eyeMaterial, type EyeStyle } from './face';
+
+const NOVA_EYES: EyeStyle = {
+  sclera: 0xfaf6ff, irisTop: 0x7a1060, irisBottom: 0xff5fd0, pupil: 0x24061c, lash: 0x1a0814, brow: 0xd0388f,
+  glow: 0.25, female: true, y: 0.113, tilt: 0.16, gaze: 0.05, browFierce: 0.35,
+};
 
 /**
  * NOVA — "Glitch Ronin". Fast dual-blade assassin.
@@ -19,7 +25,8 @@ export function buildNova(): ChampionVisual {
   const M: Record<string, THREE.Material> = {
     skin: toon({ color: 0xf6d2bb, shade: 0xffc4c0, rim: 0.3 }),
     skinDark: toon({ color: 0xa85f60, rim: 0 }),
-    hair: toon({ color: 0xff4fb6, shade: 0xc89cff, spec: 0.2, specSize: 0.93, rim: 0.55 }),
+    hair: toon({ color: 0xff4fb6, shade: 0xc89cff, hairBand: 0.4, rim: 0.55 }),
+    eyes: eyeMaterial(NOVA_EYES),
     jacket: toon({ color: 0x1b1a24, rim: 0.85, rimCut: 0.62 }),
     jacketIn: toon({ color: 0x14d6e8, side: THREE.BackSide, rim: 0.2 }),
     crop: toon({ color: 0x2a2836, rim: 0.6 }),
@@ -96,6 +103,7 @@ export function buildNova(): ChampionVisual {
   // --- head: visor, hair ---------------------------------------------------------------------------
   addVisor(b, B.head, 'gearBody', 'visorLens', true, 0.03);
   addFace(b, B.head, 'skinDark', true);
+  const eyes = addAnimeEyes(b, B.head, 'eyes', NOVA_EYES);
   const spikes: SpikeSpec[] = [
     { at: [0, 1, 0.1], len: 0.1, r: 0.05, bend: [0, -0.02, -0.08], flat: 0.55 },
     { at: [0.35, 0.9, 0.0], len: 0.11, r: 0.048, bend: [0.04, -0.04, -0.07], flat: 0.55 },
@@ -211,6 +219,7 @@ export function buildNova(): ChampionVisual {
     muzzle: blades[0].tip,
     materials: Object.values(M),
     anims,
+    eyes,
   });
 }
 

@@ -9,6 +9,12 @@ import { cyl, ellipsoid, extrude, hairLock, lathe, limb, sweep, torus, xf } from
 import { addDominoMask, addFace, addODMGear, addSpikyHair, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
+import { addAnimeEyes, eyeMaterial, type EyeStyle } from './face';
+
+const SERA_EYES: EyeStyle = {
+  sclera: 0xfbf8ff, irisTop: 0x4a2290, irisBottom: 0xd2a6ff, pupil: 0x1a0a2e, lash: 0x2a1230, brow: null,
+  glow: 0.2, female: true, x: 0.047, y: 0.1195, h: 0.036, tilt: 0.06, gaze: 0.05,
+};
 
 /**
  * SERA — "Holo Diva". Ranged caster idol.
@@ -20,7 +26,8 @@ export function buildSera(): ChampionVisual {
   const M: Record<string, THREE.Material> = {
     skin: toon({ color: 0xfbe0cf, shade: 0xffc8c8, rim: 0.3 }),
     skinDark: toon({ color: 0xc07070, rim: 0 }),
-    hair: toon({ color: 0xffd56b, shade: 0xe0a8ff, spec: 0.3, specSize: 0.92, rim: 0.5 }),
+    hair: toon({ color: 0xffd56b, shade: 0xe0a8ff, hairBand: 0.4, rim: 0.5 }),
+    eyes: eyeMaterial(SERA_EYES),
     dress: toon({ color: 0xf6f2fb, shade: 0xc8b8ff, rim: 0.45 }),
     dressIn: toon({ color: 0xff7ad9, side: THREE.BackSide, rim: 0.2 }),
     pink: toon({ color: 0xff6fcf, shade: 0xffa8e8, rim: 0.4 }),
@@ -36,7 +43,6 @@ export function buildSera(): ChampionVisual {
     neonPink: neon(0xff7ad9, 2.8),
     neonCyan: neon(0x7af6ff, 2.6),
     gearGlow: neon(0xff7ad9, 1.6),
-    eyeGlow: neon(0xff9be6, 2.2),
     holo: holoMaterial(0xff7ad9, 0x7af6ff, { intensity: 1.4, scan: 50, glitch: 0.4 }),
     halo: holoMaterial(0x7af6ff, 0xff7ad9, { intensity: 2.2, scan: 20, glitch: 0.6 }),
   };
@@ -139,8 +145,9 @@ export function buildSera(): ChampionVisual {
   const gear = addODMGear(b, rig, { body: 'gearBody', accent: 'gearAccent', glow: 'gearGlow' });
 
   // --- head: masquerade, hair, halo ------------------------------------------------------------------
-  addDominoMask(b, B.head, 'mask', 'eyeGlow', 'elegant', true);
+  addDominoMask(b, B.head, 'mask', null, 'elegant', true);
   addFace(b, B.head, 'skinDark', true);
+  const eyes = addAnimeEyes(b, B.head, 'eyes', SERA_EYES);
   for (const sx of [1, -1]) b.add(B.head, xf(new THREE.OctahedronGeometry(0.012), [sx * 0.115, 0.15, 0.08], [0, 0, 45]), 'neonPink', 0);
   const spikes: SpikeSpec[] = [
     { at: [0, 1, 0.05], len: 0.08, r: 0.05, bend: [0, -0.02, -0.05], flat: 0.55 },
@@ -256,6 +263,7 @@ export function buildSera(): ChampionVisual {
     muzzle,
     materials: Object.values(M),
     anims,
+    eyes,
     tick: (dt, t, energy) => {
       halo.rotation.z += dt * 0.6;
       halo.position.y = 0.2 + Math.sin(t * 2) * 0.01;
