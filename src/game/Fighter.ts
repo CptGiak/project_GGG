@@ -20,7 +20,7 @@ const _g = new THREE.Vector3();
 const _acc = new THREE.Vector3();
 const _hit: RayHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), distance: 0, box: null };
 const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
+const WHITE = new THREE.Color(1, 1, 1);
 const UP = new THREE.Vector3(0, 1, 0);
 
 export function forwardOf(yaw: number, out: THREE.Vector3): THREE.Vector3 {
@@ -71,6 +71,18 @@ export class Fighter {
   private lateral = 0;
   /** wall-run timer (running up a building after hitting it at speed) */
   wallRun = 0;
+  /** taunt emote time left */
+  tauntT = 0;
+  /** landing roll time left */
+  rollT = 0;
+  private rollK = 0;
+  /** continuous wall-run time (capped so you eventually slide off) */
+  private wallRunTotal = 0;
+  /** velocity at the previous visual update (banking / lateral acceleration) */
+  private visPrevVel = new THREE.Vector3();
+  /** materials flashed white on hit */
+  private flashMats: Array<{ m: THREE.MeshToonMaterial; base: THREE.Color }> = [];
+  private flashing = false;
 
   // --- combat --------------------------------------------------------------------------------
   hp: number;
@@ -113,6 +125,10 @@ export class Fighter {
     this.anim = new FighterAnimator(visual);
     const c = new THREE.Color(this.champ.colors[0]);
     this.hooks = [new Hook(c), new Hook(c)];
+    for (const mat of visual.materials) {
+      const tm = mat as THREE.MeshToonMaterial;
+      if (tm.isMeshToonMaterial) this.flashMats.push({ m: tm, base: tm.emissive.clone() });
+    }
   }
 
   get simulated(): boolean {
@@ -178,6 +194,7 @@ export class Fighter {
         this.ctrl.noHooks = false;
         this.ctrl.noDash = false;
         this.kit?.update(this, it, dt, m);
+        this.updateTaunt(it, m);
         this.movement(dt, m);
       } else {
         // dead: drift with gravity a little, no control
@@ -190,6 +207,34 @@ export class Fighter {
     this.updateVisual(dt, m);
   }
 
+  /** start / cancel the champion taunt emote */
+  private updateTaunt(it: Intent, m: MatchContext): void {
+    const busy = (this.kit as unknown as { act: string | null } | null)?.act;
+    if (it.tauntPressed && this.tauntT <= 0 && this.grounded && !busy && this.stun <= 0) {
+      this.startTaunt();
+      m.broadcastAction(this, { a: 'taunt' });
+      return;
+    }
+    if (this.tauntT > 0) {
+      const moving = it.move.lengthSq() > 0.01 || it.attackPressed || it.secondaryPressed || it.abilityPressed || it.ultimatePressed || it.jumpPressed || it.dashPressed || it.hookLPressed || it.hookRPressed;
+      if (moving || !this.grounded || busy) this.stopTaunt();
+    }
+  }
+
+  startTaunt(): void {
+    const c = this.visual.anims.clips.taunt;
+    if (!c) return;
+    this.tauntT = c.duration;
+    this.anim.play('taunt', { fadeIn: 0.1 });
+  }
+
+  stopTaunt(): void {
+    if (this.tauntT <= 0) return;
+    this.tauntT = 0;
+    if (this.anim.action.name === 'taunt') this.anim.action.stop(0.15);
+    this.trailOn = false;
+  }
+
   private timers(dt: number): void {
     this.invuln = Math.max(0, this.invuln - dt);
     this.stun = Math.max(0, this.stun - dt);
@@ -199,6 +244,10 @@ export class Fighter {
     this.spawnProtect = Math.max(0, this.spawnProtect - dt);
     this.ctrl.lockMove = Math.max(0, this.ctrl.lockMove - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt);
+    this.tauntT = Math.max(0, this.tauntT - dt);
+    this.rollT = Math.max(0, this.rollT - dt);
+    if (this.wallRun > 0) this.wallRunTotal += dt;
+    else if (this.hooked) this.wallRunTotal = 0;
     this.wallRun = Math.max(0, this.wallRun - dt);
     if (!this.alive) this.deadTime += dt;
   }
@@ -322,7 +371,14 @@ export class Fighter {
     if (this.grounded && this.landImpact > 0) {
       const impact = this.landImpact;
       this.landImpact = 0;
-      if (impact > 9) {
+      const hs = Math.hypot(this.vel.x, this.vel.z);
+      if (impact > 14 && hs > 11 && !(this.kit as unknown as { act: string | null } | null)?.act) {
+        // fast landing with momentum: stylish forward roll instead of a crouch
+        this.rollT = 0.42;
+        this.anim.play('roll', { fadeIn: 0.04, fadeOut: 0.12 });
+        m.audio.play('land', this.pos, 0.6);
+        m.vfx.landing(this.pos, this.champ.colors[0], 0.4);
+      } else if (impact > 9) {
         this.anim.st.wLand = THREE.MathUtils.clamp((impact - 6) / 16, 0.25, 1);
         m.audio.play('land', this.pos, Math.min(1, impact / 25));
         if (impact > 20) {
@@ -356,6 +412,23 @@ export class Fighter {
     const vz = this.vel.z;
     const vh = Math.hypot(vx, vz);
     const wl = wish.length();
+    if (this.rollT > 0 && vh > 0.5) {
+      // landing roll: keeps the momentum (almost no friction) and steers lightly toward the input
+      const k = Math.exp(-1.6 * h);
+      let dx = vx / vh;
+      let dz = vz / vh;
+      if (wl > 0.01) {
+        const s = 1 - Math.exp(-4 * h);
+        dx += (wish.x / wl - dx) * s;
+        dz += (wish.z / wl - dz) * s;
+        const dl = Math.hypot(dx, dz) || 1;
+        dx /= dl;
+        dz /= dl;
+      }
+      this.vel.x = dx * vh * k;
+      this.vel.z = dz * vh * k;
+      return;
+    }
     if (wl < 0.01) {
       const k = Math.exp(-MOVE.groundFriction * h);
       this.vel.x *= k;
@@ -402,7 +475,7 @@ export class Fighter {
           this.wallNormal.copy(_n).setY(0).normalize();
           this.wallAt = m.time;
           // wall-run: convert the impact into running up the wall while pushing toward it
-          if (!this.grounded && this.simulated && this.alive && this.intent.move.y > 0.3 && Math.abs(_n.y) < 0.35) {
+          if (!this.grounded && this.simulated && this.alive && this.intent.move.y > 0.3 && Math.abs(_n.y) < 0.35 && this.wallRunTotal < 2.6) {
             const into = -vn;
             if (into > 7 || this.wallRun > 0) {
               const up = Math.min(Math.max(into * 0.65, this.wallRun > 0 ? 9 : 0), 22);
@@ -431,6 +504,7 @@ export class Fighter {
     if (ground) {
       if (!this.grounded) this.airJumps = MOVE.airJumps;
       this.lastGroundedAt = m.time;
+      this.wallRunTotal = 0;
     }
     this.grounded = ground;
   }
@@ -760,7 +834,7 @@ export class Fighter {
       const sf = THREE.MathUtils.clamp((speed - 6) / 30, 0, 1);
       pitchT = THREE.MathUtils.clamp(0.45 - vyN * 0.7, -0.5, 1.15) * sf;
       // lateral acceleration (centripetal) relative to facing
-      _v.subVectors(this.vel, this.prevVel).divideScalar(Math.max(dt, 1e-4));
+      _v.subVectors(this.vel, this.visPrevVel).divideScalar(Math.max(dt, 1e-4));
       rightOf(this.facing, _r);
       this.lateral = damp(this.lateral, _v.dot(_r), 6, dt);
       bankT = THREE.MathUtils.clamp(-this.lateral * 0.022 - turnRate * 0.12, -1.0, 1.0) * sf;
@@ -776,7 +850,13 @@ export class Fighter {
     }
     this.pitch = damp(this.pitch, pitchT, 8, dt);
     this.bank = damp(this.bank, bankT, 7, dt);
-    v.pivot.rotation.set(this.pitch, 0, this.bank, 'YXZ');
+    // landing roll: somersault around the hip centre
+    this.rollK = damp(this.rollK, this.rollT > 0 ? 1 : 0, 20, dt);
+    const hipH = v.rig.hipHeight;
+    v.pivot.position.y = THREE.MathUtils.lerp(hipH, 0.62, this.rollK);
+    v.rig.root.position.y = -THREE.MathUtils.lerp(hipH, hipH - 0.35, this.rollK);
+    const rollAngle = this.rollT > 0 ? (1 - this.rollT / 0.42) * Math.PI * 2 : 0;
+    v.pivot.rotation.set(this.pitch + rollAngle, 0, this.bank, 'YXZ');
 
     // animation state
     const wallRunning = this.wallRun > 0;
@@ -812,7 +892,10 @@ export class Fighter {
     this.anim.update(dt, airborne && !this.grounded);
     // anim events -> kit
     if (this.anim.action.events.length) {
-      for (const ev of this.anim.action.events) this.kit?.onAnimEvent(this, ev, m);
+      for (const ev of this.anim.action.events) {
+        if (this.tauntT > 0 || this.anim.action.name === 'taunt') this.tauntEvent(ev, m);
+        else this.kit?.onAnimEvent(this, ev, m);
+      }
       this.anim.action.events.length = 0;
     }
 
@@ -840,8 +923,33 @@ export class Fighter {
 
     // weapon energy / champion idle fx
     v.tick(dt, m.time, this.boosting ? 1 : Math.min(1, this.speed / 30));
-    // spawn protection blink / hit flash handled by match (material emissive)
-    void _e;
+    this.visPrevVel.copy(this.vel);
+    // Persona-style white hit flash
+    if (this.hitFlash > 0 || this.flashing) {
+      const k = this.hitFlash > 0 ? Math.min(1, this.hitFlash / 0.12) * 0.75 : 0;
+      for (const fm of this.flashMats) fm.m.emissive.copy(fm.base).lerp(WHITE, k);
+      this.flashing = this.hitFlash > 0;
+    }
+  }
+
+  private tauntEvent(ev: string, m: MatchContext): void {
+    if (ev === 'swing') this.trailOn = true;
+    else if (ev === 'hitOff') this.trailOn = false;
+    else if (ev === 'plant') {
+      forwardOf(this.facing, _f);
+      const p = this.pos.clone().addScaledVector(_f, 0.6);
+      m.vfx.landing(p, this.champ.colors[0], 0.5);
+      m.vfx.hitSpark(p.setY(p.y + 0.1), UP, this.champ.colors[0], false);
+      m.audio.play('block', this.pos, 0.7);
+      m.shake(0.15, this.pos);
+    } else if (ev === 'sparkle') {
+      const h = this.head(new THREE.Vector3());
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        m.vfx.add.emit({ pos: h.clone(), vel: new THREE.Vector3(Math.cos(a) * 3, 2 + Math.random() * 2, Math.sin(a) * 3), life: 0.6, size: 0.12, color: i % 2 ? this.champ.colors[0] : this.champ.colors[1], shape: 2, drag: 2 });
+      }
+      m.audio.play('note', this.pos, 0.6);
+    }
   }
 
   isMovingBack(): boolean {

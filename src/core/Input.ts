@@ -6,7 +6,7 @@ export type Action =
   | 'forward' | 'back' | 'left' | 'right'
   | 'jump' | 'dash' | 'hookL' | 'hookR'
   | 'attack' | 'secondary' | 'ability' | 'ultimate'
-  | 'scoreboard' | 'pause';
+  | 'scoreboard' | 'pause' | 'taunt';
 
 /** binding codes: KeyboardEvent.code, or 'Mouse0'..'Mouse4' */
 export const DEFAULT_BINDINGS: Record<Action, string[]> = {
@@ -24,6 +24,7 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   ultimate: ['KeyR'],
   scoreboard: ['Tab'],
   pause: ['Escape'],
+  taunt: ['KeyT'],
 };
 
 export class Input {

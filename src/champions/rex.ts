@@ -210,6 +210,15 @@ function rexAnims(): ChampionAnimSet {
   const flyArms = pose({ wR: W([-0.36, 1.0, -0.18], [-0.2, -0.25, -0.95]), off: 0, upperArmL: [10, 0, 45], foreArmL: [-30, 0, 0] });
   // shouldered aim (rotated by the aim pitch at runtime)
   const aimSpec: PoseSpec = { ...legs, spine: [2, 4, 0], chest: [0, 4, 0], neck: [0, -4, 0], head: [6, -6, 0], wR: W([-0.17, 1.4, 0.3], [0, 0, 1]), off: 1 };
+  // taunt keys: wrist targets for the bare left hand (palm up overhead / palm down pointing)
+  const shoulderRest = W([-0.22, 1.5, 0.05], [0.1, 0.6, -0.8], [-1, 0, 0]);
+  const roofUp = W([0.3, 1.8, 0.04], [-1, 0, 0], [0, 0, 1]);
+  const roofLow = W([0.33, 1.6, 0.1], [-1, 0, 0], [0, 0, 1]);
+  const pointAt = W([0.17, 1.42, 0.5], [-1, 0, 0], [0, 0, -1]);
+  const tauntPose = (hand: WeaponSpec, nod: number, dip: number): PoseSpec => ({
+    ...legs, spine: [0, 8, 0], chest: [0, 4, 0], neck: [nod * 0.4, -4, 0], head: [nod, -6, nod * 0.3],
+    hips: [0, dip, 0], wR: shoulderRest, wL: hand, off: 0,
+  });
   const base = pose(legs);
   const clips = {
     ...sharedClips(idle),
@@ -223,6 +232,21 @@ function rexAnims(): ChampionAnimSet {
       [0.12, { wR: W([-0.24, 1.05, 0.22], [0.2, -0.45, 0.87]), off: 0, upperArmL: [-70, 0, 10], foreArmL: [-10, 0, 0], spine: [16, 18, 0], chest: [8, 14, 0], hips: [0, -0.06, 0.08], thighL: [-30, -10, 10], shinL: [34, 0, 0] }, Ease.outQuart],
       [0.4, { ...legs, wR: lowReady, off: 1 }, Ease.inOut],
     ], { events: [{ t: 0.1, id: 'release' }], fadeIn: 0.05, fadeOut: 0.15 }),
+    // taunt: rifle propped on the shoulder, the free hand "raises the roof" on the beat, then
+    // points the crowd at the target
+    taunt: clip('taunt', base, [
+      [0, { ...legs, wR: lowReady, off: 1 }],
+      [0.28, tauntPose(roofLow, -6, -0.03), Ease.outBack],
+      [0.45, tauntPose(roofUp, 14, -0.08)],
+      [0.62, tauntPose(roofLow, -8, -0.03)],
+      [0.79, tauntPose(roofUp, 14, -0.08)],
+      [0.96, tauntPose(roofLow, -8, -0.03)],
+      [1.13, tauntPose(roofUp, 14, -0.08)],
+      [1.3, tauntPose(roofLow, -8, -0.03)],
+      [1.46, { ...tauntPose(pointAt, 4, -0.05), spine: [2, -6, 0], chest: [2, -4, 0] }, Ease.outBack],
+      [1.75, { ...tauntPose(pointAt, 2, -0.04), spine: [2, -6, 0], chest: [2, -4, 0] }],
+      [2.0, { ...legs, wR: lowReady, off: 1 }, Ease.inOut],
+    ], { fadeIn: 0.1, fadeOut: 0.25 }),
     ult: clip('ult', base, [
       [0, { ...legs, wR: W([-0.15, 1.5, 0.22], [0, 0.82, 0.57]), off: 1, spine: [-12, 0, 0], chest: [-10, 0, 0], head: [-20, 0, 0], hips: [0, -0.06, 0], thighL: [-24, -10, 12], shinL: [30, 0, 0] }],
       [1.4, { ...legs, wR: W([-0.15, 1.5, 0.22], [0, 0.82, 0.57]), off: 1, spine: [-12, 0, 0], chest: [-10, 0, 0], head: [-20, 0, 0], hips: [0, -0.06, 0], thighL: [-24, -10, 12], shinL: [30, 0, 0] }],

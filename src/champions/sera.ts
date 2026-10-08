@@ -298,6 +298,17 @@ function seraAnims(): ChampionAnimSet {
       [0.14, { wR: W([-0.12, 0.62, 0.42], [0.02, -0.98, 0.2], [0, 0, 1]), upperArmL: [-20, 0, 70], foreArmL: [-10, 0, 0], spine: [24, 0, 0], chest: [10, 0, 0], hips: [0, -0.22, 0.05], thighL: [-60, 0, 14], shinL: [90, 0, 0], thighR: [10, 0, -14], shinR: [70, 0, 0] }, Ease.inCubic],
       [0.55, { ...legs, wR: W([-0.27, 1.0, 0.16], [0.04, 0.98, 0.16]) }, Ease.inOut],
     ], { events: [{ t: 0.14, id: 'wave' }], fadeIn: 0.05, fadeOut: 0.2 }),
+    // taunt: idol pose – staff up, peace sign, hip sway and a little hop
+    taunt: clip('taunt', base, [
+      [0, { ...legs, wR: W([-0.27, 1.0, 0.16], [0.04, 0.98, 0.16]) }],
+      [0.25, { wR: W([-0.3, 1.55, 0.15], [-0.25, 0.95, 0.1]), upperArmL: [-60, -40, 40], foreArmL: [-120, 0, 0], handL: [0, -30, 0], spine: [0, 10, 10], chest: [-4, 6, 6], head: [0, -14, -12], hips: [0, 0.06, 0], thighL: [-20, 0, 4], shinL: [40, 0, 0], thighR: [6, 18, -6], shinR: [16, 0, 0] }, Ease.outBack],
+      [0.45, { wR: W([-0.3, 1.5, 0.15], [-0.2, 0.96, 0.1]), upperArmL: [-60, -40, 40], foreArmL: [-120, 0, 0], handL: [0, -30, 0], spine: [0, 10, -8], chest: [-4, 6, -6], head: [0, -14, 10], hips: [0, -0.01, 0], thighL: [-6, -6, 3], shinL: [8, 0, 0], thighR: [4, 18, -6], shinR: [14, 0, 0] }],
+      [0.7, { wR: W([-0.3, 1.55, 0.15], [-0.25, 0.95, 0.1]), upperArmL: [-60, -40, 40], foreArmL: [-120, 0, 0], handL: [0, -30, 0], spine: [0, 10, 10], chest: [-4, 6, 6], head: [0, -14, -12], hips: [0, -0.01, 0], thighL: [-6, -6, 3], shinL: [8, 0, 0], thighR: [4, 18, -6], shinR: [14, 0, 0] }],
+      [0.95, { wR: W([-0.3, 1.5, 0.15], [-0.2, 0.96, 0.1]), upperArmL: [-60, -40, 40], foreArmL: [-120, 0, 0], handL: [0, -30, 0], spine: [0, 10, -8], chest: [-4, 6, -6], head: [0, -14, 10], hips: [0, -0.01, 0], thighL: [-6, -6, 3], shinL: [8, 0, 0], thighR: [4, 18, -6], shinR: [14, 0, 0] }],
+      [1.2, { wR: W([-0.3, 1.6, 0.15], [-0.25, 0.95, 0.1]), upperArmL: [-60, -40, 40], foreArmL: [-120, 0, 0], handL: [0, -30, 0], spine: [-6, 10, 0], chest: [-6, 6, 0], head: [-10, -14, -6], hips: [0, 0.1, 0], thighL: [-40, 0, 4], shinL: [80, 0, 0], thighR: [-10, 18, -6], shinR: [60, 0, 0] }, Ease.outQuad],
+      [1.45, { wR: W([-0.3, 1.55, 0.15], [-0.25, 0.95, 0.1]), upperArmL: [-60, -40, 40], foreArmL: [-120, 0, 0], handL: [0, -30, 0], spine: [0, 10, 0], chest: [-4, 6, 0], head: [-4, -14, -8], hips: [0, -0.02, 0], thighL: [-8, -6, 3], shinL: [10, 0, 0], thighR: [4, 18, -6], shinR: [14, 0, 0] }, Ease.inQuad],
+      [2.0, { ...legs, wR: W([-0.27, 1.0, 0.16], [0.04, 0.98, 0.16]) }, Ease.inOut],
+    ], { events: [{ t: 0.25, id: 'sparkle' }, { t: 1.2, id: 'sparkle' }], fadeIn: 0.1, fadeOut: 0.25 }),
     ult: clip('ult', base, [
       [0, { ...legs, wR: W([-0.1, 2.0, 0.15], [0, 1, 0.1]), upperArmL: [-170, 0, 20], foreArmL: [-10, 0, 0], spine: [-14, 0, 0], chest: [-10, 0, 0], head: [-22, 0, 0], hips: [0, 0.05, 0] }],
       [0.6, { ...legs, wR: W([-0.1, 2.02, 0.15], [0, 1, 0.1]), upperArmL: [-170, 0, 20], foreArmL: [-10, 0, 0], spine: [-14, 0, 0], chest: [-10, 0, 0], head: [-22, 0, 0], hips: [0, 0.06, 0] }],

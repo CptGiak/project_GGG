@@ -111,6 +111,11 @@ export function sharedClips(base: Pose): Record<string, Clip> {
       [0.55, { spine: [35, 0, 0], chest: [20, 0, 0], head: [25, 0, 0], thighL: [-80, 0, 10], thighR: [-70, 0, -10], shinL: [130, 0, 0], shinR: [125, 0, 0], footL: [-50, 0, 0], footR: [-50, 0, 0], upperArmL: [10, 0, 15], upperArmR: [10, 0, -15], foreArmL: [-20, 0, 0], foreArmR: [-20, 0, 0], hips: [0, -0.5, 0.1] }, Ease.inQuad],
       [1.0, { spine: [45, 0, 0], chest: [25, 0, 0], head: [30, 0, 0], thighL: [-85, 0, 10], thighR: [-75, 0, -10], shinL: [140, 0, 0], shinR: [135, 0, 0], footL: [-50, 0, 0], footR: [-50, 0, 0], upperArmL: [15, 0, 10], upperArmR: [15, 0, -10], foreArmL: [-25, 0, 0], foreArmR: [-25, 0, 0], hips: [0, -0.55, 0.12] }],
     ], { fadeIn: 0.05, fadeOut: 0.1 }),
+    // tucked somersault pose (the fighter rotates the pivot for the actual roll)
+    roll: clip('roll', pose({}), [
+      [0, { hips: [0, -0.35, 0], spine: [45, 0, 0], chest: [25, 0, 0], neck: [20, 0, 0], head: [25, 0, 0], thighL: [-120, 0, 8], thighR: [-115, 0, -8], shinL: [140, 0, 0], shinR: [140, 0, 0], footL: [-30, 0, 0], footR: [-30, 0, 0], upperArmL: [-60, 0, 25], upperArmR: [-60, 0, -25], foreArmL: [-110, 0, 0], foreArmR: [-110, 0, 0], wR: null, wL: null, off: 0 }],
+      [0.5, { hips: [0, -0.35, 0], spine: [45, 0, 0], chest: [25, 0, 0], neck: [20, 0, 0], head: [25, 0, 0], thighL: [-120, 0, 8], thighR: [-115, 0, -8], shinL: [140, 0, 0], shinR: [140, 0, 0], footL: [-30, 0, 0], footR: [-30, 0, 0], upperArmL: [-60, 0, 25], upperArmR: [-60, 0, -25], foreArmL: [-110, 0, 0], foreArmR: [-110, 0, 0], wR: null, wL: null, off: 0 }],
+    ], { fadeIn: 0.05, fadeOut: 0.12 }),
     victory: clip('victory', base, [
       [0, {}],
       [0.4, { spine: [-8, 0, 0], chest: [-6, 0, 0], head: [-12, 0, 0] }, Ease.outBack],

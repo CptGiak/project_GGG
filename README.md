@@ -46,6 +46,7 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 | **RMB** | abilità secondaria |
 | **F** | abilità speciale |
 | **R** | ultimate (si carica infliggendo danni) |
+| **T** | provocazione (emote, a terra e da fermo) |
 | **TAB** | classifica · **ESC** pausa |
 
 ### Il sistema di movimento
@@ -54,6 +55,7 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 - La corda è un vincolo fisico: cadendo **oscilli come un pendolo**; lascia il tasto al momento giusto per essere catapultato.
 - Sbattendo contro un muro ad alta velocità mentre premi **W** ci **corri sopra** (wall-run) e scavalchi i tetti.
 - Puoi agganciare anche **i nemici** (puntali e premi Q/E) per raggiungerli.
+- Atterrando ad alta velocità esegui in automatico una **capriola** che conserva lo slancio.
 - Il gas si ricarica, più velocemente a terra.
 
 ---

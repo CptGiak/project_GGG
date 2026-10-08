@@ -247,7 +247,9 @@ export class OnlineSession implements NetBridge {
       case 'act': {
         const f = m?.getFighter(msg.id);
         if (!f || !m) break;
-        if (msg.e.a === 'hookL' || msg.e.a === 'hookR') {
+        if (msg.e.a === 'taunt') {
+          f.startTaunt();
+        } else if (msg.e.a === 'hookL' || msg.e.a === 'hookR') {
           f.applyRemoteHook(msg.e.a === 'hookL' ? 0 : 1, 'flying', msg.e.p);
           m.audio.play('hookFire', f.pos, 0.6);
         } else f.kit?.playRemote(f, msg.e, m);

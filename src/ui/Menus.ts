@@ -252,6 +252,7 @@ export function controlsPanel(onClose: () => void): HTMLElement {
     ['RMB', 'Abilità secondaria'],
     ['F', 'Abilità speciale'],
     ['R', 'Ultimate (si carica infliggendo danni)'],
+    ['T', 'Provocazione (emote)'],
     ['TAB', 'Classifica'],
     ['ESC', 'Pausa'],
   ];

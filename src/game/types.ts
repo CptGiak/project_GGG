@@ -25,6 +25,7 @@ export interface Intent {
   secondaryReleased: boolean;
   abilityPressed: boolean;
   ultimatePressed: boolean;
+  tauntPressed: boolean;
 }
 
 export function newIntent(): Intent {
@@ -48,6 +49,7 @@ export function newIntent(): Intent {
     secondaryReleased: false,
     abilityPressed: false,
     ultimatePressed: false,
+    tauntPressed: false,
   };
 }
 
@@ -61,6 +63,7 @@ export function clearEdges(i: Intent): void {
   i.secondaryReleased = false;
   i.abilityPressed = false;
   i.ultimatePressed = false;
+  i.tauntPressed = false;
 }
 
 /** Network-replicated action (ability start) so remote clients can play the visuals. */

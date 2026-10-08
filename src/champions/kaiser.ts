@@ -334,6 +334,17 @@ function kaiserAnims(): ChampionAnimSet {
       [0.1, { wR: two([0.02, 1.2, 0.8], [0, -0.02, 1], [0, 1, 0]), off: 1, spine: [30, 0, 0], chest: [8, 0, 0], head: [-26, 0, 0], hips: [0, -0.16, 0.2], thighL: [-62, 0, 6], shinL: [60, 0, 0], footL: [-10, 0, 0], thighR: [42, 0, -6], shinR: [30, 0, 0], footR: [30, 0, 0] }, Ease.outExpo],
       [0.6, { wR: two([0.02, 1.2, 0.82], [0, -0.02, 1], [0, 1, 0]), off: 1, spine: [30, 0, 0], chest: [8, 0, 0], head: [-26, 0, 0], hips: [0, -0.16, 0.2], thighL: [-62, 0, 6], shinL: [60, 0, 0], footL: [-10, 0, 0], thighR: [42, 0, -6], shinR: [30, 0, 0], footR: [30, 0, 0] }],
     ], { fadeIn: 0.03, fadeOut: 0.15 }),
+    // taunt: plant the blade, lean on it and beckon
+    taunt: clip('taunt', base, [
+      [0, { ...legsIdle, wR: two([-0.24, 1.36, 0.26], [0.08, 0.38, -0.92], [-1, 0, 0]) }],
+      [0.3, { wR: two([0.0, 1.35, 0.5], [0, 0.98, 0.15], [0, 0, 1]), spine: [-6, 0, 0], hips: [0, 0.02, 0], thighL: [-8, -10, 9], shinL: [10, 0, 0], thighR: [6, 12, -10], shinR: [10, 0, 0], upperArmL: [0, 0, 14], foreArmL: [-20, 0, 0] }, Ease.outBack],
+      [0.55, { wR: two([0.0, 1.12, 0.5], [0, -0.99, 0.08], [0, 0, 1]), spine: [12, 8, 0], chest: [4, 6, 0], hips: [0, -0.06, 0], thighL: [-14, -10, 9], shinL: [20, 0, 0], thighR: [10, 14, -10], shinR: [18, 0, 0], upperArmL: [0, 0, 14], foreArmL: [-20, 0, 0], head: [-6, -10, 0] }, Ease.inQuad],
+      [0.9, { wR: two([0.0, 1.12, 0.5], [0, -0.99, 0.08], [0, 0, 1]), spine: [14, 10, 0], chest: [4, 8, 0], hips: [0, -0.07, 0], thighL: [-14, -10, 9], shinL: [20, 0, 0], thighR: [10, 14, -10], shinR: [18, 0, 0], upperArmL: [-70, 30, 30], foreArmL: [-60, 0, 0], handL: [0, 0, -30], head: [-8, -16, 0] }],
+      [1.1, { wR: two([0.0, 1.12, 0.5], [0, -0.99, 0.08], [0, 0, 1]), spine: [14, 10, 0], chest: [4, 8, 0], hips: [0, -0.07, 0], thighL: [-14, -10, 9], shinL: [20, 0, 0], thighR: [10, 14, -10], shinR: [18, 0, 0], upperArmL: [-70, 30, 30], foreArmL: [-110, 0, 0], handL: [0, 0, -30], head: [-8, -16, 0] }],
+      [1.3, { wR: two([0.0, 1.12, 0.5], [0, -0.99, 0.08], [0, 0, 1]), spine: [14, 10, 0], chest: [4, 8, 0], hips: [0, -0.07, 0], thighL: [-14, -10, 9], shinL: [20, 0, 0], thighR: [10, 14, -10], shinR: [18, 0, 0], upperArmL: [-70, 30, 30], foreArmL: [-60, 0, 0], handL: [0, 0, -30], head: [-8, -16, 0] }],
+      [1.5, { wR: two([0.0, 1.12, 0.5], [0, -0.99, 0.08], [0, 0, 1]), spine: [14, 10, 0], chest: [4, 8, 0], hips: [0, -0.07, 0], thighL: [-14, -10, 9], shinL: [20, 0, 0], thighR: [10, 14, -10], shinR: [18, 0, 0], upperArmL: [-70, 30, 30], foreArmL: [-110, 0, 0], handL: [0, 0, -30], head: [-8, -16, 0] }],
+      [2.1, { ...legsIdle, wR: two([-0.24, 1.36, 0.26], [0.08, 0.38, -0.92], [-1, 0, 0]) }, Ease.inOut],
+    ], { events: [{ t: 0.55, id: 'plant' }], fadeIn: 0.1, fadeOut: 0.25 }),
     // R: Encore Break – rise with the blade overhead (held), then slam
     ultRise: clip('ultRise', base, [
       [0, { wR: two([-0.2, 1.0, 0.3], [-0.3, -0.4, 0.86], [0, 1, 0]), off: 1, spine: [20, 0, 0], hips: [0, -0.2, 0], thighL: [-60, 0, 8], shinL: [100, 0, 0], thighR: [-10, 0, -8], shinR: [80, 0, 0] }],

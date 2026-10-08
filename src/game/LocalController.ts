@@ -42,5 +42,6 @@ export class LocalController {
     it.secondaryReleased = it.secondaryReleased || inp.released('secondary');
     it.abilityPressed = it.abilityPressed || edge('ability');
     it.ultimatePressed = it.ultimatePressed || edge('ultimate');
+    it.tauntPressed = it.tauntPressed || edge('taunt');
   }
 }

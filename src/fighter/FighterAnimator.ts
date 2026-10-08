@@ -13,6 +13,11 @@ const _inv = new THREE.Quaternion();
 const _off = new THREE.Vector3();
 const _e = new THREE.Euler();
 const _aq = new THREE.Quaternion();
+/** stand-in "weapon" for an empty hand: the key then targets the wrist + hand frame directly */
+const BARE_HAND = new THREE.Object3D();
+/** elbow pole offsets (x mirrored per side): armed hands keep the elbows low, bare hands flare out */
+const POLE_ARMED: [number, number, number] = [0.5, -0.5, -0.3];
+const POLE_BARE: [number, number, number] = [0.6, -0.3, -0.1];
 
 /**
  * Drives one champion visual: locomotion blend -> action clip -> flinch overlay -> head look ->
@@ -97,8 +102,8 @@ export class FighterAnimator {
     const p = this.pose;
     const v = this.v;
     const B = v.rig.byName;
-    if (p.wR.w > 0.001 && v.weaponR) this.solveHand(-1, v.weaponR, p.wR);
-    if (p.wL.w > 0.001 && v.weaponL) this.solveHand(1, v.weaponL, p.wL);
+    if (p.wR.w > 0.001) this.solveHand(-1, v.weaponR ?? BARE_HAND, p.wR, v.weaponR ? POLE_ARMED : POLE_BARE);
+    if (p.wL.w > 0.001) this.solveHand(1, v.weaponL ?? BARE_HAND, p.wL, v.weaponL ? POLE_ARMED : POLE_BARE);
     if (p.off > 0.001 && v.offhandGrip) {
       v.offhandGrip.getWorldPosition(_p);
       v.offhandGrip.getWorldQuaternion(_q);
@@ -112,7 +117,7 @@ export class FighterAnimator {
   }
 
   /** side: -1 right, +1 left */
-  private solveHand(side: number, weapon: THREE.Object3D, key: WeaponKey): void {
+  private solveHand(side: number, weapon: THREE.Object3D, key: WeaponKey, pole: [number, number, number]): void {
     const v = this.v;
     const B = v.rig.byName;
     const upper = side < 0 ? B.upperArmR : B.upperArmL;
@@ -131,7 +136,7 @@ export class FighterAnimator {
     _off.copy(weapon.position).applyQuaternion(_hq);
     _p.sub(_off);
     upper.getWorldPosition(_pole);
-    _off.set(side * 0.5, -0.5, -0.3).applyQuaternion(_rq);
+    _off.set(side * pole[0], pole[1], pole[2]).applyQuaternion(_rq);
     _pole.add(_off);
     solveTwoBone(upper, lower, hand, _p, _pole, key.w);
     setWorldQuat(hand, _hq, key.w);
