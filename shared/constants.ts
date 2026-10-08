@@ -1,0 +1,42 @@
+/** Movement tuning shared by every fighter (champion speed multipliers apply on top). */
+export const MOVE = {
+  gravity: 26,
+  runSpeed: 9.6,
+  groundAccel: 75,
+  groundFriction: 11,
+  airAccel: 16,
+  airMaxSpeed: 11,
+  airDrag: 0.013,
+  jumpVel: 10.5,
+  coyoteTime: 0.12,
+  airJumpVel: 9.5,
+  airJumps: 2,
+  wallKickVel: 11,
+
+  hookRange: 95,
+  hookSpeed: 280,
+  hookAssistDeg: 22,
+  hookMinLen: 1.8,
+  reelAccel: 14,
+  boostAccel: 42,
+  swingAccel: 22,
+  hookedGravity: 0.62,
+  attachYank: 8,
+  playerHookMaxTime: 1.6,
+
+  dashSpeed: 31,
+  dashTime: 0.2,
+  dashIFrames: 0.14,
+  dashCooldown: 0.55,
+
+  gasMax: 100,
+  boostCost: 20,
+  dashCost: 18,
+  airJumpCost: 14,
+  gasRegenGround: 32,
+  gasRegenAir: 9,
+
+  capsuleRadius: 0.4,
+  capsuleHeights: [0.4, 0.95, 1.5] as const,
+  height: 1.85,
+};
