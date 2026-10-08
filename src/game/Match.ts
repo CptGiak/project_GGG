@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Engine } from '../core/Engine';
 import type { Input } from '../core/Input';
 import type { AudioEngine } from '../core/Audio';
-import { CHAMPIONS, MATCH_RULES, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, MATCH_RULES, type ChampionId } from '../../shared/champions';
 import { buildArena } from '../world/arenas';
 import { applyMood, type Arena } from '../world/ArenaBuilder';
 import { setKeyLight, ToonEnv } from '../render/toon';
@@ -17,6 +17,8 @@ import { LocalController } from './LocalController';
 import { BotController } from './BotController';
 import { clearEdges, type ActionEvent, type HitInfo, type MatchContext } from './types';
 import { HUD as HUDClass, type HUD } from '../ui/HUD';
+import { WeaponGhosts } from '../vfx/WeaponGhosts';
+import { renderPortraits } from '../ui/portraits';
 
 export interface MatchOptions {
   arenaId: string;
@@ -52,6 +54,8 @@ export class Match implements MatchContext {
   readonly projectiles = new Projectiles();
   readonly camPos = new THREE.Vector3();
   readonly trails = new Map<Fighter, SlashTrail[]>();
+  readonly ghosts = new Map<Fighter, WeaponGhosts>();
+  private portraits = new Map<ChampionId, string>();
   local!: Fighter;
   time = 0;
   /** match clock (seconds remaining) */
@@ -101,6 +105,8 @@ export class Match implements MatchContext {
     }
     this.cam.snapTo(this.local);
     engine.setView(this.scene, this.cam.camera);
+    // eye close-ups for the ultimate cut-ins (rendered before the first full frame)
+    this.portraits = renderPortraits(engine.renderer, CHAMPION_IDS);
   }
 
   get world() {
@@ -118,6 +124,8 @@ export class Match implements MatchContext {
       return t;
     });
     this.trails.set(f, trails);
+    const bl = visual.blades[0];
+    if (bl) this.ghosts.set(f, new WeaponGhosts(this.scene, [visual.weaponR, visual.weaponL], bl.colorA, bl.colorB));
     this.fighters.push(f);
     return f;
   }
@@ -129,6 +137,8 @@ export class Match implements MatchContext {
     for (const o of f.sceneObjects) this.scene.remove(o);
     for (const t of this.trails.get(f) ?? []) this.scene.remove(t.mesh);
     this.trails.delete(f);
+    this.ghosts.get(f)?.dispose();
+    this.ghosts.delete(f);
     this.fighters.splice(i, 1);
   }
 
@@ -248,6 +258,15 @@ export class Match implements MatchContext {
 
   broadcastAction(f: Fighter, e: ActionEvent): void {
     if (this.opts.mode === 'online' && f.kind === 'local') this.net?.sendAction(f, e);
+  }
+
+  announceUlt(f: Fighter, remote = false): void {
+    if (!remote) this.broadcastAction(f, { a: 'ultcut' });
+    this.hud?.ultCutIn(f, f.champ.abilities.ult.name, this.portraits.get(f.champId) ?? null, f !== this.local);
+    if (f === this.local) {
+      this.audio.play('cutin');
+      this.flash = Math.max(this.flash, 0.6);
+    } else this.audio.play('cutin', undefined, 0.5);
   }
 
   shake(amount: number, at?: THREE.Vector3): void {
@@ -463,7 +482,8 @@ export class Match implements MatchContext {
     this.audio.setListener(this.camPos, _r);
     this.audio.updateLoops(this.local.alive ? this.local.speed : 0, this.local.boosting);
 
-    // trails
+    // weapon afterimages + trails
+    for (const [f, g] of this.ghosts) g.update(simDt, f.trailOn && f.alive && f.visual.root.visible);
     for (const [f, trails] of this.trails) {
       f.visual.blades.forEach((bl, i) => {
         trails[i].emitting = f.trailOn && f.alive;
@@ -506,6 +526,8 @@ export class Match implements MatchContext {
   }
 
   dispose(): void {
+    for (const g of this.ghosts.values()) g.dispose();
+    this.ghosts.clear();
     this.arena.dispose();
     this.vfx.clear();
     this.projectiles.clear();

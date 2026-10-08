@@ -261,10 +261,11 @@ export abstract class BaseKit implements Kit {
     return { point: out, fighter: bestF };
   }
 
-  /** consumes the ultimate if ready */
-  protected useUlt(f: Fighter): boolean {
+  /** consumes the ultimate if ready (and plays the cut-in) */
+  protected useUlt(f: Fighter, m: MatchContext): boolean {
     if (f.ult < 1) return false;
     f.ult = 0;
+    m.announceUlt(f);
     return true;
   }
 }

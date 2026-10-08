@@ -152,3 +152,24 @@
 
 .pause-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-12deg); font-family: var(--font-display); font-size: 3vh; background: rgba(11,7,9,0.9); padding: 1vh 3vh; border: 0.3vh solid #fff; pointer-events: auto; cursor: pointer; display: none; }
 .pause-hint.on { display: block; }
+
+/* ultimate cut-in (Persona "All-Out" style) */
+.ucut { position: absolute; left: -12vw; right: -12vw; pointer-events: none; }
+.ucut.me { top: 28vh; height: 30vh; transform: rotate(-7deg); animation: ucutIn 1.25s cubic-bezier(.25,1.25,.4,1) both; }
+.ucut.enemy { top: 9vh; height: 13vh; left: 30vw; right: -6vw; transform: rotate(-4deg); animation: ucutEnemy 1.6s cubic-bezier(.25,1.2,.4,1) both; }
+.ucut .band { position: absolute; inset: 0; background: var(--black); overflow: hidden; box-shadow: 0 1.1vh 0 var(--c1), 0 -1.1vh 0 var(--c2), 0 2.2vh 0 var(--black), 0 -2.2vh 0 var(--black); }
+.ucut .band::before { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0 18%, var(--c2) 18% 19.5%, transparent 19.5% 80%, var(--c1) 80% 81.5%, transparent 81.5%); opacity: 0.9; }
+.ucut .eyes { position: absolute; left: 50%; top: 50%; width: 132vh; height: 44vh; transform: translate(-50%, -50%) rotate(7deg); background-size: cover; background-position: center; animation: ucutEyes 1.25s ease-out both; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%); }
+.ucut.enemy .eyes { width: 60vh; height: 20vh; left: 36%; transform: translate(-50%, -50%) rotate(4deg); filter: saturate(1.3) contrast(1.1); }
+.ucut .shade { position: absolute; inset: 0; background: radial-gradient(circle, rgba(0,0,0,0.28) 22%, transparent 24%) 0 0 / 1.2vh 1.2vh; mix-blend-mode: multiply; }
+.ucut .txt { position: absolute; right: 16vw; bottom: -1vh; text-align: right; transform: skewX(-12deg); }
+.ucut.enemy .txt { right: 9vw; bottom: 0.4vh; }
+.ucut .who { display: inline-block; font-family: var(--font-display); font-size: 3vh; color: var(--black); background: #fff; padding: 0 1.4vh; letter-spacing: 0.3vh; }
+.ucut .who span { color: var(--red); }
+.ucut .move { font-family: var(--font-display); font-size: 9.5vh; line-height: 0.9; color: #fff; -webkit-text-stroke: 0.45vh var(--black); paint-order: stroke fill; letter-spacing: 0.3vh; text-shadow: 0.7vh 0.7vh 0 var(--red); animation: ucutTxt 1.25s ease-out both; }
+.ucut.enemy .who { font-size: 2vh; }
+.ucut.enemy .move { font-size: 5vh; text-shadow: 0.4vh 0.4vh 0 var(--red); }
+@keyframes ucutIn { 0% { transform: rotate(-7deg) translateX(120vw); } 14% { transform: rotate(-7deg) translateX(-1.5vw); } 20% { transform: rotate(-7deg) translateX(0); } 84% { transform: rotate(-7deg) translateX(0); opacity: 1; } 100% { transform: rotate(-7deg) translateX(-130vw); opacity: 0.8; } }
+@keyframes ucutEnemy { 0% { transform: rotate(-4deg) translateX(80vw); } 15% { transform: rotate(-4deg) translateX(0); } 85% { transform: rotate(-4deg) translateX(0); opacity: 1; } 100% { transform: rotate(-4deg) translateX(80vw); opacity: 0; } }
+@keyframes ucutEyes { 0% { transform: translate(-42%, -50%) rotate(7deg) scale(1.12); filter: brightness(2.2); } 22% { filter: brightness(1); } 100% { transform: translate(-50%, -50%) rotate(7deg) scale(1.02); } }
+@keyframes ucutTxt { 0% { letter-spacing: 2.6vh; opacity: 0; } 18% { letter-spacing: 0.3vh; opacity: 1; } 100% { letter-spacing: 0.5vh; } }

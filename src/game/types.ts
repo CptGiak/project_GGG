@@ -92,6 +92,8 @@ export interface MatchContext {
   reportHeal(f: Fighter, amount: number): void;
   /** broadcast an action so remote clients can play it */
   broadcastAction(f: Fighter, e: ActionEvent): void;
+  /** ultimate cut-in (local: big band; others: warning strip); remote = received from the net */
+  announceUlt(f: Fighter, remote?: boolean): void;
   readonly vfx: import('../vfx/Effects').Effects;
   readonly audio: import('../core/Audio').AudioEngine;
   readonly projectiles: import('../combat/Projectiles').Projectiles;

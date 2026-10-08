@@ -394,6 +394,20 @@ export class HUD {
     window.setTimeout(() => c.remove(), 1700);
   }
 
+  /**
+   * Persona-style ultimate cut-in: a skewed band slams across the screen with the champion's
+   * eyes and the move name. Enemy ultimates get a smaller warning strip at the top.
+   */
+  ultCutIn(f: Fighter, move: string, portrait: string | null, enemy: boolean): void {
+    const [c1, c2] = f.champ.colors;
+    const eyes = portrait ? `<div class="eyes" style="background-image:url(${portrait})"></div>` : '';
+    const c = el('div', `ucut ${enemy ? 'enemy' : 'me'}`, `<div class="band" style="--c1:${c1};--c2:${c2}">${eyes}<div class="shade"></div></div><div class="txt"><div class="who">${esc(f.champ.name)}${enemy ? ` · <span>${esc(f.name)}</span>` : ''}</div><div class="move">${esc(move.toUpperCase())}</div></div>`);
+    if (!enemy) this.cutin.innerHTML = '';
+    else this.cutin.querySelectorAll('.ucut.enemy').forEach((n) => n.remove());
+    this.cutin.append(c);
+    window.setTimeout(() => c.remove(), enemy ? 1600 : 1250);
+  }
+
   deathScreen(killer: Fighter | null): void {
     const by = this.death.querySelector('.by') as HTMLDivElement;
     by.innerHTML = killer && killer !== this.local ? `ABBATTUTO DA <b>${esc(killer.name)}</b> · ${killer.champ.name}` : 'FUORI DALL\'ARENA';

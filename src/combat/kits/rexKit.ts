@@ -41,7 +41,7 @@ export class RexKit extends BaseKit {
 
     if (this.act === 'ult') return;
     // ultimate
-    if (it.ultimatePressed && !this.act && !this.charging && this.useUlt(f)) {
+    if (it.ultimatePressed && !this.act && !this.charging && this.useUlt(f, m)) {
       this.startAction(f, 'ult', 1.5);
       f.anim.play('ult', { hold: true });
       this.ultShots = 12;

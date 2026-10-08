@@ -10,6 +10,7 @@ import { HUD } from './ui/HUD';
 import { MenuStage } from './ui/MenuStage';
 import { champSelect, controlsPanel, h, loadingScreen, mainMenu, pauseMenu, resultsScreen, settingsPanel, toast } from './ui/Menus';
 import { OnlineSession } from './net/OnlineSession';
+import { Beat } from './core/Beat';
 
 type PracticeOpts = { champ: ChampionId; arena: string; bots: number; difficulty: number };
 
@@ -357,6 +358,7 @@ export class App {
   private frame = (now: number) => {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
+    Beat.update(dt);
     if (this.match) {
       this.session?.update(dt);
       this.match.update(dt);

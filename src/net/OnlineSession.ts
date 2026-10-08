@@ -249,6 +249,8 @@ export class OnlineSession implements NetBridge {
         if (!f || !m) break;
         if (msg.e.a === 'taunt') {
           f.startTaunt();
+        } else if (msg.e.a === 'ultcut') {
+          m.announceUlt(f, true);
         } else if (msg.e.a === 'flip') {
           f.startFlip(Math.sign(msg.e.n ?? 0));
         } else if (msg.e.a === 'hookL' || msg.e.a === 'hookR') {

@@ -52,7 +52,7 @@ export class KaiserKit extends BaseKit {
     }
 
     // ---- ultimate -----------------------------------------------------------------------------
-    if (it.ultimatePressed && !this.act && this.useUlt(f)) {
+    if (it.ultimatePressed && !this.act && this.useUlt(f, m)) {
       this.startUlt(f, m);
       m.broadcastAction(f, { a: 'ult' });
       return;

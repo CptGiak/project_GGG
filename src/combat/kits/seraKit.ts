@@ -44,7 +44,7 @@ export class SeraKit extends BaseKit {
     this.aimHold = Math.max(0, this.aimHold - dt);
     if (this.act === 'ult') return;
 
-    if (it.ultimatePressed && !this.act && this.channel <= 0 && this.useUlt(f)) {
+    if (it.ultimatePressed && !this.act && this.channel <= 0 && this.useUlt(f, m)) {
       const { point } = this.aimPoint(f, m, this.data.abilities.ult.range);
       // drop the target onto the ground below the aim point
       const g = m.world.raycast(point.clone().setY(point.y + 0.5), new THREE.Vector3(0, -1, 0), 80);

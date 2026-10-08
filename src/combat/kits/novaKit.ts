@@ -38,7 +38,7 @@ export class NovaKit extends BaseKit {
     if (this.comboTimer <= 0 && !this.act) this.combo = 0;
     if (this.act === 'ult') return;
 
-    if (it.ultimatePressed && !this.act && this.useUlt(f)) {
+    if (it.ultimatePressed && !this.act && this.useUlt(f, m)) {
       this.startUlt(f, m);
       return;
     }

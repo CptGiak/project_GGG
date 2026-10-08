@@ -4,6 +4,7 @@ import { CollisionWorld } from './Collision';
 import { outlineMaterial, smoothNormalGeometry, ToonEnv } from '../render/toon';
 import { Rng } from '../core/Random';
 import { mergeNonIndexed } from '../fighter/shapes';
+import { Beat } from '../core/Beat';
 
 export interface SpawnPoint {
   pos: THREE.Vector3;
@@ -213,6 +214,18 @@ export class ArenaBuilder {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.04;
     this.root.add(sun, sun.target);
+    // stage screens / equalizers bounce with the music
+    const eqs = new Set<{ value: number }>();
+    this.root.traverse((o) => {
+      const u = ((o as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms?.uEnergy as { value: number } | undefined;
+      if (u) eqs.add(u);
+    });
+    if (eqs.size) {
+      const base = new Map([...eqs].map((u) => [u, u.value] as const));
+      this.tickers.push(() => {
+        for (const [u, v] of base) u.value = v * (0.85 + Beat.kick * 0.55 + Beat.snare * 0.3);
+      });
+    }
     const tickers = this.tickers;
     return {
       id: args.id,

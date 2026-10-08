@@ -6,6 +6,7 @@ import type { ModelBuilder } from '../fighter/ModelBuilder';
 import type { ChampionAnimSet } from '../fighter/locomotion';
 import type { BladeRef, ChampionVisual } from './types';
 import { blinker } from './face';
+import { Beat } from '../core/Beat';
 
 /** Wraps a built rig into the pivot hierarchy the game expects. */
 export function assembleVisual(args: {
@@ -51,8 +52,25 @@ export function assembleVisual(args: {
   root.add(pivot);
   const worldObjects: THREE.Object3D[] = [];
   for (const c of args.cloth) worldObjects.push(...c.objects);
-  const baseTick: ChampionVisual['tick'] = args.tick ?? (() => {});
+  const champTick: ChampionVisual['tick'] = args.tick ?? (() => {});
   const blink = args.eyes ? blinker(args.eyes) : null;
+  // True Damage feel: every neon surface and equalizer of the champion pumps with the music
+  const neons = args.materials.filter((m): m is THREE.MeshBasicMaterial => (m as THREE.MeshBasicMaterial).isMeshBasicMaterial);
+  const eqs = args.materials
+    .map((m) => (m as THREE.ShaderMaterial).uniforms?.uEnergy as { value: number } | undefined)
+    .filter((u): u is { value: number } => !!u);
+  let neonMul = 1;
+  let eqAdd = 0;
+  const baseTick: ChampionVisual['tick'] = (dt, t, e) => {
+    // undo last frame's boost so champion ticks always start from their own values
+    for (const m of neons) m.color.multiplyScalar(1 / neonMul);
+    for (const u of eqs) u.value -= eqAdd;
+    champTick(dt, t, e);
+    neonMul = 1 + Beat.pulse * 0.42;
+    eqAdd = Beat.kick * 0.8 + Beat.snare * 0.4;
+    for (const m of neons) m.color.multiplyScalar(neonMul);
+    for (const u of eqs) u.value += eqAdd;
+  };
   return {
     rig,
     root,

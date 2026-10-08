@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Beat } from './Beat';
 
 /**
  * Fully synthesized audio: SFX via Web Audio graphs and a procedural "True Damage"-ish beat
@@ -33,6 +34,8 @@ export class AudioEngine {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
+    const ctx = this.ctx;
+    Beat.attachClock(() => ctx.currentTime);
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volumes.master;
     const comp = this.ctx.createDynamicsCompressor();
@@ -302,6 +305,11 @@ const SFX: Record<string, SfxFn> = {
     a.osc('square', 1600, 200, t, 0.15, o, 0.1);
     a.noiseHit(t, 0.12, o, 0.3, 'bandpass', 5000, 800, 3);
   },
+  cutin: (a, o, t) => {
+    a.noiseHit(t, 0.35, o, 0.5, 'bandpass', 900, 7000, 1.4, 0.01);
+    for (const [f, d] of [[523, 0], [659, 0.02], [784, 0.04], [1046, 0.06]] as const) a.osc('sawtooth', f, f, t + 0.08 + d, 0.45, o, 0.09, 0.005);
+    a.osc('sine', 160, 50, t + 0.08, 0.4, o, 0.6);
+  },
   ultReady: (a, o, t) => {
     a.osc('triangle', 523, 523, t, 0.2, o, 0.15);
     a.osc('triangle', 784, 784, t + 0.1, 0.2, o, 0.15);
@@ -375,6 +383,7 @@ class MusicPlayer {
   private schedule(): void {
     const ctx = this.a.ctx!;
     const bpm = this.style === 'menu' ? 92 : 104;
+    Beat.bpm = bpm;
     const s16 = 60 / bpm / 4;
     while (this.nextTime < ctx.currentTime + 0.12) {
       this.playStep(this.step, this.nextTime, s16);
@@ -399,11 +408,13 @@ class MusicPlayer {
     // kick
     const kickPat = battle ? [0, 3, 8, 10] : [0, 7, 10];
     if (kickPat.includes(s)) {
+      Beat.push(t, false);
       a.osc('sine', 150, 42, t, 0.32, o, 0.75);
       a.osc('square', 60, 40, t, 0.04, o, 0.1);
     }
     // snare / clap
     if (s === 4 || s === 12) {
+      Beat.push(t, true);
       a.noiseHit(t, 0.18, o, 0.35, 'bandpass', 1800, 1200, 0.8);
       a.osc('triangle', 220, 160, t, 0.08, o, 0.25);
       if (battle) a.noiseHit(t + 0.012, 0.12, o, 0.2, 'highpass', 2500, 2500);

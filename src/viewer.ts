@@ -3,6 +3,7 @@ import { Engine } from './core/Engine';
 import { setKeyLight, ToonEnv } from './render/toon';
 import { buildVisual } from './champions';
 import { FighterAnimator } from './fighter/FighterAnimator';
+import { Beat } from './core/Beat';
 
 /**
  * Debug model viewer: /?viewer&champ=kaiser&anims=idle,run@0.25,atk1@0.13&cam=34&freeze=1
@@ -67,6 +68,7 @@ export function startViewer(params: URLSearchParams): void {
   const loop = () => {
     const dt = 1 / 60;
     t += dt;
+    Beat.update(dt);
     if (!freeze) {
       for (const { a, spec } of animators) {
         if (spec.startsWith('run')) a.st.runPhase += dt * 9;
