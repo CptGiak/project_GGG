@@ -29,7 +29,7 @@ export function buildSera(): ChampionVisual {
     hair: toon({ color: 0xffd56b, shade: 0xe0a8ff, hairBand: 0.4, rim: 0.5 }),
     eyes: eyeMaterial(SERA_EYES),
     dress: toon({ color: 0xf6f2fb, shade: 0xc8b8ff, rim: 0.45 }),
-    dressIn: toon({ color: 0xff7ad9, side: THREE.BackSide, rim: 0.2 }),
+    dressIn: toon({ color: 0xd8c6ff, side: THREE.BackSide, rim: 0.2 }),
     pink: toon({ color: 0xff6fcf, shade: 0xffa8e8, rim: 0.4 }),
     pinkFront: toon({ color: 0xff6fcf, rim: 0.3 }),
     boot: toon({ color: 0xf4f0fa, shade: 0xc8b8ff, spec: 0.4, rim: 0.4 }),
@@ -75,11 +75,18 @@ export function buildSera(): ChampionVisual {
   // --- bell sleeves (detached, from the elbow) -----------------------------------------------------
   for (const side of ['L', 'R'] as const) {
     const fa = B[`foreArm${side}`];
-    const prof: [number, number][] = [[0.046, 0.0], [0.05, -0.06], [0.062, -0.13], [0.085, -0.19], [0.105, -0.23]];
+    const prof: [number, number][] = [[0.046, 0.0], [0.05, -0.06], [0.058, -0.12], [0.072, -0.17], [0.088, -0.205]];
     const sleeve = lathe(prof, 18);
     b.add(fa, sleeve, 'dress');
     b.add(fa, sleeve.clone(), 'dressIn', 0);
-    b.add(fa, xf(torus(0.104, 0.008, 5, 20), [0, -0.23, 0], [90, 0, 0]), 'gold', 0.4);
+    // ruffled hem: a wavy gold-trimmed frill instead of a plain hoop
+    const frill: THREE.Vector3[] = [];
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const r = 0.09 + Math.sin(a * 9) * 0.006;
+      frill.push(new THREE.Vector3(Math.cos(a) * r, -0.207 + Math.cos(a * 9) * 0.007, Math.sin(a) * r));
+    }
+    b.add(fa, sweep(frill, () => 0.0065, 5, 96, false), 'gold', 0.4);
     b.add(fa, xf(torus(0.048, 0.008, 5, 16), [0, 0.0, 0], [90, 0, 0]), 'pink', 0.4);
   }
   // thigh-high boot tops

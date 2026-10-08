@@ -127,7 +127,8 @@ export function buildRex(): ChampionVisual {
   addFace(b, B.head, 'skinDark', false);
   const eyes = addAnimeEyes(b, B.head, 'eyes', REX_EYES);
   // teal undercut sides
-  for (const sx of [1, -1]) b.add(B.head, xf(ellipsoid(0.03, 0.06, 0.085), [sx * 0.095, 0.15, -0.02], [0, 0, sx * 8]), 'teal', 0.6);
+  // (flush with the skull so they read as shaved sides, not ear muffs)
+  for (const sx of [1, -1]) b.add(B.head, xf(ellipsoid(0.014, 0.05, 0.075), [sx * 0.1, 0.152, -0.025], [0, 0, sx * 10]), 'teal', 0.4);
   const spikes: SpikeSpec[] = [
     { at: [0, 1, 0.35], len: 0.14, r: 0.05, bend: [0, 0.02, -0.08] },
     { at: [0.2, 1, 0.15], len: 0.15, r: 0.05, bend: [0.02, 0.0, -0.1] },

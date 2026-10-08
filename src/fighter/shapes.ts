@@ -176,11 +176,12 @@ export function sweep(points: THREE.Vector3[], radius: (t: number) => number, ra
       uvs.push(j / radial, t);
     }
   }
+  // the ring runs N -> B (counter-clockwise around the tangent), so (a, a+1, b) faces outward
   for (let i = 0; i < tubular; i++) {
     for (let j = 0; j < radial; j++) {
       const a = i * (radial + 1) + j;
       const b = (i + 1) * (radial + 1) + j;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   if (closedEnds) {
@@ -191,8 +192,8 @@ export function sweep(points: THREE.Vector3[], radius: (t: number) => number, ra
       uvs.push(0.5, end / tubular);
       for (let j = 0; j < radial; j++) {
         const a = end * (radial + 1) + j;
-        if (end === 0) idx.push(ci, a + 1, a);
-        else idx.push(ci, a, a + 1);
+        if (end === 0) idx.push(ci, a, a + 1);
+        else idx.push(ci, a + 1, a);
       }
     }
   }
@@ -298,13 +299,21 @@ export function xf(g: THREE.BufferGeometry, pos: V3 = [0, 0, 0], rotDeg: V3 = [0
   _p.set(pos[0], pos[1], pos[2]);
   _m.compose(_p, _q, _s);
   g.applyMatrix4(_m);
+  // a mirroring scale turns faces inside out: restore the winding
+  if (_s.x * _s.y * _s.z < 0) flipWinding(g);
   return g;
 }
 
 export function mirrorX(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const c = g.clone();
   c.scale(-1, 1, 1);
-  // flip winding so faces stay front-facing
+  flipWinding(c);
+  c.computeVertexNormals();
+  return c;
+}
+
+/** reverses every triangle so faces keep pointing outward after a reflection */
+function flipWinding(c: THREE.BufferGeometry): void {
   if (c.index) {
     const a = c.index.array as Uint16Array | Uint32Array;
     for (let i = 0; i < a.length; i += 3) {
@@ -323,8 +332,6 @@ export function mirrorX(g: THREE.BufferGeometry): THREE.BufferGeometry {
       if (uv) swapVert(uv, i + 1, i + 2);
     }
   }
-  c.computeVertexNormals();
-  return c;
 }
 
 function swapVert(attr: THREE.BufferAttribute, a: number, b: number) {
