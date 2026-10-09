@@ -1,44 +1,44 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { CHAMPIONS, kitOf, type ChampionId } from '../../shared/champions';
+import { CHAMPIONS, type ChampionId } from '../../shared/champions';
 import { ModelBuilder } from '../fighter/ModelBuilder';
 import type { BodySphere } from '../fighter/Cloth';
+import type { ChampionAnimSet } from '../fighter/locomotion';
 import { addOutline, toon } from '../render/toon';
 import { makeBodySpheres } from './body';
 import { assembleVisual, marker, weaponPivot } from './common';
 import { instantiateGlb, type GlbMaterialSpec } from './glbModels';
-import { kaiserAnims } from './kaiser';
-import { novaAnims } from './nova';
+import { akaliAnims, lockeAnims, lolAnimScale, qiyanaAnims } from './lolAnims';
 import type { BladeRef, ChampionVisual } from './types';
 
 /**
  * Champions imported from League of Legends (tools/blender/build_lol.py, public/models/lol/<id>.glb):
- * original mesh and textures, the game skeleton rebuilt from the skin weights,
- * the League weapons in the weapon pivots. They play with the kit of an original champion
- * (shared/champions.ts KIT_OF): same clips, IK and gameplay, scaled to the body (animScale).
+ * original mesh and textures, the game skeleton rebuilt from the skin weights, the League
+ * weapons in the weapon pivots. Each one has its own kit and clips (src/champions/lolAnims.ts),
+ * authored for bodySpec('female') and scaled to the model's body (animScale).
  */
 
 /** hand-painted textures already carry their lighting: soft toon on top */
 const LOL_MATERIAL: GlbMaterialSpec = { rim: 0.05, rimCut: 0.72, spec: 0.08, specSize: 0.94 };
 
-/** left-hand grip for two-handed moves, in the right weapon's pivot frame (kits with offhandGrip) */
-const OFFHAND: Partial<Record<ChampionId, [number, number, number]>> = {
-  // ring blade: on the rim, 30 degrees away from the main grip
-  qiyana: [0, 0.2, 0.054],
+/** clip set and weapon hands of each port */
+const SETUP: Partial<Record<ChampionId, { anims: () => ChampionAnimSet; hands: Array<'L' | 'R'> }>> = {
+  akali: { anims: akaliAnims, hands: ['L', 'R'] },
+  qiyana: { anims: qiyanaAnims, hands: ['R'] },
+  locke: { anims: lockeAnims, hands: ['L', 'R'] },
 };
 
 export function buildLolGlb(id: ChampionId, gltf: GLTF): ChampionVisual {
-  const kit = kitOf(id);
-  const dual = kit === 'nova';
-  const glb = instantiateGlb(gltf, { gripHands: dual ? ['L', 'R'] : ['R'], materials: {}, defaultMaterial: LOL_MATERIAL });
+  const setup = SETUP[id] ?? SETUP.akali!;
+  const hands = setup.hands;
+  const glb = instantiateGlb(gltf, { gripHands: hands, materials: {}, defaultMaterial: LOL_MATERIAL });
   const rig = glb.rig;
   const female = rig.spec.female;
-  const source = (glb.extras.source ?? {}) as { animScale?: number };
   const colors = CHAMPIONS[id].colors;
 
-  // driver pivots for the kit's weapon IK, visible weapons on the model's own hands
+  // driver pivots for the clips' weapon IK, visible weapons on the model's own hands
   const drvR = weaponPivot(rig.byName.handR, female);
-  const drvL = dual ? weaponPivot(rig.byName.handL, female) : null;
+  const drvL = hands.includes('L') ? weaponPivot(rig.byName.handL, female) : null;
   const meshes: Partial<Record<'L' | 'R', THREE.Mesh>> = {};
   glb.scene.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -46,11 +46,12 @@ export function buildLolGlb(id: ChampionId, gltf: GLTF): ChampionVisual {
   });
   const materials: THREE.Material[] = [...glb.materials];
   const blades: BladeRef[] = [];
+  const glows: THREE.Mesh[] = [];
   for (const side of ['R', 'L'] as const) {
     const w = meshes[side];
     if (!w) continue;
     w.removeFromParent();
-    if (side === 'L' && !dual) continue;
+    if (!hands.includes(side)) continue;
     w.position.set(0, 0, 0);
     w.quaternion.identity();
     w.scale.set(1, 1, 1);
@@ -64,6 +65,9 @@ export function buildLolGlb(id: ChampionId, gltf: GLTF): ChampionVisual {
     addOutline(w, 1.8);
     const pivot = glb.handPivot(side, female);
     pivot.add(w);
+    const glow = glowShell(w);
+    pivot.add(glow);
+    glows.push(glow);
     // slash trail from near the grip to the farthest point of the weapon (blade tip, ring rim)
     const pos = w.geometry.getAttribute('position');
     const tip = new THREE.Vector3();
@@ -81,8 +85,6 @@ export function buildLolGlb(id: ChampionId, gltf: GLTF): ChampionVisual {
       width: 1,
     });
   }
-  const off = OFFHAND[id];
-  const offhandGrip = !dual ? marker(drvR, ...(off ?? [0, 0.05, -0.115]), 'offhand') : null;
 
   // gameplay sockets (grapple launchers, gas nozzle) on the hips
   const hipH = rig.hipHeight;
@@ -95,6 +97,13 @@ export function buildLolGlb(id: ChampionId, gltf: GLTF): ChampionVisual {
   const headSphere: BodySphere = { bone: rig.byName.head, offset: new THREE.Vector3(0, 0.1, 0.0), radius: 0.12, world: new THREE.Vector3() };
   for (const c of glb.chains) c.spheres = [...spheres, headSphere];
 
+  // weapon enchantment (Qiyana's elements...): additive shell over the weapons, pulsing
+  let glowOn = false;
+  const tick: ChampionVisual['tick'] = (_dt, time) => {
+    if (!glowOn) return;
+    for (const g of glows) (g.material as THREE.MeshBasicMaterial).opacity = 0.42 + Math.sin(time * 9) * 0.16;
+  };
+
   const v = assembleVisual({
     rig,
     builder: new ModelBuilder({}),
@@ -104,13 +113,43 @@ export function buildLolGlb(id: ChampionId, gltf: GLTF): ChampionVisual {
     gear: { gearL: socket('gearL', [0.2, hipH, 0.05]), gearR: socket('gearR', [-0.2, hipH, 0.05]), nozzle: socket('nozzle', [0, hipH + 0.08, -0.16]) },
     weaponR: drvR,
     weaponL: drvL,
-    offhandGrip,
+    offhandGrip: null,
     muzzle: blades[0]?.tip ?? null,
     materials,
-    anims: dual ? novaAnims() : kaiserAnims(),
+    anims: setup.anims(),
+    tick,
   });
   rig.root.add(glb.scene);
   v.syncPose = glb.syncPose;
-  v.animScale = source.animScale ?? 1;
+  v.animScale = lolAnimScale(rig.spec);
+  v.weaponGlow = (color) => {
+    glowOn = color !== null;
+    for (const g of glows) {
+      g.visible = glowOn;
+      if (color !== null) (g.material as THREE.MeshBasicMaterial).color.set(color);
+    }
+  };
   return v;
+}
+
+/** the weapon pushed out along its normals, additive: shown while the weapon is enchanted */
+function glowShell(w: THREE.Mesh): THREE.Mesh {
+  const geo = w.geometry.clone();
+  const pos = geo.getAttribute('position');
+  let nrm = geo.getAttribute('normal');
+  if (!nrm) {
+    geo.computeVertexNormals();
+    nrm = geo.getAttribute('normal');
+  }
+  for (let i = 0; i < pos.count; i++) {
+    pos.setXYZ(i, pos.getX(i) + nrm.getX(i) * 0.014, pos.getY(i) + nrm.getY(i) * 0.014, pos.getZ(i) + nrm.getZ(i) * 0.014);
+  }
+  pos.needsUpdate = true;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const shell = new THREE.Mesh(geo, mat);
+  shell.name = `${w.name}_glow`;
+  shell.visible = false;
+  shell.frustumCulled = false;
+  shell.renderOrder = 5;
+  return shell;
 }

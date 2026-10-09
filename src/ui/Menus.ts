@@ -1,4 +1,4 @@
-import { CHAMPION_IDS, CHAMPIONS, KIT_OF, type AbilitySlot, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, LOL_CHAMPIONS, type AbilitySlot, type ChampionId } from '../../shared/champions';
 import { championAvailable } from '../champions';
 import { ARENA_META } from '../../shared/arenas';
 import type { PlayerInfo } from '../../shared/protocol';
@@ -83,10 +83,10 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
 
 /**
  * Notice required by Riot's fan-project policy ("Legal Jibber Jabber") while League of Legends
- * models are in the game (local files, see tools/blender/build_lol.py).
+ * models are in the game (public/models/lol, see tools/blender/build_lol.py).
  */
 function riotNotice(): HTMLElement | null {
-  const lol = CHAMPION_IDS.filter((id) => KIT_OF[id] && championAvailable(id));
+  const lol = LOL_CHAMPIONS.filter(championAvailable);
   if (!lol.length) return null;
   return h('div', { class: 'mm-legal' },
     `${lol.map((id) => CHAMPIONS[id].name).join(', ')}: modelli e texture da League of Legends © Riot Games. `,
@@ -122,7 +122,7 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       h('div', { class: 'cs-title' }, c.title.toUpperCase()),
       h('div', { class: 'cs-meta' }, h('span', { class: 'role' }, c.role === 'melee' ? 'MISCHIA' : 'DISTANZA'), h('span', {}, `DIFFICOLTÀ ${'★'.repeat(c.difficulty)}${'☆'.repeat(3 - c.difficulty)}`), h('span', {}, `HP ${c.hp}`), h('span', {}, c.weapon.toUpperCase())),
       h('div', { class: 'cs-bio' }, c.bio),
-      h('div', { class: 'cs-abs' }, ...SLOT_ORDER.map((slot) => {
+      h('div', { class: 'cs-abs' }, ...(c.passive ? [h('div', { class: 'cs-ab passive' }, h('div', { class: 'k' }, 'P'), h('div', {}, h('div', { class: 'n' }, c.passive.name.toUpperCase() + '  ·  PASSIVA'), h('div', { class: 'd' }, c.passive.desc)))] : []), ...SLOT_ORDER.map((slot) => {
         const a = c.abilities[slot];
         return h('div', { class: `cs-ab ${slot === 'ult' ? 'ult' : ''}` }, h('div', { class: 'k' }, a.key), h('div', {}, h('div', { class: 'n' }, a.name.toUpperCase() + (a.cooldown >= 1 ? `  ·  ${a.cooldown}s` : slot === 'ult' ? '  ·  ULTIMATE' : '')), h('div', { class: 'd' }, a.desc)));
       })),

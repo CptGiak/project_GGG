@@ -94,6 +94,8 @@
 .cs-ab .n { font-family: var(--font-display); font-size: 2.1vh; color: var(--c1); letter-spacing: 0.05vh; }
 .cs-ab .d { font-size: 1.5vh; color: rgba(255,255,255,0.8); line-height: 1.3; }
 .cs-ab.ult { border-color: var(--c1); }
+.cs-ab.passive { border-style: dashed; opacity: 0.92; }
+.cs-ab.passive .k { background: var(--c2, #fff); }
 
 .cs-bottom { position: absolute; right: 4vh; bottom: 4vh; display: flex; gap: 2vh; align-items: flex-end; }
 .cs-opts { position: absolute; left: 4vh; bottom: 11vh; display: flex; flex-direction: column; gap: 1vh; }

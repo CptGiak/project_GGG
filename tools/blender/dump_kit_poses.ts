@@ -1,24 +1,25 @@
 /**
- * Like dump_poses.ts, for imported models that borrow another champion's kit: evaluates the
- * kit's real game poses (locomotion + clips + weapon IK, with the body-size animScale) on the
- * model's proportions and writes the model-space bone and weapon-pivot transforms to JSON.
+ * Like dump_poses.ts, for the champions imported from League of Legends: evaluates their real
+ * game poses (locomotion + clips of src/champions/lolAnims.ts + weapon IK, with the body-size
+ * animScale) on the model's proportions and writes the model-space bone and weapon-pivot
+ * transforms to JSON.
  *
  *   npx tsx tools/blender/dump_kit_poses.ts in.json out.json
- *   in.json: { "spec": BodySpec, "kit": "nova" | "kaiser", "animScale": number }
+ *   in.json: { "spec": BodySpec, "champ": "akali" | "qiyana" | "locke", "grip": ["L", "R"] }
  */
 import * as fs from 'node:fs';
 import * as THREE from 'three';
 import { BONES, Rig, type BodySpec } from '../../src/fighter/Rig';
 import { FighterAnimator } from '../../src/fighter/FighterAnimator';
 import { applyPose, pose } from '../../src/fighter/Animator';
-import { kaiserAnims } from '../../src/champions/kaiser';
-import { novaAnims } from '../../src/champions/nova';
-import { marker, weaponPivot } from '../../src/champions/common';
+import { akaliAnims, lockeAnims, lolAnimScale, qiyanaAnims } from '../../src/champions/lolAnims';
+import { weaponPivot } from '../../src/champions/common';
 import type { ChampionVisual } from '../../src/champions/types';
 
 const [inPath, outPath] = process.argv.slice(2);
-const cfg = JSON.parse(fs.readFileSync(inPath, 'utf8')) as { spec: BodySpec; kit: 'nova' | 'kaiser'; animScale: number };
-const dual = cfg.kit === 'nova';
+const cfg = JSON.parse(fs.readFileSync(inPath, 'utf8')) as { spec: BodySpec; champ: 'akali' | 'qiyana' | 'locke'; grip: Array<'L' | 'R'> };
+const ANIMS = { akali: akaliAnims, qiyana: qiyanaAnims, locke: lockeAnims };
+const dual = cfg.grip.includes('L');
 
 function visual(): ChampionVisual {
   const rig = new Rig(cfg.spec);
@@ -30,12 +31,11 @@ function visual(): ChampionVisual {
   root.add(pivot);
   const wR = weaponPivot(rig.byName.handR, cfg.spec.female);
   const wL = dual ? weaponPivot(rig.byName.handL, cfg.spec.female) : null;
-  const offhandGrip = dual ? null : marker(wR, 0, 0.05, -0.115, 'offhand');
   const dummy = new THREE.Object3D();
   return {
     rig, root, pivot, worldObjects: [], cloth: [], bodySpheres: [], blades: [],
-    gearL: dummy, gearR: dummy, nozzle: dummy, weaponR: wR, weaponL: wL, offhandGrip, muzzle: null,
-    materials: [], tick: () => {}, anims: dual ? novaAnims() : kaiserAnims(), animScale: cfg.animScale,
+    gearL: dummy, gearR: dummy, nozzle: dummy, weaponR: wR, weaponL: wL, offhandGrip: null, muzzle: null,
+    materials: [], tick: () => {}, anims: ANIMS[cfg.champ](), animScale: lolAnimScale(cfg.spec),
   };
 }
 
@@ -52,8 +52,8 @@ const SPECS: Spec[] = dual
       { name: 'rest', label: 'braccia lungo i fianchi', setup: () => {} },
       { name: 'idle', label: 'idle', setup: (a) => { a.st.time = 0.4; } },
       { name: 'run', label: 'corsa', setup: (a) => { a.st.wRun = 1; a.st.runIntensity = 1; a.st.runPhase = Math.PI * 0.5; } },
-      { name: 'atk1', label: 'attacco: fendente', setup: (a) => { a.play('atk1', { speed: 0, hold: true, fadeIn: 0, offset: 0.16 }); } },
-      { name: 'atk3', label: 'attacco: schianto', setup: (a) => { a.play('atk3', { speed: 0, hold: true, fadeIn: 0, offset: 0.24 }); } },
+      { name: 'c1', label: 'attacco: fendente', setup: (a) => { a.play('c1', { speed: 0, hold: true, fadeIn: 0, offset: 0.1 }); } },
+      { name: 'wrath', label: "attacco: ira degli elementi", setup: (a) => { a.play('wrath', { speed: 0, hold: true, fadeIn: 0, offset: 0.12 }); } },
     ];
 
 const out: Record<string, unknown> = {};

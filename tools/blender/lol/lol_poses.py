@@ -1,7 +1,7 @@
 """
 Pose del gioco sui modelli importati da LoL (controllo dei pesi rimappati), come kaiser_poses.py.
 
-dump_kit_poses.ts valuta le pose vere del kit (locomozione, clip, IK delle armi, animScale) sulle
+dump_kit_poses.ts valuta le pose vere del campione (locomozione, clip di lolAnims.ts, IK delle armi, animScale) sulle
 proporzioni del modello. Qui ogni osso del GLB riceve la stessa rotazione del Rig pilota rispetto
 alla T-pose (lo stesso retarget di glbModels.ts), le posizioni restano quelle del GLB; le armi
 seguono la mano visibile come nel gioco, le dita si chiudono sull'impugnatura e le falde si
@@ -97,12 +97,11 @@ def place_weapons(arm, weapons: dict, female: bool):
 
 def render_poses(cid: str, B: dict):
     spec = B['spec']
-    kit = B['kit']
     work = os.path.join(os.path.dirname(__file__), '_cache', cid, 'renders')
     os.makedirs(work, exist_ok=True)
     inp = os.path.join(work, 'kit_in.json')
     dump = os.path.join(work, 'kit_poses.json')
-    json.dump({'spec': spec, 'kit': kit, 'animScale': B['anim_scale']}, open(inp, 'w'))
+    json.dump({'spec': spec, 'champ': cid, 'grip': B['grip_hands']}, open(inp, 'w'))
     subprocess.run(['npx', 'tsx', 'tools/blender/dump_kit_poses.ts', inp, dump], cwd=ROOT, check=True)
     poses = json.load(open(dump))
     arm, mesh = B['arm'], B['mesh']

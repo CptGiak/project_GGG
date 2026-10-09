@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHAMPION_IDS, CHAMPIONS, kitOf, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, type ChampionId } from '../../shared/champions';
 import { buildVisual, championAvailable } from '../champions';
 import type { ChampionVisual } from '../champions/types';
 import { FighterAnimator } from '../fighter/FighterAnimator';
@@ -7,12 +7,14 @@ import { groundMaterial, skyMaterial } from '../world/materials';
 import { setKeyLight, ToonEnv } from '../render/toon';
 import { SlashTrail } from '../vfx/Trails';
 
-/** preview clips per kit (imported champions use their kit's) */
-const PREVIEWS: Partial<Record<ChampionId, string[]>> = {
+const PREVIEWS: Record<ChampionId, string[]> = {
   kaiser: ['taunt', 'atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
   nova: ['taunt', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
   rex: ['taunt', 'aim', 'charge', 'throw', 'ult'],
   sera: ['taunt', 'cast', 'wave', 'ult', 'cast'],
+  akali: ['taunt', 'c1', 'c2', 'c3', 'fan', 'flip', 'air'],
+  qiyana: ['taunt', 'c1', 'c2', 'wrath', 'audacity', 'air'],
+  locke: ['taunt', 'c1', 'c2', 'c3', 'c4', 'nails', 'pursuit'],
 };
 
 const BEAM_VERT = /* glsl */ `
@@ -169,13 +171,13 @@ export class MenuStage {
       // preview clips
       c.nextPreview -= dt;
       if (c.nextPreview <= 0) {
-        const list = PREVIEWS[c.id] ?? PREVIEWS[kitOf(c.id)] ?? ['taunt'];
+        const list = PREVIEWS[c.id] ?? ['taunt'];
         const name = list[c.previewIdx % list.length];
         c.previewIdx++;
         c.anim.play(name, { fadeIn: 0.08 });
         const clipLen = c.visual.anims.clips[name]?.duration ?? 1;
         c.nextPreview = focused ? Math.max(2.4, clipLen + 0.4) : 3.5 + Math.random() * 2.5;
-        if ((kitOf(c.id) === 'rex' || kitOf(c.id) === 'sera') && name !== 'taunt') c.anim.st.aim = 1;
+        if ((c.id === 'rex' || c.id === 'sera') && name !== 'taunt') c.anim.st.aim = 1;
       }
       if (!c.anim.action.active) c.anim.st.aim *= Math.exp(-dt * 3);
       c.anim.update(dt, false);

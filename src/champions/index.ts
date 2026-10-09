@@ -1,5 +1,5 @@
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { KIT_OF, kitOf, type ChampionId } from '../../shared/champions';
+import { LOL_CHAMPIONS, type ChampionId } from '../../shared/champions';
 import type { ChampionVisual } from './types';
 import { buildKaiser } from './kaiser';
 import { buildKaiserGlb } from './kaiserGlb';
@@ -25,12 +25,15 @@ const GLB_BUILDERS: Record<string, (gltf: GLTF) => ChampionVisual> = {
 };
 
 /**
- * Imported champions (League of Legends) need their local model file: without it they are not
- * offered in the menus (other players' picks still show, with their kit champion's model).
+ * Imported champions (League of Legends) need their model file: without it they are not
+ * offered in the menus (other players' picks still show, with a lookalike procedural model).
  */
 export function championAvailable(id: ChampionId): boolean {
-  return !KIT_OF[id] || !!championModel(id);
+  return !LOL_CHAMPIONS.includes(id) || !!championModel(id);
 }
+
+/** procedural stand-in when an imported champion's model file is missing */
+const LOOKALIKE: Partial<Record<ChampionId, string>> = { akali: 'nova', qiyana: 'nova', locke: 'nova' };
 
 export function buildVisual(id: string): ChampionVisual {
   const gltf = championModel(id);
@@ -42,5 +45,5 @@ export function buildVisual(id: string): ChampionVisual {
       console.warn(`[models] ${id}: GLB model failed, using the procedural one`, err);
     }
   }
-  return (VISUAL_BUILDERS[id] ?? VISUAL_BUILDERS[kitOf(id as ChampionId)] ?? buildKaiser)();
+  return (VISUAL_BUILDERS[id] ?? VISUAL_BUILDERS[LOOKALIKE[id as ChampionId] ?? ''] ?? buildKaiser)();
 }

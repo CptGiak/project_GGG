@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import type { ChampionId } from '../../../shared/champions';
 import { BaseKit } from '../BaseKit';
 import type { Fighter } from '../../game/Fighter';
 import { forwardOf } from '../../game/Fighter';
@@ -30,8 +29,8 @@ export class NovaKit extends BaseKit {
   private barrageT = 0;
   private barrageIdx = 0;
 
-  constructor(id: ChampionId = 'nova') {
-    super(id);
+  constructor() {
+    super('nova');
   }
 
   protected handleInput(f: Fighter, it: Intent, dt: number, m: MatchContext): void {

@@ -41,7 +41,7 @@ export class HUD {
   private hitm: HTMLDivElement;
   private chargeRing: HTMLDivElement;
   private chargeFg: SVGCircleElement;
-  private abs: Record<AbilitySlot, { root: HTMLDivElement; cd: HTMLDivElement; cdt: HTMLDivElement; last: number; extra?: HTMLDivElement; fill?: HTMLDivElement }>;
+  private abs: Record<AbilitySlot, { root: HTMLDivElement; cd: HTMLDivElement; cdt: HTMLDivElement; last: number; extra?: HTMLDivElement; fill?: HTMLDivElement; hint: HTMLDivElement }>;
   private floatLayer: HTMLDivElement;
   private plateLayer: HTMLDivElement;
   private plates = new Map<string, { e: HTMLDivElement; bar: HTMLElement; lastHp: number }>();
@@ -114,7 +114,7 @@ export class HUD {
       const a = c.abilities[slot];
       const card = el('div', `ab ${slot === 'ult' ? 'ult' : ''}`);
       const inner = el('div', 'inner');
-      inner.innerHTML = `<div class="icon" style="color:${slot === 'ult' ? c.colors[0] : '#fff'}">${abilityIcon(c.id, slot)}</div><div class="name">${a.name.toUpperCase()}</div>`;
+      inner.innerHTML = `<div class="icon" style="color:${slot === 'ult' ? c.colors[0] : '#fff'}">${abilityIcon(c.id, slot)}</div><div class="name${a.name.length > (slot === 'ult' ? 18 : 13) ? ' long' : ''}">${a.name.toUpperCase()}</div>`;
       const fill = slot === 'ult' ? el('div', 'fillult') : undefined;
       const extra = slot === 'ult' ? el('div', 'pct', '0%') : undefined;
       if (extra) inner.append(extra);
@@ -122,9 +122,10 @@ export class HUD {
       cd.style.transform = 'scaleY(0)';
       const cdt = el('div', 'cdt');
       if (fill) card.append(fill);
-      card.append(inner, cd, cdt, el('div', 'key', a.key));
+      const hint = el('div', 'hint');
+      card.append(inner, cd, cdt, hint, el('div', 'key', a.key));
       abWrap.append(card);
-      this.abs[slot] = { root: card, cd, cdt, last: 0, extra, fill };
+      this.abs[slot] = { root: card, cd, cdt, last: 0, extra, fill, hint };
     }
 
     this.floatLayer = el('div', 'hud-float');
@@ -218,8 +219,14 @@ export class HUD {
     // abilities
     if (kit) {
       const cds = kit.cooldowns();
+      const hints = kit.hints?.() ?? {};
       for (const slot of SLOTS) {
         const a = this.abs[slot];
+        const hint = hints[slot] ?? '';
+        if (a.hint.textContent !== hint) {
+          a.hint.textContent = hint;
+          a.hint.classList.toggle('on', hint !== '');
+        }
         if (slot === 'ult') {
           const pct = Math.floor(f.ult * 100);
           if (a.extra) a.extra.textContent = pct >= 100 ? 'READY' : `${pct}%`;
@@ -274,7 +281,7 @@ export class HUD {
   private updatePlates(m: Match): void {
     const seen = new Set<string>();
     for (const f of m.fighters) {
-      if (f === this.local || !f.alive) continue;
+      if (f === this.local || !f.alive || f.isHiddenFrom(this.local)) continue;
       const head = f.head(new THREE.Vector3());
       head.y += 0.55;
       const pr = this.project(head);

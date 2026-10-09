@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { MOVE } from '../../shared/constants';
-import { kitOf } from '../../shared/champions';
 import type { Fighter } from './Fighter';
 import { forwardOf, wrapAngle } from './Fighter';
 import type { MatchContext } from './types';
@@ -46,12 +45,13 @@ export class BotController {
     const diff = this.difficulty;
     // ---- target selection -------------------------------------------------------------------
     this.retargetT -= dt;
+    if (this.target?.isHiddenFrom(f)) this.target = null; // lost in the smoke
     if (this.retargetT <= 0 || !this.target || !this.target.alive) {
       this.retargetT = 0.6 + Math.random() * 0.5;
       let best: Fighter | null = null;
       let bestD = Infinity;
       for (const o of m.fighters) {
-        if (o === f || !o.alive) continue;
+        if (o === f || !o.alive || o.isHiddenFrom(f)) continue;
         const d = o.pos.distanceTo(f.pos) * (o.kind === 'local' ? 0.85 : 1);
         if (d < bestD) {
           bestD = d;
@@ -75,7 +75,7 @@ export class BotController {
       // lead moving targets for ranged champions
       if (!melee) {
         const dist = _aim.distanceTo(f.pos);
-        const projSpeed = kitOf(f.champId) === 'rex' ? 120 : 60;
+        const projSpeed = f.champId === 'rex' ? 120 : 60;
         _aim.addScaledVector(t.vel, (dist / projSpeed) * THREE.MathUtils.lerp(0.4, 1, diff));
       }
     } else {
@@ -146,7 +146,7 @@ export class BotController {
     const threat = t.kit && (t.kit as unknown as { act: string | null }).act;
     if (threat && this.reaction <= 0 && dist < (melee ? 6 : 10)) {
       this.reaction = THREE.MathUtils.lerp(0.9, 0.25, diff);
-      if (kitOf(f.champId) === 'kaiser' && Math.random() < 0.35 + diff * 0.35) this.holdGuard = 0.45 + Math.random() * 0.3;
+      if (f.champId === 'kaiser' && Math.random() < 0.35 + diff * 0.35) this.holdGuard = 0.45 + Math.random() * 0.3;
       else if (Math.random() < 0.25 + diff * 0.4 && f.gas > MOVE.dashCost) {
         it.move.set(this.strafe, -0.3);
         it.dashPressed = true;
@@ -169,11 +169,17 @@ export class BotController {
         if (Math.random() < dt * THREE.MathUtils.lerp(3, 7, diff)) it.attackPressed = true;
       }
       if (cds.abi <= 0 && dist > 5 && dist < 18 && onTarget && Math.random() < dt * (0.6 + diff)) it.abilityPressed = true;
-      if (kitOf(f.champId) === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
+      if (f.champId === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
+      // League ports: smoke when engaging or hurt, nails as a ranged poke, Terrashape to close in
+      if (f.champId === 'akali' && cds.sec <= 0 && (dist < 6 || f.hp < f.maxHp * 0.5) && Math.random() < dt * 0.5) it.secondaryPressed = true;
+      if (f.champId === 'locke' && cds.sec <= 0 && dist > 4 && dist < 22 && aimDot > 0.995 && Math.random() < dt * 1.2) it.secondaryPressed = true;
+      if (f.champId === 'qiyana' && cds.sec <= 0 && dist > 4 && dist < 14 && Math.random() < dt * 0.6) it.secondaryPressed = true;
       if (f.ult >= 1 && dist < 9 && Math.random() < dt * 0.8) it.ultimatePressed = true;
+      // second cast of a two-part ultimate
+      if (kit.hints?.().ult === 'x2' && dist < 12 && Math.random() < dt * 1.5) it.ultimatePressed = true;
     } else {
       if (onTarget && dist < 90) {
-        if (kitOf(f.champId) === 'rex' && cds.sec <= 0 && dist > 25 && this.chargeT <= 0 && Math.random() < dt * 0.4) this.chargeT = 0.9 + Math.random() * 0.4;
+        if (f.champId === 'rex' && cds.sec <= 0 && dist > 25 && this.chargeT <= 0 && Math.random() < dt * 0.4) this.chargeT = 0.9 + Math.random() * 0.4;
         if (this.chargeT > 0) {
           this.chargeT -= dt;
           it.secondary = true;
@@ -187,12 +193,12 @@ export class BotController {
             if (Math.random() < 0.2) it.attackPressed = true;
           }
         }
-        if (kitOf(f.champId) === 'sera' && cds.sec <= 0 && dist < 30 && Math.random() < dt * 0.3) {
+        if (f.champId === 'sera' && cds.sec <= 0 && dist < 30 && Math.random() < dt * 0.3) {
           it.secondaryPressed = true;
           it.secondary = true;
         }
       }
-      if (cds.abi <= 0 && dist < (kitOf(f.champId) === 'sera' ? 8 : 30) && Math.random() < dt * (0.5 + diff)) it.abilityPressed = true;
+      if (cds.abi <= 0 && dist < (f.champId === 'sera' ? 8 : 30) && Math.random() < dt * (0.5 + diff)) it.abilityPressed = true;
       if (f.ult >= 1 && dist < 45 && onTarget && Math.random() < dt * 0.6) it.ultimatePressed = true;
     }
   }

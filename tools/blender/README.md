@@ -62,8 +62,10 @@ I flag si possono combinare (`--iter 10 --poses --export`).
 ## Campioni importati da League of Legends
 
 Esperimento per giocare tra amici: Akali (True Damage), Qiyana (True Damage) e Locke con le mesh e
-le texture originali di LoL, mosse e numeri presi in prestito dai kit esistenti (Akali e Locke
-giocano col kit di Nova, Qiyana con quello di Kaiser; `KIT_OF` in `shared/champions.ts`).
+le texture originali di LoL. Sono campioni a sé, con kit ispirati a quelli di League e adattati ai
+comandi del gioco (LMB / RMB / F / R più una passiva): `src/combat/kits/akaliKit.ts`,
+`qiyanaKit.ts` e `lockeKit.ts`, clip in `src/champions/lolAnims.ts`, numeri e testi in
+`shared/champions.ts`.
 
 I file scaricati da LoL restano in locale (`tools/blender/lol/_cache/` è ignorata); i GLB
 convertiti in `public/models/lol/` sono nel repository, così il gioco li trova. Si rigenerano con i
@@ -108,9 +110,10 @@ Le skin, la scala, le armi (impugnatura e assi) e gli eventuali pezzi da nascond
    solo le rotazioni).
 5. **Armi**: i pezzi delle armi vengono portati nel sistema del perno della mano (impugnatura
    nell'origine, punta lungo +Z) ed esportati come mesh separate `weapon_R` / `weapon_L`.
-6. **Animazioni**: le clip dei kit hanno bersagli assoluti pensati per il corpo di Nova o di Kaiser;
-   `animScale` (spalle del modello / spalle del corpo del kit, negli extras del GLB) scala bersagli
-   delle armi e spostamenti del bacino.
+6. **Animazioni**: le clip di `src/champions/lolAnims.ts` hanno bersagli assoluti pensati per il
+   corpo di `bodySpec('female')`; `animScale` (spalle del modello / spalle di quel corpo,
+   `lolAnimScale`) scala bersagli delle armi e spostamenti del bacino. `skins.py` dice quali mani
+   impugnano un'arma (`grip`): Qiyana ha la sinistra libera.
 
 Nel gioco `src/champions/lolGlb.ts` usa lo stesso retarget di Kaiser (`glbModels.ts`). Le armi stanno
 su perni attaccati alle mani del modello (`handPivot`), così restano nel pugno visibile. Le falde e

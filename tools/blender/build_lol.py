@@ -31,7 +31,7 @@ from mathutils import Matrix, Vector  # noqa: E402
 import bl_kit as K  # noqa: E402
 from lolfmt import read_skn  # noqa: E402
 from rig_infer import infer  # noqa: E402
-from skins import KIT_GRIP, KIT_SHOULDER, SKINS  # noqa: E402
+from skins import SKINS  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(HERE))
 CACHE = os.path.join(HERE, 'lol', '_cache')
@@ -287,6 +287,20 @@ def fit_spec(J, female: bool, bulk: float) -> dict:
     return {k: (round(float(v), 4) if isinstance(v, (float, np.floating)) and not isinstance(v, bool) else v) for k, v in s.items()}
 
 
+def shoulder_y(s: dict) -> float:
+    """altezza delle spalle in T-pose di un corpo del Rig (come in Rig.ts)"""
+    return 0.045 + s['thigh'] + s['shin'] + s['footHeight'] + s['spineLen'] + s['chestLen'] + s['shoulderDrop'] - 0.01
+
+
+# le clip dei campioni importati (src/champions/lolAnims.ts) sono scritte per bodySpec('female')
+FEMALE_BODY = {'thigh': 0.42, 'shin': 0.42, 'footHeight': 0.075, 'spineLen': 0.1, 'chestLen': 0.15, 'shoulderDrop': 0.13}
+
+
+def anim_scale_of(spec: dict) -> float:
+    """animScale di quelle clip sul corpo `spec` (lolAnimScale nel gioco)"""
+    return shoulder_y(spec) / shoulder_y(FEMALE_BODY)
+
+
 # =============================================================================================
 # Armi: pezzi della mesh portati nel sistema del perno della mano
 # =============================================================================================
@@ -454,8 +468,7 @@ def build(cid: str, log=print):
     weapons = {side: build_weapon(lol, side, w, mats) for side, w in cfg.get('weapons', {}).items()}
 
     hips_b = K.g2b(J['hips'])
-    shoulder = (J['upperArmL'][1] + J['upperArmR'][1]) / 2
-    anim_scale = round(float(shoulder / KIT_SHOULDER[cfg['kit']]), 4)
+    anim_scale = round(anim_scale_of(spec), 4)
     arm['ggg_spec'] = json.dumps(spec)
     arm['ggg_chains'] = json.dumps([
         {'bones': ch['bones'], 'parent': ch['parent'],
@@ -467,13 +480,13 @@ def build(cid: str, log=print):
         'gearR': g(hips_b + V((-spec['hipWidth'] - 0.12, -0.05, -0.02))),
         'nozzle': g(hips_b + V((0, 0.16, 0.08))),
     })
-    arm['ggg_source'] = json.dumps({'champion': cfg['champ'], 'skin': cfg['skin'], 'name': cfg['name'], 'kit': cfg['kit'],
+    arm['ggg_source'] = json.dumps({'champion': cfg['champ'], 'skin': cfg['skin'], 'name': cfg['name'],
                                     'animScale': anim_scale, 'scale': cfg.get('scale', 1.0)})
     tris = sum(len(o.data.polygons) for o in [mesh, *weapons.values()])
     log(f'  {cid}: {len(names)} ossa, {len(guess.chains)} catene, {tris} triangoli, {time.time() - t0:.1f}s')
-    log(f'  animScale {anim_scale} (kit {cfg["kit"]})')
+    log(f'  animScale {anim_scale}')
     return {'lol': lol, 'guess': guess, 'spec': spec, 'arm': arm, 'mesh': mesh, 'weapons': weapons, 'names': names,
-            'kit': cfg['kit'], 'anim_scale': anim_scale, 'grip_hands': KIT_GRIP[cfg['kit']], 'J': J}
+            'anim_scale': anim_scale, 'grip_hands': cfg['grip'], 'J': J}
 
 
 def export(cid: str, B: dict):

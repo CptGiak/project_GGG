@@ -49,6 +49,8 @@ export interface ChampionVisual {
   /** called every frame for champion-specific idle effects (weapon glow, floating rings...) */
   tick(dt: number, time: number, energy: number): void;
   anims: ChampionAnimSet;
+  /** tints the weapon glow (element enchantments...), null = back to normal */
+  weaponGlow?(color: THREE.ColorRepresentation | null): void;
   /**
    * Scales the positional parts of the animations (weapon targets, hip offsets) when a body
    * uses the clips of a champion with different proportions (imported models). Default 1.

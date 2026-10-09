@@ -114,6 +114,17 @@ export class Fighter {
   hitFlash = 0;
   /** weapon slash trails emitting */
   trailOn = false;
+  /** invisibility seconds left (smoke shroud, grass veil); 0 = visible */
+  stealth = 0;
+  /** stealth zone: while stealthRadius > 0 the fighter is hidden only inside it */
+  readonly stealthZone = new THREE.Vector3();
+  stealthRadius = 0;
+  /** briefly visible while stealthed (attacking reveals) */
+  reveal = 0;
+  /** see-through look for the stealthed player's own view */
+  private ghost = false;
+  private ghostSaved = new Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }>();
+  private ghostHidden: THREE.Object3D[] = [];
 
   /** per-frame overrides written by the kit */
   readonly ctrl = { lockMove: 0, gravityScale: 1, speedMul: 1, noHooks: false, aim: 0, noDash: false };
@@ -163,7 +174,7 @@ export class Fighter {
 
   /** objects to add to the scene */
   get sceneObjects(): THREE.Object3D[] {
-    return [this.visual.root, ...this.visual.worldObjects, ...this.hooks.flatMap((h) => [h.visual.rope, h.visual.head])];
+    return [this.visual.root, ...this.visual.worldObjects, ...this.hooks.flatMap((h) => [h.visual.rope, h.visual.head]), ...(this.kit?.sceneObjects ?? [])];
   }
 
   /** chest position (aim target) */
@@ -184,6 +195,8 @@ export class Fighter {
     this.alive = true;
     this.gas = MOVE.gasMax;
     this.stun = this.slow = this.dashTime = 0;
+    this.stealth = this.reveal = this.stealthRadius = 0;
+    this.setGhost(false);
     this.spawnProtect = MATCH_RULES.spawnProtectSec;
     this.hooks.forEach((h) => h.reset());
     this.kit?.cancel(this);
@@ -228,6 +241,7 @@ export class Fighter {
       this.puppet(dt);
       this.kit?.tickRemote?.(this, dt, m);
     }
+    this.kit?.tickWorld?.(this, dt, m);
     this.updateVisual(dt, m);
   }
 
@@ -269,6 +283,7 @@ export class Fighter {
     m.broadcastAction(this, { a: 'flip', n: kind });
   }
 
+  /** kind 0 = front flip, +-1 = barrel roll, 2 = back flip */
   startFlip(kind: number): void {
     this.flipKind = kind;
     this.flipDur = kind === 0 ? 0.62 : 0.55;
@@ -287,6 +302,9 @@ export class Fighter {
   }
 
   private timers(dt: number): void {
+    this.stealth = Math.max(0, this.stealth - dt);
+    this.reveal = Math.max(0, this.reveal - dt);
+    if (this.stealth <= 0) this.stealthRadius = 0;
     this.invuln = Math.max(0, this.invuln - dt);
     this.stun = Math.max(0, this.stun - dt);
     this.slow = Math.max(0, this.slow - dt);
@@ -930,6 +948,7 @@ export class Fighter {
       const u = 1 - this.flipT / this.flipDur;
       const a = u * u * (3 - 2 * u) * Math.PI * 2;
       if (this.flipKind === 0) rx += a;
+      else if (this.flipKind === 2) rx -= a; // back flip
       else rz += a * this.flipKind;
     }
     if (this.tumbleT > 0) {
@@ -1054,6 +1073,53 @@ export class Fighter {
     if (l < 1e-3) return 0;
     out.divideScalar(l);
     return taut;
+  }
+
+  /** stealthed right now (inside the zone, if any, and not revealed) */
+  get stealthed(): boolean {
+    if (this.stealth <= 0 || this.reveal > 0 || !this.alive) return false;
+    return this.stealthRadius <= 0 || this.pos.distanceTo(this.stealthZone) <= this.stealthRadius;
+  }
+
+  /** invisible to `viewer` (stealthed and not right next to them) */
+  isHiddenFrom(viewer: Fighter | null): boolean {
+    if (!viewer || viewer === this || !this.stealthed) return false;
+    return this.pos.distanceTo(viewer.pos) > 2.4;
+  }
+
+  /** see-through model (own view while stealthed): transparent materials, no outlines */
+  setGhost(on: boolean): void {
+    if (on === this.ghost) return;
+    this.ghost = on;
+    if (on) {
+      this.visual.root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (/outline/i.test(mesh.name) && mesh.visible) {
+          mesh.visible = false;
+          this.ghostHidden.push(mesh);
+          return;
+        }
+        for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (!mat || this.ghostSaved.has(mat)) continue;
+          this.ghostSaved.set(mat, { transparent: mat.transparent, opacity: mat.opacity, depthWrite: mat.depthWrite });
+          mat.transparent = true;
+          mat.opacity = 0.32;
+          mat.depthWrite = false;
+          mat.needsUpdate = true;
+        }
+      });
+    } else {
+      for (const [mat, st] of this.ghostSaved) {
+        mat.transparent = st.transparent;
+        mat.opacity = st.opacity;
+        mat.depthWrite = st.depthWrite;
+        mat.needsUpdate = true;
+      }
+      this.ghostSaved.clear();
+      for (const o of this.ghostHidden) o.visible = true;
+      this.ghostHidden.length = 0;
+    }
   }
 
   isMovingBack(): boolean {
