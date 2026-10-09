@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MOVE } from '../../shared/constants';
+import { kitOf } from '../../shared/champions';
 import type { Fighter } from './Fighter';
 import { forwardOf, wrapAngle } from './Fighter';
 import type { MatchContext } from './types';
@@ -74,7 +75,7 @@ export class BotController {
       // lead moving targets for ranged champions
       if (!melee) {
         const dist = _aim.distanceTo(f.pos);
-        const projSpeed = f.champId === 'rex' ? 120 : 60;
+        const projSpeed = kitOf(f.champId) === 'rex' ? 120 : 60;
         _aim.addScaledVector(t.vel, (dist / projSpeed) * THREE.MathUtils.lerp(0.4, 1, diff));
       }
     } else {
@@ -145,7 +146,7 @@ export class BotController {
     const threat = t.kit && (t.kit as unknown as { act: string | null }).act;
     if (threat && this.reaction <= 0 && dist < (melee ? 6 : 10)) {
       this.reaction = THREE.MathUtils.lerp(0.9, 0.25, diff);
-      if (f.champId === 'kaiser' && Math.random() < 0.35 + diff * 0.35) this.holdGuard = 0.45 + Math.random() * 0.3;
+      if (kitOf(f.champId) === 'kaiser' && Math.random() < 0.35 + diff * 0.35) this.holdGuard = 0.45 + Math.random() * 0.3;
       else if (Math.random() < 0.25 + diff * 0.4 && f.gas > MOVE.dashCost) {
         it.move.set(this.strafe, -0.3);
         it.dashPressed = true;
@@ -168,11 +169,11 @@ export class BotController {
         if (Math.random() < dt * THREE.MathUtils.lerp(3, 7, diff)) it.attackPressed = true;
       }
       if (cds.abi <= 0 && dist > 5 && dist < 18 && onTarget && Math.random() < dt * (0.6 + diff)) it.abilityPressed = true;
-      if (f.champId === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
+      if (kitOf(f.champId) === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
       if (f.ult >= 1 && dist < 9 && Math.random() < dt * 0.8) it.ultimatePressed = true;
     } else {
       if (onTarget && dist < 90) {
-        if (f.champId === 'rex' && cds.sec <= 0 && dist > 25 && this.chargeT <= 0 && Math.random() < dt * 0.4) this.chargeT = 0.9 + Math.random() * 0.4;
+        if (kitOf(f.champId) === 'rex' && cds.sec <= 0 && dist > 25 && this.chargeT <= 0 && Math.random() < dt * 0.4) this.chargeT = 0.9 + Math.random() * 0.4;
         if (this.chargeT > 0) {
           this.chargeT -= dt;
           it.secondary = true;
@@ -186,12 +187,12 @@ export class BotController {
             if (Math.random() < 0.2) it.attackPressed = true;
           }
         }
-        if (f.champId === 'sera' && cds.sec <= 0 && dist < 30 && Math.random() < dt * 0.3) {
+        if (kitOf(f.champId) === 'sera' && cds.sec <= 0 && dist < 30 && Math.random() < dt * 0.3) {
           it.secondaryPressed = true;
           it.secondary = true;
         }
       }
-      if (cds.abi <= 0 && dist < (f.champId === 'sera' ? 8 : 30) && Math.random() < dt * (0.5 + diff)) it.abilityPressed = true;
+      if (cds.abi <= 0 && dist < (kitOf(f.champId) === 'sera' ? 8 : 30) && Math.random() < dt * (0.5 + diff)) it.abilityPressed = true;
       if (f.ult >= 1 && dist < 45 && onTarget && Math.random() < dt * 0.6) it.ultimatePressed = true;
     }
   }

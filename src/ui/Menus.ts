@@ -1,4 +1,5 @@
-import { CHAMPION_IDS, CHAMPIONS, type AbilitySlot, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, KIT_OF, type AbilitySlot, type ChampionId } from '../../shared/champions';
+import { championAvailable } from '../champions';
 import { ARENA_META } from '../../shared/arenas';
 import type { PlayerInfo } from '../../shared/protocol';
 import type { Settings } from '../core/Settings';
@@ -72,11 +73,25 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
     list,
     h('div', { class: 'mm-name' }, h('label', {}, 'CODENAME'), input),
     h('div', { class: 'mm-foot' }, 'Q/E RAMPINI · SPAZIO GAS · SHIFT SCATTO', h('br'), 'v0.1 — browser build'),
+    riotNotice(),
     // touch-only devices: the game needs a keyboard and a mouse
     window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
       ? h('div', { class: 'mm-touch' }, 'PROJECT GGG si gioca da computer con tastiera e mouse.')
       : null,
   );
+}
+
+/**
+ * Notice required by Riot's fan-project policy ("Legal Jibber Jabber") while League of Legends
+ * models are in the game (local files, see tools/blender/build_lol.py).
+ */
+function riotNotice(): HTMLElement | null {
+  const lol = CHAMPION_IDS.filter((id) => KIT_OF[id] && championAvailable(id));
+  if (!lol.length) return null;
+  return h('div', { class: 'mm-legal' },
+    `${lol.map((id) => CHAMPIONS[id].name).join(', ')}: modelli e texture da League of Legends © Riot Games. `,
+    'PROJECT GGG isn\'t endorsed by Riot Games and doesn\'t reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. ',
+    'Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.');
 }
 
 export interface SelectCallbacks {
@@ -89,12 +104,13 @@ export interface SelectCallbacks {
 const SLOT_ORDER: AbilitySlot[] = ['atk', 'sec', 'abi', 'ult'];
 
 export function champSelect(mode: 'practice' | 'online', s: Settings, cb: SelectCallbacks): HTMLElement {
-  let champ: ChampionId = s.champ;
+  const ids = CHAMPION_IDS.filter(championAvailable);
+  let champ: ChampionId = ids.includes(s.champ) ? s.champ : ids[0];
   let arena = s.arena;
   let bots = s.bots;
   let diff = s.botDifficulty;
   const root = h('div', { class: 'screen fade-in' });
-  const cards = h('div', { class: 'cs-cards' });
+  const cards = h('div', { class: ids.length > 4 ? 'cs-cards many' : 'cs-cards' });
   const info = h('div', { class: 'cs-info' });
   const renderInfo = () => {
     const c = CHAMPIONS[champ];
@@ -113,7 +129,7 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
     );
     cards.querySelectorAll('.cs-card').forEach((e) => e.classList.toggle('sel', (e as HTMLElement).dataset.id === champ));
   };
-  for (const id of CHAMPION_IDS) {
+  for (const id of ids) {
     const c = CHAMPIONS[id];
     const card = h('div', { class: 'cs-card', 'data-id': id, style: `--c1:${c.colors[0]};--c2:${c.colors[1]}`, onclick: () => {
       if (champ !== id) {

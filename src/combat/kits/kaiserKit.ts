@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { ChampionId } from '../../../shared/champions';
 import { BaseKit } from '../BaseKit';
 import type { Fighter } from '../../game/Fighter';
 import { forwardOf } from '../../game/Fighter';
@@ -20,8 +21,8 @@ export class KaiserKit extends BaseKit {
   private diveDir = new THREE.Vector3();
   private ultPhase: 'rise' | 'slam' | null = null;
 
-  constructor() {
-    super('kaiser');
+  constructor(id: ChampionId = 'kaiser') {
+    super(id);
   }
 
   protected handleInput(f: Fighter, it: Intent, dt: number, m: MatchContext): void {

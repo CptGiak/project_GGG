@@ -50,6 +50,11 @@ export interface ChampionVisual {
   tick(dt: number, time: number, energy: number): void;
   anims: ChampionAnimSet;
   /**
+   * Scales the positional parts of the animations (weapon targets, hip offsets) when a body
+   * uses the clips of a champion with different proportions (imported models). Default 1.
+   */
+  animScale?: number;
+  /**
    * Called after the animation pose and the weapon IK are applied to `rig` (before cloth):
    * skinned models copy the driver skeleton onto their own bones here.
    */

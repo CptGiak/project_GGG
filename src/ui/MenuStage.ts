@@ -1,13 +1,14 @@
 import * as THREE from 'three';
-import { CHAMPION_IDS, CHAMPIONS, type ChampionId } from '../../shared/champions';
-import { buildVisual } from '../champions';
+import { CHAMPION_IDS, CHAMPIONS, kitOf, type ChampionId } from '../../shared/champions';
+import { buildVisual, championAvailable } from '../champions';
 import type { ChampionVisual } from '../champions/types';
 import { FighterAnimator } from '../fighter/FighterAnimator';
 import { groundMaterial, skyMaterial } from '../world/materials';
 import { setKeyLight, ToonEnv } from '../render/toon';
 import { SlashTrail } from '../vfx/Trails';
 
-const PREVIEWS: Record<ChampionId, string[]> = {
+/** preview clips per kit (imported champions use their kit's) */
+const PREVIEWS: Partial<Record<ChampionId, string[]>> = {
   kaiser: ['taunt', 'atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
   nova: ['taunt', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
   rex: ['taunt', 'aim', 'charge', 'throw', 'ult'],
@@ -40,11 +41,14 @@ interface StageChamp {
   beam: THREE.Mesh;
 }
 
-/** 3D backdrop for the menus: the four champions on a concert stage under spotlights. */
+/** 3D backdrop for the menus: the champions on a concert stage under spotlights. */
 export class MenuStage {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(32, 1, 0.1, 500);
   private champs = new Map<ChampionId, StageChamp>();
+  private lineup: ChampionId[] = [];
+  /** lineup width relative to the original four (camera distance scale) */
+  private spread = 1;
   private mode: 'lineup' | 'select' = 'lineup';
   private focus: ChampionId = 'kaiser';
   private camPos = new THREE.Vector3(0, 1.6, 9);
@@ -80,12 +84,18 @@ export class MenuStage {
     this.pedestalRing.position.y = 0.02;
     this.scene.add(this.pedestalRing);
 
-    CHAMPION_IDS.forEach((id, i) => {
+    const ids = CHAMPION_IDS.filter(championAvailable);
+    this.lineup = ids;
+    const mid = (ids.length - 1) / 2;
+    // four in a row; more get closer, staggered in depth, and the lineup camera backs off
+    const step = ids.length <= 4 ? 1.75 : 1.15;
+    this.spread = ids.length <= 4 ? 1 : ((ids.length - 1) * step) / (3 * 1.75) + 0.08;
+    ids.forEach((id, i) => {
       const visual = buildVisual(id);
       const anim = new FighterAnimator(visual);
-      const home = new THREE.Vector3((i - 1.5) * 1.75, 0, i % 2 ? -0.6 : 0);
+      const home = new THREE.Vector3((i - mid) * step, 0, i % 2 ? (ids.length <= 4 ? -0.6 : -0.9) : 0);
       visual.root.position.copy(home);
-      visual.root.rotation.y = -0.15 * (i - 1.5);
+      visual.root.rotation.y = -0.15 * (i - mid);
       this.scene.add(visual.root);
       for (const o of visual.worldObjects) this.scene.add(o);
       const trails = visual.blades.map((b) => {
@@ -154,18 +164,18 @@ export class MenuStage {
       const target = focused ? new THREE.Vector3(0, 0, 0) : c.home;
       c.visual.root.position.lerp(target, 1 - Math.exp(-dt * 6));
       c.beam.position.set(c.visual.root.position.x, 4.5, c.visual.root.position.z);
-      const yaw = focused ? Math.sin(t * 0.35) * 0.45 + 0.2 : -0.12 * (CHAMPION_IDS.indexOf(c.id) - 1.5);
+      const yaw = focused ? Math.sin(t * 0.35) * 0.45 + 0.2 : -0.12 * (this.lineup.indexOf(c.id) - (this.lineup.length - 1) / 2);
       c.visual.root.rotation.y += (yaw - c.visual.root.rotation.y) * (1 - Math.exp(-dt * 3));
       // preview clips
       c.nextPreview -= dt;
       if (c.nextPreview <= 0) {
-        const list = PREVIEWS[c.id];
+        const list = PREVIEWS[c.id] ?? PREVIEWS[kitOf(c.id)] ?? ['taunt'];
         const name = list[c.previewIdx % list.length];
         c.previewIdx++;
         c.anim.play(name, { fadeIn: 0.08 });
         const clipLen = c.visual.anims.clips[name]?.duration ?? 1;
         c.nextPreview = focused ? Math.max(2.4, clipLen + 0.4) : 3.5 + Math.random() * 2.5;
-        if ((c.id === 'rex' || c.id === 'sera') && name !== 'taunt') c.anim.st.aim = 1;
+        if ((kitOf(c.id) === 'rex' || kitOf(c.id) === 'sera') && name !== 'taunt') c.anim.st.aim = 1;
       }
       if (!c.anim.action.active) c.anim.st.aim *= Math.exp(-dt * 3);
       c.anim.update(dt, false);
@@ -184,8 +194,9 @@ export class MenuStage {
     let look: THREE.Vector3;
     if (this.mode === 'lineup') {
       const a = Math.sin(t * 0.12) * 0.18 - 0.12;
-      pos = new THREE.Vector3(Math.sin(a) * 10 - 2.6, 1.8, Math.cos(a) * 10);
-      look = new THREE.Vector3(-2.6, 1.05, 0);
+      const k = this.spread;
+      pos = new THREE.Vector3(Math.sin(a) * 10 * k - 2.6 * k, 1.8 + (k - 1) * 0.8, Math.cos(a) * 10 * k);
+      look = new THREE.Vector3(-2.6 * k, 1.05, 0);
     } else {
       pos = new THREE.Vector3(0.2, 1.35, 5.3);
       look = new THREE.Vector3(0.05, 1.0, 0);

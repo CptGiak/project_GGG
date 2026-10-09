@@ -48,7 +48,8 @@ def collection(name: str) -> bpy.types.Collection:
 
 def set_active(ob: bpy.types.Object) -> None:
     for o in bpy.context.view_layer.objects:
-        o.select_set(False)
+        if o is not None:
+            o.select_set(False)
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
 

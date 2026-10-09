@@ -1,3 +1,4 @@
+import { kitOf, type ChampionId } from '../../shared/champions';
 /** Minimal SVG glyphs for ability cards (stroke-only, inherits currentColor). */
 const P = (d: string, extra = '') => `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linejoin="miter" stroke-linecap="square" ${extra}>${d}</svg>`;
 
@@ -28,5 +29,6 @@ const MAP: Record<string, Record<string, string>> = {
 };
 
 export function abilityIcon(champ: string, slot: string): string {
-  return ICONS[MAP[champ]?.[slot] ?? 'burst'];
+  const icons = MAP[champ] ?? MAP[kitOf(champ as ChampionId)];
+  return ICONS[icons?.[slot] ?? 'burst'];
 }

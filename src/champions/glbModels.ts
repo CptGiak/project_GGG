@@ -9,8 +9,9 @@ import type { ClothLike } from './types';
 
 /**
  * Champion models made in Blender from the character sheets (tools/blender/build_<id>.py ->
- * public/models/<id>.glb). They are loaded once at startup; champions without a model (or if the
- * file is missing / fails to load) keep their procedural model.
+ * public/models/<id>.glb) or imported from League of Legends (tools/blender/build_lol.py ->
+ * public/models/lol/<id>.glb, local files only). They are loaded once at startup; champions
+ * without a model (or if the file is missing / fails to load) keep their procedural model.
  *
  * The GLB is bound in T-pose and carries the game skeleton (same bone names, hierarchy and joint
  * positions as Rig.ts, body proportions stored in the extras) plus extra bones: coat flaps and
@@ -20,7 +21,13 @@ import type { ClothLike } from './types';
  * not matter), closes the fingers on the grip, and verlet chains swing the coat flaps.
  */
 
-const MODEL_IDS = ['kaiser'] as const;
+/** model files (under public/); the League of Legends imports are local only (not in git) */
+const MODEL_PATHS: Record<string, string> = {
+  kaiser: 'models/kaiser.glb',
+  akali: 'models/lol/akali.glb',
+  qiyana: 'models/lol/qiyana.glb',
+  locke: 'models/lol/locke.glb',
+};
 const cache = new Map<string, GLTF>();
 
 /** Loads the champion GLBs (call before building any visual). Never throws. */
@@ -29,10 +36,10 @@ export async function preloadChampionModels(params?: URLSearchParams, timeoutMs 
   const loader = new GLTFLoader();
   const base = import.meta.env.BASE_URL ?? '/';
   await Promise.all(
-    MODEL_IDS.map(async (id) => {
+    Object.entries(MODEL_PATHS).map(async ([id, path]) => {
       try {
         const gltf = await Promise.race([
-          loader.loadAsync(`${base}models/${id}.glb`),
+          loader.loadAsync(`${base}${path}`),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
         ]);
         cache.set(id, gltf);
@@ -63,6 +70,8 @@ export interface GlbMaterialSpec extends Partial<ToonOptions> {
 export interface GlbChampionConfig {
   /** per material name (Blender material names) */
   materials: Record<string, GlbMaterialSpec>;
+  /** materials without an entry in `materials` */
+  defaultMaterial?: GlbMaterialSpec;
   /** hands holding a weapon all the time (fingers closed) */
   gripHands: Array<'L' | 'R'>;
 }
@@ -75,9 +84,17 @@ export interface GlbInstance {
   materials: THREE.Material[];
   /** sockets from the extras, model space (feet at the origin, +Z forward) */
   sockets: Record<string, THREE.Vector3>;
-  /** coat-flap chains; pass the body spheres before use */
+  /** coat-flap / hair chains; pass the body spheres before use */
   chains: BoneChain[];
+  /** other extras of the model (ggg_source of the imported ones...) */
+  extras: Record<string, unknown>;
   syncPose(pose: Pose): void;
+  /**
+   * Weapon pivot that follows the model's own hand: same frame as the driver's weaponPivot in
+   * the T-pose, so a weapon built for the pivot sits in the visible fist even where the model's
+   * joints do not match the driver's exactly (imported models).
+   */
+  handPivot(side: 'L' | 'R', female?: boolean): THREE.Object3D;
 }
 
 const _q = new THREE.Quaternion();
@@ -118,7 +135,7 @@ export function instantiateGlb(gltf: GLTF, cfg: GlbChampionConfig): GlbInstance 
   const arm = found[0];
   if (!arm) throw new Error('GLB without ggg_spec extras');
   const spec = JSON.parse(arm.userData.ggg_spec as string) as BodySpec;
-  const chainData = JSON.parse((arm.userData.ggg_chains as string) ?? '[]') as Array<{ bones: string[]; joints: number[][] }>;
+  const chainData = JSON.parse((arm.userData.ggg_chains as string) ?? '[]') as Array<{ bones: string[]; joints: number[][]; parent?: string }>;
   const socketData = JSON.parse((arm.userData.ggg_sockets as string) ?? '{}') as Record<string, number[]>;
   const rig = new Rig(spec);
 
@@ -169,7 +186,7 @@ export function instantiateGlb(gltf: GLTF, cfg: GlbChampionConfig): GlbInstance 
     const src = m.material as THREE.MeshStandardMaterial;
     let mat = made.get(src);
     if (!mat) {
-      mat = convertMaterial(src, cfg.materials[src.name] ?? {});
+      mat = convertMaterial(src, cfg.materials[src.name] ?? cfg.defaultMaterial ?? {});
       made.set(src, mat);
       materials.push(mat);
     }
@@ -188,12 +205,38 @@ export function instantiateGlb(gltf: GLTF, cfg: GlbChampionConfig): GlbInstance 
   skinned[0].parent!.add(hull);
   hull.bind(skeleton, skinned[0].bindMatrix);
 
-  // ---- coat chains ------------------------------------------------------------------------------
-  const hipsBone = glbBones[0];
-  const hipsBindInv = new THREE.Matrix4().copy(hipsBone.matrixWorld).invert();
+  // ---- coat / hair chains (anchored to the hips unless the extras say otherwise) -----------------
   const chains = chainData
     .filter((c) => c.joints?.length === c.bones.length + 1)
-    .map((c) => new BoneChain(hipsBone, c.bones.map(bone), c.joints.map((j) => new THREE.Vector3(j[0], j[1], j[2]).applyMatrix4(hipsBindInv))));
+    .map((c) => {
+      const anchor = bone(c.parent ?? 'hips');
+      const bindInv = new THREE.Matrix4().copy(anchor.matrixWorld).invert();
+      return new BoneChain(anchor, c.bones.map(bone), c.joints.map((j) => new THREE.Vector3(j[0], j[1], j[2]).applyMatrix4(bindInv)));
+    });
+  const extras: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(arm.userData)) {
+    if (!k.startsWith('ggg_') || k === 'ggg_spec' || k === 'ggg_chains' || k === 'ggg_sockets') continue;
+    try {
+      extras[k.slice(4)] = JSON.parse(val as string);
+    } catch {
+      extras[k.slice(4)] = val;
+    }
+  }
+
+  // weapon pivots on the model's hands, from the bind (T-pose) frames
+  const handBind = { L: bone('handL').matrixWorld.clone(), R: bone('handR').matrixWorld.clone() };
+  const handPivot = (side: 'L' | 'R', female = false): THREE.Object3D => {
+    const hand = bone(`hand${side}`);
+    const tq = tpose[BONES.indexOf(`hand${side}`)];
+    const handPos = new THREE.Vector3().setFromMatrixPosition(handBind[side]);
+    const pivotPos = new THREE.Vector3(0, -0.05 * (female ? 0.88 : 1), 0.006).applyQuaternion(tq).add(handPos);
+    const local = new THREE.Matrix4().copy(handBind[side]).invert().multiply(new THREE.Matrix4().compose(pivotPos, tq, new THREE.Vector3(1, 1, 1)));
+    const g = new THREE.Group();
+    g.name = `${hand.name}_glbWeapon`;
+    local.decompose(g.position, g.quaternion, g.scale);
+    hand.add(g);
+    return g;
+  };
 
   const sockets: Record<string, THREE.Vector3> = {};
   for (const [k, v] of Object.entries(socketData)) sockets[k] = new THREE.Vector3(v[0], v[1], v[2]);
@@ -228,7 +271,7 @@ export function instantiateGlb(gltf: GLTF, cfg: GlbChampionConfig): GlbInstance 
     }
     scene.updateMatrixWorld(true);
   };
-  return { scene, rig, materials, sockets, chains, syncPose };
+  return { scene, rig, materials, sockets, chains, extras, syncPose, handPivot };
 }
 
 function convertMaterial(src: THREE.MeshStandardMaterial, s: GlbMaterialSpec): THREE.Material {
@@ -269,7 +312,7 @@ function outlineGeometry(gltf: GLTF, cfg: GlbChampionConfig): THREE.BufferGeomet
   const width: number[] = [];
   const index: number[] = [];
   for (const m of parts) {
-    const spec = cfg.materials[(m.material as THREE.Material).name] ?? {};
+    const spec = cfg.materials[(m.material as THREE.Material).name] ?? cfg.defaultMaterial ?? {};
     const w = spec.outline ?? 1;
     if (w <= 0) continue;
     const g = m.geometry;

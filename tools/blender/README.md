@@ -58,3 +58,60 @@ I flag si possono combinare (`--iter 10 --poses --export`).
 - Le dita si chiudono sull'impugnatura.
 - Le falde sono catene verlet che collidono con le sfere del corpo (gambe).
 - I materiali diventano `toon()` con i parametri per materiale; il contorno è un unico guscio invertito con skinning (`outlineMaterialSkinned`).
+
+## Campioni importati da League of Legends
+
+Esperimento per giocare tra amici: Akali (True Damage), Qiyana (True Damage) e Locke con le mesh e
+le texture originali di LoL, mosse e numeri presi in prestito dai kit esistenti (Akali e Locke
+giocano col kit di Nova, Qiyana con quello di Kaiser; `KIT_OF` in `shared/champions.ts`).
+
+I file di LoL e tutto ciò che ne deriva **non vanno in git** (`tools/blender/lol/_cache/`,
+`public/models/lol/` sono ignorati): ogni copia del gioco li rigenera con i due comandi qui sotto.
+Senza i file i tre campioni non compaiono nei menu e il gioco resta quello di prima. Finché ci
+sono, il menu principale mostra la nota richiesta da Riot per i progetti dei fan.
+
+```bash
+PY=/root/blender-venv/bin/python
+python3 -I tools/blender/lol/fetch.py akali qiyana locke          # scarica da raw.communitydragon.org
+$PY -I tools/blender/build_lol.py akali qiyana locke --export      # public/models/lol/<id>.glb
+$PY -I tools/blender/build_lol.py locke --render --poses           # render di controllo in _cache/<id>/renders
+$PY -I tools/blender/build_lol.py akali --preview                  # la mesh com'è nei file di gioco
+```
+
+Le skin, la scala, le armi (impugnatura e assi) e gli eventuali pezzi da nascondere stanno in
+`tools/blender/lol/skins.py`.
+
+### Come funziona
+
+1. **Download** (`lol/fetch.py`): dai dati della skin (`skinN.bin.json`) prende la mesh `.skn`, le
+   texture di ogni pezzo (il mirror le converte in PNG) e i pezzi nascosti di default.
+2. **Mesh** (`lol/lolfmt.py`): lettura della `.skn` (sotto-mesh, vertici, 4 influenze per vertice).
+   LoL è sinistrorso: X specchiato e avvolgimento dei triangoli invertito. Il controllo è il testo
+   sulle texture: dopo l'import si legge dritto ("TRUE DAMAGE" sulla gamba di Qiyana).
+3. **Scheletro** (`lol/rig_infer.py`): il mirror non pubblica gli scheletri `.skl`, quindi
+   l'ossatura si ricostruisce dai pesi.
+   - Due influenze che condividono vertici sono collegate. L'articolazione è il centro
+     dell'anello dove i loro pesi si mescolano.
+   - Albero di copertura massimo dal bacino.
+   - Gambe risalendo dai piedi, colonna fino alla testa, braccia verso l'esterno fino alla mano
+     (dove partono le dita).
+   - Ginocchio e gomito per posizione lungo l'arto. Se una manica imbottita sposta il gomito, si
+     usa il 52% della distanza spalla-polso.
+   - Tutto il resto (viso, capelli, vestiti, accessori) va all'osso del gioco più vicino.
+   - Le catene lunghe che pendono dal tronco diventano ossa a parte: sono le falde del cappotto
+     di Locke.
+   - I pesi originali di LoL restano: si sommano per osso del gioco, al massimo 4 per vertice.
+4. **T-pose** (`build_lol.py`): con un'armatura provvisoria nella posa di bind, braccia orizzontali e
+   dritte, gambe verticali; la coda di Akali viene abbassata e diventa una catena appesa alla testa.
+   La deformazione si applica alla mesh, poi le proporzioni del `Rig` del gioco (`ggg_spec`) si
+   ricavano dalle articolazioni. Le ossa del GLB restano sulle articolazioni vere (il gioco copia
+   solo le rotazioni).
+5. **Armi**: i pezzi delle armi vengono portati nel sistema del perno della mano (impugnatura
+   nell'origine, punta lungo +Z) ed esportati come mesh separate `weapon_R` / `weapon_L`.
+6. **Animazioni**: le clip dei kit hanno bersagli assoluti pensati per il corpo di Nova o di Kaiser;
+   `animScale` (spalle del modello / spalle del corpo del kit, negli extras del GLB) scala bersagli
+   delle armi e spostamenti del bacino.
+
+Nel gioco `src/champions/lolGlb.ts` usa lo stesso retarget di Kaiser (`glbModels.ts`). Le armi stanno
+su perni attaccati alle mani del modello (`handPivot`), così restano nel pugno visibile. Le falde e
+la coda sono catene verlet che collidono con le sfere del corpo.

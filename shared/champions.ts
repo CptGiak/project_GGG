@@ -35,10 +35,23 @@ export interface ChampionData {
   abilities: Record<AbilitySlot, AbilityData>;
 }
 
-export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera';
-export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera'];
+export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera' | 'akali' | 'qiyana' | 'locke';
+export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera', 'akali', 'qiyana', 'locke'];
 
-export const CHAMPIONS: Record<ChampionId, ChampionData> = {
+type BaseId = 'kaiser' | 'nova' | 'rex' | 'sera';
+
+/**
+ * Champions imported from League of Legends (tools/blender/build_lol.py): they play with the kit
+ * (moves, numbers, animations) of one of the original champions.
+ */
+export const KIT_OF: Partial<Record<ChampionId, BaseId>> = { akali: 'nova', qiyana: 'kaiser', locke: 'nova' };
+
+/** the champion whose kit `id` plays with (itself for the original four) */
+export function kitOf(id: ChampionId): BaseId {
+  return KIT_OF[id] ?? (id as BaseId);
+}
+
+const BASE: Record<BaseId, ChampionData> = {
   kaiser: {
     id: 'kaiser',
     name: 'KAISER',
@@ -115,6 +128,63 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
       ult: { slot: 'ult', key: 'R', name: 'Grand Finale', desc: 'Un riflettore colpisce il punto mirato: colonna di luce devastante e cura per te.', cooldown: 0, damage: { pillar: 400 }, range: 90, maxRate: 4 },
     },
   },
+};
+
+type Flavor = Pick<ChampionData, 'name' | 'title' | 'colors' | 'weapon' | 'bio'> & {
+  abilities: Record<AbilitySlot, { name: string; desc?: string }>;
+};
+
+/** same gameplay numbers as the kit, own name, colours and ability names */
+function borrowKit(id: ChampionId, kit: BaseId, f: Flavor): ChampionData {
+  const base = BASE[kit];
+  const abilities = {} as Record<AbilitySlot, AbilityData>;
+  for (const slot of Object.keys(base.abilities) as AbilitySlot[]) {
+    abilities[slot] = { ...base.abilities[slot], name: f.abilities[slot].name, desc: f.abilities[slot].desc ?? base.abilities[slot].desc };
+  }
+  return { ...base, id, name: f.name, title: f.title, colors: f.colors, weapon: f.weapon, bio: f.bio, abilities };
+}
+
+export const CHAMPIONS: Record<ChampionId, ChampionData> = {
+  ...BASE,
+  akali: borrowKit('akali', 'nova', {
+    name: 'AKALI',
+    title: 'True Damage',
+    colors: ['#a15cff', '#ff6a3d'],
+    weapon: 'Kama e kunai',
+    bio: 'Rapper dei True Damage. Arriva dall\'ombra, colpisce a tempo e sparisce prima del ritornello. (Modello: League of Legends, kit di Nova.)',
+    abilities: {
+      atk: { name: 'Five Point Strike', desc: 'Combo rapida di 4 colpi con kama e kunai. In aria: colpo ascendente.' },
+      sec: { name: 'Shuriken Flip' },
+      abi: { name: 'Twilight Shroud' },
+      ult: { name: 'Perfect Execution' },
+    },
+  }),
+  qiyana: borrowKit('qiyana', 'kaiser', {
+    name: 'QIYANA',
+    title: 'True Damage',
+    colors: ['#57d9ff', '#ffc94a'],
+    weapon: 'Lama ad anello d\'oro',
+    bio: 'La diva dei True Damage. Tutto il palco è il suo regno, e l\'anello d\'oro chiude ogni discussione. (Modello: League of Legends, kit di Kaiser.)',
+    abilities: {
+      atk: { name: 'Edge of Ixtal', desc: 'Combo di 3 colpi con la lama ad anello. In aria: fendente rotante.' },
+      sec: { name: 'Terrashape' },
+      abi: { name: 'Audacity' },
+      ult: { name: 'Supreme Display of Talent' },
+    },
+  }),
+  locke: borrowKit('locke', 'nova', {
+    name: 'LOCKE',
+    title: 'L\'Esorcista Cinereo',
+    colors: ['#3fd6b0', '#7a5cff'],
+    weapon: 'Paletto d\'argento e chiodi',
+    bio: 'Esorcista demaciano: caccia demoni con paletti e chiodi rituali. (Modello: League of Legends, kit di Nova.)',
+    abilities: {
+      atk: { name: 'Ritual Nails', desc: 'Combo rapida di 4 colpi con paletto e chiodo. In aria: colpo ascendente.' },
+      sec: { name: 'Ashen Pursuit' },
+      abi: { name: 'Silver Stake' },
+      ult: { name: 'Soul Ignition' },
+    },
+  }),
 };
 
 export const MATCH_RULES = {

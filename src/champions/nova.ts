@@ -236,7 +236,7 @@ export function buildNova(): ChampionVisual {
   });
 }
 
-function novaAnims(): ChampionAnimSet {
+export function novaAnims(): ChampionAnimSet {
   const W = (p: [number, number, number], d: [number, number, number], u: [number, number, number] = [0, 1, 0]): WeaponSpec => ({ p, d, u });
   const legs: PoseSpec = {
     hips: [0, -0.1, 0],

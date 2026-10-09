@@ -86,6 +86,13 @@ export class FighterAnimator {
     this.flinch.update(dt);
     this.flinch.apply(pose, airborne);
     this.applyReact(dt, pose);
+    // clips authored for another body size: weapon targets and hip offsets scale with the body
+    const k = this.v.animScale ?? 1;
+    if (k !== 1) {
+      pose.wR.p.multiplyScalar(k);
+      pose.wL.p.multiplyScalar(k);
+      pose.hips.multiplyScalar(k);
+    }
 
     // head / chest look-at
     const lp = THREE.MathUtils.clamp(st.lookPitch, -55, 55);
