@@ -10,8 +10,9 @@ import { toon, type ToonMaterial } from '../render/toon';
  *
  * Everything starts loading as soon as this module is imported, so it is normally ready before a
  * match starts. Textures can be used right away (they fill in when loaded); kit pieces placed before
- * the GLB arrives are added to the arena as soon as it does. Missing files only log: the arena keeps
- * its plain geometry.
+ * the GLB arrives are added to the arena as soon as it does. Missing files only log: a missing
+ * texture turns plain grey without glow (the materials keep their flat colours) and a missing kit
+ * leaves the arena with its plain geometry.
  */
 
 export type ArtTheme = 'city' | 'stage' | 'tartarus';
@@ -41,7 +42,13 @@ const kitWaiters = new Map<ArtTheme, Array<(k: Kit | null) => void>>();
 export function artTexture(name: string, opts: { repeat?: boolean; nearest?: boolean; flipY?: boolean } = {}): THREE.Texture {
   let t = textures.get(name);
   if (t) return t;
-  t = texLoader.load(`${BASE}${name}.png`, undefined, undefined, () => console.info(`[arena art] ${name}.png missing`));
+  const tex: THREE.Texture = texLoader.load(`${BASE}${name}.png`, undefined, undefined, () => {
+    console.info(`[arena art] ${name}.png missing`);
+    // a texture that never loaded samples black: use the tiles' average grey with no glow instead
+    tex.image = new ImageData(new Uint8ClampedArray([112, 112, 112, 0]), 1, 1);
+    tex.needsUpdate = true;
+  });
+  t = tex;
   t.colorSpace = THREE.SRGBColorSpace;
   if (opts.flipY === false) t.flipY = false;
   if (opts.repeat !== false) t.wrapS = t.wrapT = THREE.RepeatWrapping;

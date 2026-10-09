@@ -66,7 +66,8 @@ ignorata da git.
 ## Nel gioco
 
 - `src/world/ArenaArt.ts` carica texture (`artTexture`) e kit (GLB) appena il modulo viene
-  importato; se un file manca l'arena resta con la geometria semplice.
+  importato; se manca una texture il materiale resta a tinta unita (senza luci), se manca un kit
+  restano le forme semplici.
 - `src/world/ArenaBuilder.ts`: `piece()` piazza i pezzi del kit (uniti nei batch per materiale),
   `tiledBox()` crea scatole con UV che contano i tile (finestre allineate piano per piano),
   `beamBox()` travi e truss, `lightbox()` / `signFace()` le insegne (un unico atlante canvas).
