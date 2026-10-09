@@ -1,10 +1,11 @@
 /**
  * Builds the game as one self-contained page for static hosting without the game server (the
  * version published as a Claude artifact): three.js from jsDelivr through an import map, the
- * game's JS and CSS inline, the GLB models packed as base64 in models.json next to the page
- * (artifact hosts do not serve .glb files). Online PvP is off (VITE_STATIC).
+ * game's JS and CSS inline, the champion GLB models packed as base64 in models.json and the
+ * arena art in arenas.json next to the page (artifact hosts do not serve .glb files). Online PvP
+ * is off (VITE_STATIC).
  *
- *   node tools/build_static.mjs [outDir]      -> <outDir>/index.html + <outDir>/models.json
+ *   node tools/build_static.mjs [outDir]      -> <outDir>/index.html + models.json + arenas.json
  *
  * The page has no <html>/<head>/<body> of its own: the artifact host wraps it.
  */
@@ -64,11 +65,14 @@ ${read(js[0], 'script')}
 fs.writeFileSync(path.join(out, 'index.html'), html);
 fs.rmSync(tmp, { recursive: true, force: true });
 
-// public/models/**/*.glb -> { "models/<path>.glb": base64 } (the keys are the game's model paths)
+// champion models: public/models/**/*.glb -> { "models/<path>.glb": base64 } (the game's model paths)
+const pack = (files) => JSON.stringify(Object.fromEntries(files.map((p) => [p, fs.readFileSync(path.join(root, 'public', p)).toString('base64')])));
 const glbs = (dir, pre) =>
   fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? glbs(path.join(dir, d.name), `${pre}${d.name}/`) : d.name.endsWith('.glb') ? [`${pre}${d.name}`] : []));
-const packed = Object.fromEntries(glbs(path.join(root, 'public/models'), 'models/').map((p) => [p, fs.readFileSync(path.join(root, 'public', p)).toString('base64')]));
-fs.writeFileSync(path.join(out, 'models.json'), JSON.stringify(packed));
+fs.writeFileSync(path.join(out, 'models.json'), pack(glbs(path.join(root, 'public/models'), 'models/').filter((p) => !p.startsWith('models/arenas/'))));
+// arena art (textures and kits of public/models/arenas) -> arenas.json, read by src/world/ArenaArt.ts
+const arenaFiles = fs.readdirSync(path.join(root, 'public/models/arenas')).filter((f) => /\.(png|glb)$/.test(f));
+fs.writeFileSync(path.join(out, 'arenas.json'), pack(arenaFiles.map((f) => `models/arenas/${f}`)));
 
 const list = (dir, pre = '') =>
   fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? list(path.join(dir, d.name), `${pre}${d.name}/`) : [`${pre}${d.name}`]));
