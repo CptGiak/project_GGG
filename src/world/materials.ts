@@ -191,8 +191,12 @@ uniform vec3 uSideTint;`,
 // Ground with painted patterns
 // ---------------------------------------------------------------------------------------------
 
-/** Ground with painted lines / tiles from world position (asphalt, crosswalks, stage floor). */
-export function groundMaterial(opts: ToonOptions & { line: THREE.ColorRepresentation; pattern: 'crosswalk' | 'tiles' | 'stage' | 'water'; scale?: number; glow?: number; tex?: THREE.Texture; texScale?: number; paint?: number }): ToonMaterial {
+/**
+ * Ground with painted lines / tiles from world position (asphalt, crosswalks, stage floor), or calm
+ * water ('water': `line` is the reflected sky tint, `glow` its strength, `moonDir` puts a soft
+ * moon path on it).
+ */
+export function groundMaterial(opts: ToonOptions & { line: THREE.ColorRepresentation; pattern: 'crosswalk' | 'tiles' | 'stage' | 'water'; scale?: number; glow?: number; tex?: THREE.Texture; texScale?: number; paint?: number; moonDir?: THREE.Vector3 }): ToonMaterial {
   const mat = toon(opts);
   const base = mat.onBeforeCompile;
   const line = new THREE.Color(opts.line);
@@ -206,6 +210,7 @@ export function groundMaterial(opts: ToonOptions & { line: THREE.ColorRepresenta
     uTex: { value: opts.tex ?? null },
     uTexScale: { value: opts.texScale ?? 8 },
     uTime: ToonEnv.time,
+    uMoonDir: { value: (opts.moonDir ?? new THREE.Vector3(0, 0.5, -1)).clone().normalize() },
   };
   mat.onBeforeCompile = (shader, renderer) => {
     base.call(mat, shader, renderer);
@@ -216,6 +221,7 @@ export function groundMaterial(opts: ToonOptions & { line: THREE.ColorRepresenta
         '#include <common>',
         `#include <common>
 ${opts.tex ? '#define G_TEX' : ''}
+uniform vec3 uMoonDir;
 varying vec3 vWPos;
 varying vec3 vWNor;
 uniform vec3 uLine;
@@ -277,18 +283,26 @@ ${AA_GLSL}`,
     m = clamp( rings + spokes, 0.0, 1.0 );
     totalEmissiveRadiance += uLine * m * uGlow;
   } else {
-    // water: slow ripple lines
-    float w = sin( p.x * 0.35 + uTime * 0.35 ) * sin( p.y * 0.3 - uTime * 0.25 ) + sin( ( p.x + p.y ) * 0.21 + uTime * 0.4 );
-    float fw = max( fwidth( w ), 1e-4 );
-    m = smoothstep( 1.18 - fw, 1.18 + fw, w ) * ( 1.0 - smoothstep( 1.26 - fw, 1.26 + fw, w ) );
-    m *= 1.0 - smoothstep( 0.15, 0.6, fw );
-    totalEmissiveRadiance += uLine * m * uGlow;
+    // water: calm and dark. Broad slow swells (10..23 m) tilt the normal a little; the far water
+    // mirrors the sky tint and a soft path glitters towards the moon. No lines, nothing that
+    // blinks: the swells flatten out where they would shrink to a few pixels.
+    vec3 V = normalize( vWPos - cameraPosition );
+    vec2 g = vec2( 0.28, 0.1 ) * cos( dot( p, vec2( 0.28, 0.1 ) ) + uTime * 0.5 )
+      + vec2( -0.13, 0.24 ) * cos( dot( p, vec2( -0.13, 0.24 ) ) - uTime * 0.42 )
+      + vec2( 0.5, -0.33 ) * 0.45 * cos( dot( p, vec2( 0.5, -0.33 ) ) + uTime * 0.66 );
+    float detail = 1.0 - smoothstep( 0.35, 1.6, length( fwidth( p ) ) );
+    vec3 N = normalize( vec3( -g.x * 0.1 * detail, 1.0, -g.y * 0.1 * detail ) );
+    vec3 R = reflect( V, N );
+    float fres = pow( 1.0 - clamp( -V.y, 0.0, 1.0 ), 3.0 );
+    float moon = smoothstep( 0.93, 0.995, dot( R, uMoonDir ) );
+    diffuseColor.rgb *= 0.93 + 0.07 * clamp( g.x + g.y, -1.0, 1.0 ) * detail;
+    totalEmissiveRadiance += uLine * ( fres * 0.5 + moon * 0.55 ) * uGlow;
   }
   diffuseColor.rgb = mix( diffuseColor.rgb, uLine, m * ( uPat > 2.5 ? 0.0 : uPaint ) );
 }`,
       );
   };
-  mat.customProgramCacheKey = () => `ggg-toon-ground-${opts.tex ? 't' : 'n'}-v3`;
+  mat.customProgramCacheKey = () => `ggg-toon-ground-${opts.tex ? 't' : 'n'}-v4`;
   return mat;
 }
 
@@ -428,8 +442,15 @@ export function skyMaterial(opts: { top: THREE.ColorRepresentation; mid: THREE.C
         float md = acos( clamp( dot( d, uMoonDir ), -1.0, 1.0 ) );
         float disc = 1.0 - smoothstep( uMoonSize - 0.004, uMoonSize, md );
         float halo = exp( -max( md - uMoonSize, 0.0 ) * 9.0 ) * uHalo;
-        float cr = h3( floor( d * 60.0 ) );
-        vec3 moonCol = uMoon * ( 1.0 - 0.12 * step( 0.7, cr ) );
+        // soft maria in disc coordinates (no blocky cells)
+        vec3 t1 = normalize( cross( uMoonDir, vec3( 0.0, 1.0, 0.0 ) ) );
+        vec3 t2 = cross( t1, uMoonDir );
+        vec2 q = vec2( dot( d, t1 ), dot( d, t2 ) ) / uMoonSize;
+        float mare = smoothstep( 0.42, 0.16, length( q - vec2( -0.28, 0.24 ) ) )
+          + 0.8 * smoothstep( 0.3, 0.08, length( q - vec2( 0.32, 0.3 ) ) )
+          + 0.9 * smoothstep( 0.36, 0.12, length( q - vec2( 0.1, -0.32 ) ) )
+          + 0.7 * smoothstep( 0.2, 0.04, length( q - vec2( -0.4, -0.36 ) ) );
+        vec3 moonCol = uMoon * ( 1.0 - 0.14 * clamp( mare, 0.0, 1.0 ) ) * ( 0.93 + 0.07 * ( 1.0 - dot( q, q ) ) );
         col = mix( col, moonCol * 1.15, disc );
         col += uMoon * halo * ( 1.0 - disc );
         gl_FragColor = vec4( col, 1.0 );

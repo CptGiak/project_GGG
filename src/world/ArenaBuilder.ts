@@ -259,10 +259,11 @@ export class ArenaBuilder {
   /**
    * Box whose side UVs count texture tiles, measured from the face's left edge and from world height
    * `v0`: a facade tile of `tileW` x `tileH` metres repeats exactly, so windows line up on every
-   * floor. Face widths snap to whole half-tiles (one bay) so no window is cut at a corner. `seed`
-   * shifts the UVs by whole tiles (same look, different lit windows). Bottom face omitted.
+   * floor. Face widths snap to whole half-tiles (one bay) so no window is cut at a corner, or to
+   * whole tiles with `whole` (tiles with one centred motif). `seed` shifts the UVs by whole tiles
+   * (same look, different lit windows). Bottom face omitted.
    */
-  static tiledBox(w: number, h: number, d: number, tileW: number, tileH: number, v0: number, seed: number, top = false): THREE.BufferGeometry {
+  static tiledBox(w: number, h: number, d: number, tileW: number, tileH: number, v0: number, seed: number, top = false, whole = false): THREE.BufferGeometry {
     const pos: number[] = [];
     const nor: number[] = [];
     const uv: number[] = [];
@@ -282,7 +283,7 @@ export class ArenaBuilder {
       const half = nx !== 0 ? hd : hw;
       const off = nx !== 0 ? hw : hd;
       const width = half * 2;
-      const tiles = Math.max(1, Math.round((width / tileW) * 2)) / 2;
+      const tiles = whole ? Math.max(1, Math.round(width / tileW)) : Math.max(1, Math.round((width / tileW) * 2)) / 2;
       const u0 = Math.floor((seed * 7 + i * 13) % 97);
       const left = [nx * off - rx * half, nz * off - rz * half];
       const right = [nx * off + rx * half, nz * off + rz * half];
