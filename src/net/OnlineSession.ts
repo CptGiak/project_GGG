@@ -70,6 +70,8 @@ export class OnlineSession implements NetBridge {
   attach(m: Match): void {
     this.match = m;
     m.net = this;
+    // joining mid-match: the first blood is already history
+    m.medals.seed([...this.players.values()].some((p) => p.kills > 0));
     for (const p of this.players.values()) {
       if (p.score) m.spot?.scores.set(p.id, p.score);
       if (p.id === this.myId) {
@@ -147,7 +149,15 @@ export class OnlineSession implements NetBridge {
 
   update(dt: number): void {
     // drain messages
-    while (this.net.queue.length) this.handle(this.net.queue.shift()!);
+    while (this.net.queue.length) {
+      const msg = this.net.queue.shift()!;
+      // one bad message (another client's malformed action) must not stop the frame loop
+      try {
+        this.handle(msg);
+      } catch (e) {
+        console.error(`[net] bad '${msg.t}' message`, e);
+      }
+    }
     const m = this.match;
     if (!m) return;
     // RIFLETTORE runs on the server's beat clock
@@ -306,7 +316,8 @@ export class OnlineSession implements NetBridge {
         if (!m) break;
         const def = m.getFighter(msg.def);
         const att = m.getFighter(msg.att);
-        if (def && att) m.applyParry(def, att);
+        // the server decides whether the parry paid the counter window (its cooldown is the truth)
+        if (def && att) m.applyParry(def, att, !!msg.rw);
         break;
       }
       case 'dodge': {

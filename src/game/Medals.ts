@@ -60,6 +60,11 @@ export class Medals {
     return r;
   }
 
+  /** a match joined in progress: whether someone already scored (no FIRST BLOOD then) */
+  seed(anyKills: boolean): void {
+    this.firstBlood = anyKills;
+  }
+
   streak(f: Fighter): number {
     return this.runs.get(f.id)?.streak ?? 0;
   }

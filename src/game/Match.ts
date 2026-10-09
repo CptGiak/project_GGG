@@ -536,7 +536,8 @@ export class Match implements MatchContext {
    * Perfect guard: within COMBAT.parryRange the attacker is stunned and punishable, and the
    * defender gets a counter window (Kaiser: the Riposte).
    */
-  applyParry(defender: Fighter, attacker: Fighter): void {
+  /** `reward`: online, the server's ruling on the counter window (offline: the local cooldown) */
+  applyParry(defender: Fighter, attacker: Fighter, reward?: boolean): void {
     const close = defender.pos.distanceTo(attacker.pos) <= COMBAT.parryRange;
     if (close) {
       attacker.punishT = Math.max(attacker.punishT, COMBAT.parryStun);
@@ -549,7 +550,7 @@ export class Match implements MatchContext {
     }
     // the reward needs a real exchange (close) and shares the dodge's cooldown: raising the
     // guard into rapid fire from across the map farms nothing
-    const rewarded = defender.simulated && close && defender.dodgeCd <= 0;
+    const rewarded = defender.simulated && (reward ?? (close && defender.dodgeCd <= 0));
     this.stat(close ? 'parry:close' : 'parry:far');
     if (rewarded) {
       defender.dodgeCd = COMBAT.dodgeRewardCd;

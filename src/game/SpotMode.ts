@@ -146,15 +146,14 @@ export class SpotMode {
     return spotTarget(this.phase);
   }
 
+  /** most points, ties broken by kills (as the server does); nobody if no one scored */
   leader(): Fighter | null {
     let best: Fighter | null = null;
-    let bestS = 0;
     for (const f of this.m.fighters) {
       const s = this.score(f);
-      if (s > bestS) {
-        bestS = s;
-        best = f;
-      }
+      if (s <= 0) continue;
+      const bs = best ? this.score(best) : 0;
+      if (!best || s > bs || (s === bs && f.kills > best.kills)) best = f;
     }
     return best;
   }
@@ -164,10 +163,11 @@ export class SpotMode {
     if (this.authoritative && m.state === 'playing') this.timeMs += dt * 1000;
     const beat = Math.floor(this.timeMs / BEAT_MS);
     const prev = this.phase;
+    // the first update only catches up (joining mid-match is not a switch or a scored beat)
+    const first = this.beat < 0;
     this.phase = spotPhase(this.schedule, beat);
-    if (this.phase.idx !== prev.idx) this.onSwitch(prev);
+    if (this.phase.idx !== prev.idx && !first) this.onSwitch(prev);
     if (beat !== this.beat) {
-      const first = this.beat < 0;
       this.beat = beat;
       if (!first) this.onBeat();
     }

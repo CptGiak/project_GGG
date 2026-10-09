@@ -41,6 +41,13 @@ export class KaiserKit extends BaseKit {
     m.audio.play('perfectTick', f.pos, 0.9);
   }
 
+  /** a stun or a death also closes the Riposte window */
+  cancel(f: Fighter): void {
+    this.riposteT = 0;
+    this.riposteTarget = null;
+    super.cancel(f);
+  }
+
   protected handleInput(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
     this.comboTimer -= dt;
     this.guardCd = Math.max(0, this.guardCd - dt);

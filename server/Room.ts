@@ -3,7 +3,7 @@ import { CHAMPIONS, CHAMPION_IDS, MATCH_RULES, type AbilityData, type ChampionId
 import { COMBAT, MOVE, dashIFrames, hitMultiplier } from '../shared/constants';
 import { ARENA_META, arenaMeta } from '../shared/arenas';
 import { BEAT_MS, MODE_IDS, SPOT, SPOT_DURATION_SEC, SPOT_ZONES, inSpot, spotPhase, spotSchedule, spotTarget, type ModeId, type SpotZone } from '../shared/modes';
-import type { C2S, HitMsg, MatchModeMsg, PlayerInfo, PlayerState, S2C, V3 } from '../shared/protocol';
+import type { ActionMsg, C2S, HitMsg, MatchModeMsg, PlayerInfo, PlayerState, S2C, V3 } from '../shared/protocol';
 
 interface Player {
   id: string;
@@ -18,7 +18,10 @@ interface Player {
   respawnAt: number;
   spawnedAt: number;
   guard: boolean;
+  /** when the guard went up (a perfect parry window), or -1e9 when that raise opened none */
   guardStart: number;
+  /** when the guard last came down (a fresh raise needs a rest, like the client's guard cooldown) */
+  guardDropAt: number;
   /** recent hit timestamps per slot (rate limiting) */
   hitLog: Record<string, number[]>;
   lastHeal: number;
@@ -26,12 +29,14 @@ interface Player {
   joinedAt: number;
   /** recent movement speeds from states, [time, m/s] (momentum strike validation) */
   spd: Array<[number, number]>;
+  /** recent positions from states, [time, position]: the distance really covered caps the speed */
+  trail: Array<[number, V3]>;
   /** dash i-frames seen in states (a hit inside them is a perfect dodge) */
   dodge: IFrames;
   /** invulnerability granted by abilities (Nova's blinks and ultimate), opened by their actions */
   invulnUntil: number;
-  /** last time each invulnerable action was accepted (rate limited by its cooldown) */
-  ivActAt: Record<string, number>;
+  /** budget of each invulnerable action (tokens refill once per its `every`, up to its `burst`) */
+  ivBudget: Map<string, { tokens: number; at: number }>;
   /** last perfect dodge rewarded (one per COMBAT.dodgeRewardCd) and the counter window it opened */
   dodgeRewardAt: number;
   counterUntil: number;
@@ -96,6 +101,8 @@ function trackIFrames(f: IFrames, on: boolean, t: number): void {
 
 const TICK_MS = 50;
 const now = () => Date.now();
+/** a raise of the guard opens a parry window only after it rested this long (client: 500 ms) */
+const GUARD_REARM_MS = 350;
 
 function finite(v: unknown, fallback = 0): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -107,6 +114,24 @@ function vec(v: unknown): V3 | null {
 }
 function dist(a: V3, b: V3): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+function clampV(v: V3 | null, lim: number): V3 | undefined {
+  return v ? (v.map((x) => Math.max(-lim, Math.min(lim, x))) as V3) : undefined;
+}
+
+/** an action as relayed to the other clients: only the fields their handlers read, well formed */
+function cleanAction(e: unknown): ActionMsg | null {
+  if (!e || typeof e !== 'object') return null;
+  const r = e as Record<string, unknown>;
+  if (typeof r.a !== 'string' || !r.a || r.a.length >= 24) return null;
+  const out: ActionMsg = { a: r.a };
+  const p = clampV(vec(r.p), 1e4);
+  const d = clampV(vec(r.d), 1e4);
+  if (p) out.p = p;
+  if (d) out.d = d;
+  if (typeof r.t === 'string') out.t = r.t.slice(0, 32);
+  if (typeof r.n === 'number' && Number.isFinite(r.n)) out.n = Math.max(-100, Math.min(100, r.n));
+  return out;
 }
 
 /**
@@ -189,15 +214,17 @@ export class Room {
       respawnAt: 0,
       spawnedAt: now(),
       guard: false,
-      guardStart: 0,
+      guardStart: -1e9,
+      guardDropAt: -1e9,
       hitLog: {},
       lastHeal: 0,
       pendingChamp: null,
       joinedAt: now(),
       spd: [],
+      trail: [],
       dodge: iframes(),
       invulnUntil: 0,
-      ivActAt: {},
+      ivBudget: new Map(),
       dodgeRewardAt: -1e9,
       counterUntil: 0,
       counterUsed: true,
@@ -246,16 +273,14 @@ export class Room {
       case 'state':
         this.onState(p, msg.s);
         break;
-      case 'act':
-        if (msg.e && typeof msg.e.a === 'string' && msg.e.a.length < 24) {
-          if (msg.e.a === 'guard') {
-            p.guard = !!msg.e.n;
-            if (p.guard) p.guardStart = now();
-          }
-          this.onActIFrames(p, msg.e.a);
-          this.broadcast({ t: 'act', id: p.id, e: msg.e }, p.id);
-        }
+      case 'act': {
+        const e = cleanAction(msg.e);
+        if (!e) break;
+        if (e.a === 'guard') this.setGuard(p, !!e.n);
+        this.onActIFrames(p, e.a);
+        this.broadcast({ t: 'act', id: p.id, e }, p.id);
         break;
+      }
       case 'hit':
         this.onHit(p, msg);
         break;
@@ -290,17 +315,39 @@ export class Room {
       hb: vec(s.hb) ?? undefined,
     };
     const t = now();
-    // speed history (momentum strikes are capped to it)
-    p.spd.push([t, Math.min(90, Math.hypot(vel[0], vel[1], vel[2]))]);
+    // speed history (momentum strikes are capped to it): the reported velocity, but never more
+    // than the distance the states actually covered
+    p.spd.push([t, Math.min(90, Math.hypot(vel[0], vel[1], vel[2]), this.movedSpeed(p, pos, t))]);
     while (p.spd.length && t - p.spd[0][0] > COMBAT.momentumWindowMs) p.spd.shift();
     // dash i-frames: no longer than a dash, no more often than the dash cooldown allows
     trackIFrames(p.dodge, (p.state.fl & 32) !== 0, t);
-    const g = (p.state.fl & 8) !== 0;
-    if (!g) p.guard = false;
-    else if (!p.guard) {
-      p.guard = true;
-      p.guardStart = now();
+    // the guard also drops through states (a stun or a death cancels it without an action)
+    this.setGuard(p, (p.state.fl & 8) !== 0);
+  }
+
+  /**
+   * Raise / lower the guard (only champions that have one). A raise opens the perfect parry
+   * window only if the guard rested first, as the client's guard cooldown makes it: toggling it
+   * can't keep the window open.
+   */
+  private setGuard(p: Player, on: boolean): void {
+    if (on && !CHAMPIONS[p.champ].guard) return;
+    if (on === p.guard) return;
+    const t = now();
+    p.guard = on;
+    if (on) p.guardStart = t - p.guardDropAt >= GUARD_REARM_MS ? t : -1e9;
+    else p.guardDropAt = t;
+  }
+
+  /** how fast the states really moved (m/s): over at least 100 ms, with slack for arrival jitter */
+  private movedSpeed(p: Player, pos: V3, t: number): number {
+    p.trail.push([t, pos]);
+    while (p.trail.length && t - p.trail[0][0] > 600) p.trail.shift();
+    for (let i = p.trail.length - 2; i >= 0; i--) {
+      const [at, q] = p.trail[i];
+      if (t - at >= 100) return (dist(pos, q) / ((t - at) / 1000)) * 1.25 + 3;
     }
+    return 0;
   }
 
   private onHit(att: Player, h: HitMsg): void {
@@ -308,11 +355,13 @@ export class Room {
     const tgt = this.players.get(h.target);
     if (!tgt || tgt === att || !tgt.alive) return;
     if (now() - tgt.spawnedAt < MATCH_RULES.spawnProtectSec * 1000) return;
+    // own keys only: 'constructor' & co. would reach Object's prototype
     const champ = CHAMPIONS[att.champ];
+    if (typeof h.slot !== 'string' || typeof h.part !== 'string' || !Object.hasOwn(champ.abilities, h.slot)) return;
     const ab = champ.abilities[h.slot];
-    if (!ab) return;
+    if (!Object.hasOwn(ab.damage, h.part)) return;
     const base = ab.damage[h.part];
-    if (base === undefined) return;
+    if (typeof base !== 'number') return;
     // rate limit per slot
     const t = now();
     const log = (att.hitLog[h.slot] ??= []);
@@ -367,13 +416,19 @@ export class Room {
       const front = Math.sin(tgt.state.f) * (dx / l) + Math.cos(tgt.state.f) * (dz / l);
       if (front > 0.2) {
         if (t - tgt.guardStart < 260) {
-          // perfect parry: a close attacker is stunned (punishable), the defender gets a counter window
+          // perfect parry: a close attacker is stunned (punishable); the defender's counter window
+          // shares the perfect dodge's reward cooldown, as on the client
+          let rw = false;
           if (l <= COMBAT.parryRange + 3) {
             att.punishUntil = t + COMBAT.parryStun * 1000 + 150;
-            tgt.counterUntil = t + COMBAT.counterSec * 1000 + 250;
-            tgt.counterUsed = false;
+            if (t - tgt.dodgeRewardAt >= COMBAT.dodgeRewardCd * 1000) {
+              rw = true;
+              tgt.dodgeRewardAt = t;
+              tgt.counterUntil = t + COMBAT.counterSec * 1000 + 250;
+              tgt.counterUsed = false;
+            }
           }
-          this.broadcast({ t: 'parry', def: tgt.id, att: att.id });
+          this.broadcast({ t: 'parry', def: tgt.id, att: att.id, rw: rw || undefined });
           return;
         }
         blocked = true;
@@ -429,13 +484,23 @@ export class Room {
     return false;
   }
 
-  /** abilities with invulnerability open a server-side window, at most once per their cooldown */
+  /**
+   * Abilities with invulnerability open a server-side window. Each action has a small budget that
+   * refills once per `every` seconds: the kit's resets (Nova's takedowns) can chain a few quickly,
+   * spamming the action can't.
+   */
   private onActIFrames(p: Player, a: string): void {
-    const iv = CHAMPIONS[p.champ].invulnActs?.[a];
-    if (!iv || !p.alive) return;
+    const acts = CHAMPIONS[p.champ].invulnActs;
+    if (!acts || !Object.hasOwn(acts, a) || !p.alive) return;
+    const iv = acts[a];
+    const burst = iv.burst ?? 1;
     const t = now();
-    if (t - (p.ivActAt[a] ?? -1e9) < iv.every * 1000) return;
-    p.ivActAt[a] = t;
+    let b = p.ivBudget.get(a);
+    if (!b) p.ivBudget.set(a, (b = { tokens: burst, at: t }));
+    b.tokens = Math.min(burst, b.tokens + (t - b.at) / (iv.every * 1000));
+    b.at = t;
+    if (b.tokens < 1) return;
+    b.tokens -= 1;
     p.invulnUntil = Math.max(p.invulnUntil, t + iv.sec * 1000);
   }
 
@@ -573,6 +638,7 @@ export class Room {
       p.deaths = 0;
       p.score = 0;
       p.alive = true;
+      p.guard = false;
       if (p.pendingChamp) {
         p.champ = p.pendingChamp;
         p.pendingChamp = null;

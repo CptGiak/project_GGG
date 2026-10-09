@@ -147,7 +147,13 @@ function onConnection(ws: WebSocket): void {
       return;
     }
     const p = room.players.get(playerId!);
-    if (p) room.handle(p, msg);
+    if (!p) return;
+    try {
+      room.handle(p, msg);
+    } catch (e) {
+      // a malformed message must never take the whole server down
+      console.error(`[room] ${room.id}: bad message from ${playerId}:`, e);
+    }
   });
   ws.on('close', () => {
     if (room && playerId) {

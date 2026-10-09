@@ -94,7 +94,8 @@ export type S2C =
   | { t: 'snap'; time: number; clock: number; ps: Array<[string, PlayerState]> }
   | { t: 'act'; id: string; e: ActionMsg }
   | { t: 'dmg'; src: string | null; tgt: string; amt: number; hp: number; crit?: boolean; blocked?: boolean; kb?: V3; stun?: number; slow?: number; at?: V3; slot?: string; mo?: number; ctr?: boolean; pun?: boolean }
-  | { t: 'parry'; def: string; att: string }
+  /** perfect parry; rw = it paid the defender's counter window (the server rate-limits it) */
+  | { t: 'parry'; def: string; att: string; rw?: boolean }
   /** perfect dodge (rewarded); ft = the attacker was close enough to go Fuori Tempo */
   | { t: 'dodge'; def: string; att: string; ft?: boolean }
   | { t: 'heal'; id: string; amt: number; hp: number }

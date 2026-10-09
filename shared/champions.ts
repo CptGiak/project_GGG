@@ -44,8 +44,13 @@ export interface ChampionData {
   weapon: string;
   bio: string;
   abilities: Record<AbilitySlot, AbilityData>;
-  /** replicated actions that make the champion invulnerable: seconds, and how often the server accepts them */
-  invulnActs?: Record<string, { sec: number; every: number }>;
+  /** has a held guard (Kaiser's Mute Guard): the server ignores guard flags from anyone else */
+  guard?: boolean;
+  /**
+   * replicated actions that make the champion invulnerable: seconds, and how often the server
+   * accepts them (a budget of `burst` uses, refilled one per `every` seconds)
+   */
+  invulnActs?: Record<string, { sec: number; every: number; burst?: number }>;
 }
 
 export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera';
@@ -61,6 +66,7 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
     hp: 1150,
     speed: 1.0,
     ultCharge: 1400,
+    guard: true,
     colors: ['#ffc24a', '#ff2e88'],
     weapon: 'BASSLINE — holo greatsword',
     bio: 'Ex-frontman diventato leggenda dell\'arena. Ogni colpo di BASSLINE è un drop che fa tremare il palco.',
@@ -89,7 +95,8 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
       abi: { slot: 'abi', key: 'F', name: 'Phantom Cut', desc: 'Si teletrasporta alle spalle del bersaglio mirato (preferisce i marchiati) e colpisce con un critico. Su un marchiato: metà ricarica.', cooldown: 9, damage: { cut: 155 }, range: 30, maxRate: 3, crit: ['cut'] },
       ult: { slot: 'ult', key: 'R', name: 'Remix Barrage', desc: 'Raffica di 8 tagli glitch a velocità impossibile sui nemici vicini.', cooldown: 0, damage: { hit: 46 }, range: 16, maxRate: 20 },
     },
-    invulnActs: { glitch: { sec: 0.25, every: 3.5 }, phantom: { sec: 0.2, every: 8 }, ult: { sec: 1.8, every: 10 } },
+    // a takedown resets Glitch Step and halves Phantom Cut (4.5 s on a marked target): a few can chain
+    invulnActs: { glitch: { sec: 0.25, every: 3.5, burst: 3 }, phantom: { sec: 0.2, every: 4, burst: 3 }, ult: { sec: 1.8, every: 10 } },
   },
   rex: {
     id: 'rex',
