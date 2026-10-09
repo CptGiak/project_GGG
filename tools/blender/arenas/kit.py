@@ -447,8 +447,11 @@ def render_tile(build: Callable[[bpy.types.Collection], None], W: float, H: floa
     facing +Z (floors). Returns (albedo uint8 HxWx3, glow mask float HxW 0..1) and caches PNGs.
     """
     reset()
-    tile = new_collection('tile', linked=False)
+    # build inside the scene (modifiers such as bevels and booleans only evaluate there), then keep
+    # the collection out of it: the 3 x 3 instances below render it
+    tile = new_collection('tile', linked=True)
     build(tile)
+    bpy.context.scene.collection.children.unlink(tile)
     rx, ry = repeat
     for i in range(-rx, rx + 1):
         for j in range(-ry, ry + 1):
@@ -676,14 +679,16 @@ def prism(coll, name: str, profile, axis: str, a0: float, a1: float, m) -> bpy.t
 
 
 def contact_sheet(pieces: Sequence[bpy.types.Object], path: str, cols: int = 4, cell: float = 6.0, px: int = 1600) -> None:
-    """Perspective render of every piece standing on a grid (for checking the kit)."""
+    """Perspective render of every piece standing on a grid, each scaled to fill its cell (for
+    checking the kit's shapes)."""
     sc = bpy.context.scene
     cols = min(cols, len(pieces))
     rows = (len(pieces) + cols - 1) // cols
     for i, ob in enumerate(pieces):
         bb = [V(c) for c in ob.bound_box]
         size = max(max(c[k] for c in bb) - min(c[k] for c in bb) for k in range(3))
-        s = min(1.0, (cell * 0.75) / max(size, 1e-3))
+        # every piece fills its cell (shapes matter here, not relative sizes)
+        s = (cell * 0.7) / max(size, 1e-3)
         zmin = min(c.z for c in bb)
         ob.scale = (s, s, s)
         ob.location = ((i % cols) * cell, -(i // cols) * cell, -zmin * s)
