@@ -145,6 +145,37 @@ export function wrapAroundY(g: THREE.BufferGeometry, radius: number): THREE.Buff
   return g;
 }
 
+/**
+ * Bends flat geometry drawn in XY (as seen from the front, extruded along +Z) onto the BACK of
+ * a lathe shell with the given profile and x/z squash: the piece is turned to face -Z and each
+ * vertex is pushed onto the shell's elliptical cross-section at its height, `lift` metres out.
+ */
+export function wrapOnBack(g: THREE.BufferGeometry, prof: [number, number][], sx: number, sz: number, lift = 0.004): THREE.BufferGeometry {
+  const pr = [...prof].sort((a, b) => a[1] - b[1]);
+  const radiusAt = (y: number): number => {
+    if (y <= pr[0][1]) return pr[0][0];
+    for (let i = 1; i < pr.length; i++) {
+      if (y <= pr[i][1]) {
+        const t = (y - pr[i - 1][1]) / Math.max(pr[i][1] - pr[i - 1][1], 1e-6);
+        return pr[i - 1][0] + (pr[i][0] - pr[i - 1][0]) * t;
+      }
+    }
+    return pr[pr.length - 1][0];
+  };
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    // 180 degree turn about Y (a rotation, so the winding stays valid), then onto the shell
+    const x = -p.getX(i);
+    const y = p.getY(i);
+    const z = -p.getZ(i);
+    const r = radiusAt(y);
+    const s = THREE.MathUtils.clamp(x / (r * sx), -0.97, 0.97);
+    p.setXYZ(i, x, y, -r * sz * Math.sqrt(1 - s * s) - lift + z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Shape helper from a flat list of points [x0,y0,x1,y1,...] */
 export function poly(points: number[]): THREE.Shape {
   const s = new THREE.Shape();

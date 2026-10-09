@@ -5,7 +5,7 @@ import { ModelBuilder } from '../fighter/ModelBuilder';
 import { ClothSheet, ClothChain } from '../fighter/Cloth';
 import { clip, Ease, pose, type PoseSpec } from '../fighter/Animator';
 import type { ChampionAnimSet } from '../fighter/locomotion';
-import { cyl, ellipsoid, extrude, hairLock, lathe, poly, rbox, sweep, torus, xf } from '../fighter/shapes';
+import { cyl, ellipsoid, extrude, hairLock, lathe, poly, rbox, sweep, torus, wrapOnBack, xf } from '../fighter/shapes';
 import { addDominoMask, addFace, addODMGear, addSpikyHair, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
@@ -87,6 +87,32 @@ export function buildKaiser(): ChampionVisual {
     collarTop.push(new THREE.Vector3(Math.sin(a) * 0.122 * 1.15, 0.335, Math.cos(a) * 0.122 * 1.02));
   }
   b.add(B.chest, sweep(collarTop, () => 0.006, 5, 40), 'gold', 0.4);
+
+  // back crest: winged speaker with a bass "drop" (what you see of Kaiser most of the match)
+  {
+    const cy = 0.105;
+    const onBack = (shape: THREE.Shape, depth: number, dy = 0) => wrapOnBack(xf(extrude(shape, depth, 0, 16), [0, cy + dy, 0]), chestProf, 1.2, 0.68, 0.003);
+    const ring = new THREE.Shape();
+    ring.absarc(0, 0, 0.031, 0, Math.PI * 2, false);
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, 0.022, 0, Math.PI * 2, true);
+    ring.holes.push(hole);
+    b.add(B.chest, onBack(ring, 0.003), 'neonPink', 0);
+    const cone = new THREE.Shape();
+    cone.absarc(0, 0, 0.014, 0, Math.PI * 2, false);
+    b.add(B.chest, onBack(cone, 0.005), 'gold', 0.4);
+    for (const sx of [1, -1]) {
+      for (let i = 0; i < 3; i++) {
+        const f = poly([0.03, 0.014 - i * 0.011, 0.106 - i * 0.017, 0.036 - i * 0.022, 0.098 - i * 0.017, 0.023 - i * 0.022, 0.03, 0.003 - i * 0.011].map((v, k) => (k % 2 === 0 ? v * sx : v)));
+        b.add(B.chest, onBack(f, 0.003), 'gold', 0.4);
+      }
+    }
+    b.add(B.chest, onBack(poly([-0.017, -0.037, 0.017, -0.037, 0, -0.066]), 0.003), 'neonPink', 0);
+    for (let i = -2; i <= 2; i++) {
+      const h = [0.012, 0.02, 0.026, 0.018, 0.01][i + 2];
+      b.add(B.chest, onBack(poly([i * 0.011 - 0.0035, 0.036, i * 0.011 + 0.0035, 0.036, i * 0.011 + 0.0035, 0.036 + h, i * 0.011 - 0.0035, 0.036 + h]), 0.003), 'gold', 0.3);
+    }
+  }
 
   // chest harness strap + buckle, chain necklace + pendant
   b.add(B.chest, sweep([new THREE.Vector3(0.1, 0.215, 0.07), new THREE.Vector3(0.05, 0.14, 0.112), new THREE.Vector3(-0.02, 0.06, 0.112), new THREE.Vector3(-0.09, -0.03, 0.098)], () => 0.011, 4, 14, true, 0.35), 'gearBody', 0.6);

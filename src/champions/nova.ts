@@ -5,7 +5,7 @@ import { ModelBuilder } from '../fighter/ModelBuilder';
 import { ClothChain } from '../fighter/Cloth';
 import { clip, Ease, pose, type PoseSpec, type WeaponSpec } from '../fighter/Animator';
 import type { ChampionAnimSet } from '../fighter/locomotion';
-import { cyl, ellipsoid, extrude, hairLock, lathe, limb, rbox, sweep, torus, xf } from '../fighter/shapes';
+import { cyl, ellipsoid, extrude, hairLock, lathe, limb, poly, rbox, sweep, torus, wrapOnBack, xf } from '../fighter/shapes';
 import { addFace, addODMGear, addSpikyHair, addVisor, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
@@ -61,6 +61,19 @@ export function buildNova(): ChampionVisual {
   const jprof: [number, number][] = [[cw * 0.92 + 0.03, 0.03], [cw * 0.98 + 0.028, 0.09], [cw + 0.03, 0.15], [cw * 0.95 + 0.03, 0.2], [cw * 0.7 + 0.03, 0.24], [cw * 0.45 + 0.03, 0.258]];
   const jacket = lathe(jprof, 22, 1.26, 0.8, 34, 292);
   b.add(B.chest, jacket, 'jacket');
+  // back print: a glitched "N" split into cyan / magenta channels with stray scanline bars
+  {
+    // off-centre like a patch, clear of the ponytail hanging down the spine
+    const onBack = (shape: THREE.Shape, depth: number, dx: number, dy: number) => wrapOnBack(xf(extrude(shape, depth, 0, 4), [0.075 + dx, 0.15 + dy, 0], [0, 0, 0], 0.72), jprof, 1.26, 0.8, 0.003);
+    const N = () => poly([-0.036, -0.04, -0.02, -0.04, -0.02, 0.01, 0.02, -0.04, 0.036, -0.04, 0.036, 0.04, 0.02, 0.04, 0.02, -0.01, -0.02, 0.04, -0.036, 0.04]);
+    b.add(B.chest, onBack(N(), 0.002, -0.006, 0.003), 'neonCyan', 0);
+    b.add(B.chest, onBack(N(), 0.002, 0.006, -0.003), 'neonPink', 0);
+    b.add(B.chest, onBack(N(), 0.004, 0, 0), 'wrap', 0.3);
+    const bar = (x0: number, x1: number, y: number, h: number) => poly([x0, y, x1, y, x1, y + h, x0, y + h]);
+    b.add(B.chest, onBack(bar(0.044, 0.078, 0.018, 0.006), 0.002, 0, 0), 'neonCyan', 0);
+    b.add(B.chest, onBack(bar(-0.082, -0.046, -0.022, 0.005), 0.002, 0, 0), 'neonPink', 0);
+    b.add(B.chest, onBack(bar(-0.06, -0.044, 0.03, 0.004), 0.002, 0, 0), 'neonCyan', 0);
+  }
   b.add(B.chest, jacket.clone(), 'jacketIn', 0);
   // ribbed hem + collar
   const hemPts: THREE.Vector3[] = [];

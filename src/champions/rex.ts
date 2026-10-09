@@ -5,7 +5,7 @@ import { ModelBuilder } from '../fighter/ModelBuilder';
 import { ClothChain } from '../fighter/Cloth';
 import { clip, Ease, pose, type PoseSpec, type WeaponSpec } from '../fighter/Animator';
 import type { ChampionAnimSet } from '../fighter/locomotion';
-import { cyl, ellipsoid, lathe, limb, noteGeometry, rbox, sweep, torus, xf } from '../fighter/shapes';
+import { cyl, ellipsoid, extrude, lathe, limb, noteGeometry, poly, rbox, sweep, torus, wrapOnBack, xf } from '../fighter/shapes';
 import { addFace, addODMGear, addSpikyHair, addVisor, buildBody, makeBodySpheres, type SpikeSpec } from './body';
 import { assembleVisual, marker, sharedClips, weaponPivot } from './common';
 import type { ChampionVisual } from './types';
@@ -61,6 +61,14 @@ export function buildRex(): ChampionVisual {
   const hProf: [number, number][] = [[cw * 0.9 + 0.026, -0.06], [cw * 0.96 + 0.026, 0.04], [cw + 0.028, 0.12], [cw * 0.98 + 0.03, 0.17], [cw * 0.84 + 0.032, 0.215], [cw * 0.5 + 0.03, 0.25]];
   const hood = lathe(hProf, 22, 1.22, 0.72, 22, 316);
   b.add(B.chest, hood, 'hoodie');
+  // back print: the Headliner crown over a big music note, neon underline
+  {
+    const onBack = (g: THREE.BufferGeometry, dy: number) => wrapOnBack(xf(g, [0, dy, 0]), hProf, 1.22, 0.72, 0.003);
+    const crown = poly([-0.05, 0, 0.05, 0, 0.05, 0.03, 0.03, 0.012, 0.015, 0.042, 0, 0.016, -0.015, 0.042, -0.03, 0.012, -0.05, 0.03]);
+    b.add(B.chest, onBack(xf(extrude(crown, 0.004, 0, 4), [0, 0, 0], [0, 0, 0], 0.85), 0.098), 'gold', 0.4);
+    b.add(B.chest, onBack(xf(noteGeometry(0.3), [0.006, 0, 0]), -0.005), 'gold', 0.4);
+    b.add(B.chest, onBack(extrude(poly([-0.055, 0, 0.055, 0, 0.05, 0.006, -0.05, 0.006]), 0.002, 0, 2), -0.058), 'neonViolet', 0);
+  }
   b.add(B.chest, hood.clone(), 'hoodieIn', 0);
   const aProf: [number, number][] = [[0.164 * s.bulk, -0.13], [0.152 * s.bulk, -0.05], [0.146 * s.bulk, 0.02], [0.15 * s.bulk, 0.09], [0.162 * s.bulk, 0.17], [0.17 * s.bulk, 0.21]];
   const abs = lathe(aProf, 22, 1.1, 0.76, 20, 320);
@@ -82,8 +90,9 @@ export function buildRex(): ChampionVisual {
   }
   // hood bunched at the back of the neck
   const hoodBack = new THREE.SphereGeometry(0.13, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62);
-  b.add(B.chest, xf(hoodBack, [0, 0.21, -0.1], [-120, 0, 0], [1.25, 0.9, 0.75]), 'hoodie');
-  b.add(B.chest, xf(hoodBack.clone(), [0, 0.21, -0.1], [-120, 0, 0], [1.2, 0.86, 0.7]), 'hoodieIn', 0);
+  // (xf transforms in place: give each layer its own copy)
+  b.add(B.chest, xf(hoodBack.clone(), [0, 0.232, -0.1], [-120, 0, 0], [1.12, 0.78, 0.64]), 'hoodie');
+  b.add(B.chest, xf(hoodBack.clone(), [0, 0.232, -0.1], [-120, 0, 0], [1.07, 0.74, 0.59]), 'hoodieIn', 0);
   // drawstrings
   for (const sx of [1, -1]) {
     b.add(B.chest, sweep([new THREE.Vector3(sx * 0.055, 0.235, 0.1), new THREE.Vector3(sx * 0.06, 0.16, 0.13), new THREE.Vector3(sx * 0.058, 0.08, 0.13)], () => 0.005, 4, 8), 'shoe', 0.4);
