@@ -10,7 +10,7 @@ import type { ClothLike } from './types';
 /**
  * Champion models made in Blender from the character sheets (tools/blender/build_<id>.py ->
  * public/models/<id>.glb) or imported from League of Legends (tools/blender/build_lol.py ->
- * public/models/lol/<id>.glb, local files only). They are loaded once at startup; champions
+ * public/models/lol/<id>.glb). They are loaded once at startup; champions
  * without a model (or if the file is missing / fails to load) keep their procedural model.
  *
  * The GLB is bound in T-pose and carries the game skeleton (same bone names, hierarchy and joint
@@ -21,7 +21,7 @@ import type { ClothLike } from './types';
  * not matter), closes the fingers on the grip, and verlet chains swing the coat flaps.
  */
 
-/** model files (under public/); the League of Legends imports are local only (not in git) */
+/** model files (under public/); champions whose file is missing keep their procedural model */
 const MODEL_PATHS: Record<string, string> = {
   kaiser: 'models/kaiser.glb',
   akali: 'models/lol/akali.glb',

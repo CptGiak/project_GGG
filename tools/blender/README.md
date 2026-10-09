@@ -65,10 +65,10 @@ Esperimento per giocare tra amici: Akali (True Damage), Qiyana (True Damage) e L
 le texture originali di LoL, mosse e numeri presi in prestito dai kit esistenti (Akali e Locke
 giocano col kit di Nova, Qiyana con quello di Kaiser; `KIT_OF` in `shared/champions.ts`).
 
-I file di LoL e tutto ciò che ne deriva **non vanno in git** (`tools/blender/lol/_cache/`,
-`public/models/lol/` sono ignorati): ogni copia del gioco li rigenera con i due comandi qui sotto.
-Senza i file i tre campioni non compaiono nei menu e il gioco resta quello di prima. Finché ci
-sono, il menu principale mostra la nota richiesta da Riot per i progetti dei fan.
+I file scaricati da LoL restano in locale (`tools/blender/lol/_cache/` è ignorata); i GLB
+convertiti in `public/models/lol/` sono nel repository, così il gioco li trova. Si rigenerano con i
+comandi qui sotto. Senza i GLB i tre campioni non compaiono nei menu e il gioco resta quello di
+prima. Finché ci sono, il menu principale mostra la nota richiesta da Riot per i progetti dei fan.
 
 ```bash
 PY=/root/blender-venv/bin/python

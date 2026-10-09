@@ -12,8 +12,8 @@ import { novaAnims } from './nova';
 import type { BladeRef, ChampionVisual } from './types';
 
 /**
- * Champions imported from League of Legends (tools/blender/build_lol.py, public/models/lol/<id>.glb,
- * local files only): original mesh and textures, the game skeleton rebuilt from the skin weights,
+ * Champions imported from League of Legends (tools/blender/build_lol.py, public/models/lol/<id>.glb):
+ * original mesh and textures, the game skeleton rebuilt from the skin weights,
  * the League weapons in the weapon pivots. They play with the kit of an original champion
  * (shared/champions.ts KIT_OF): same clips, IK and gameplay, scaled to the body (animScale).
  */
