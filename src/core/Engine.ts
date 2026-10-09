@@ -45,7 +45,8 @@ export class Engine {
     this.composer = new EffectComposer(this.renderer);
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.5, 0.32, 1.45);
+    // gentle bloom: the arenas keep their lights under the threshold, so mostly skills glow
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.42, 0.32, 1.45);
     this.composer.addPass(this.bloom);
     this.fx = new ShaderPass(PersonaFXShader);
     this.composer.addPass(this.fx);

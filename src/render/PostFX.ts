@@ -3,6 +3,9 @@ import * as THREE from 'three';
 /**
  * Persona-flavoured final grade: saturation/contrast, anime speed lines, vignette, damage
  * vignette, chromatic aberration, white flash and death desaturation.
+ *
+ * Comfort: the colour fringes stay around a pixel or two (more only at speed or when hurt), and
+ * the speed lines fade in and out each on their own clock instead of all re-rolling together.
  */
 export const PersonaFXShader = {
   name: 'PersonaFX',
@@ -14,7 +17,7 @@ export const PersonaFXShader = {
     uDamage: { value: 0 },
     uDesat: { value: 0 },
     uFlash: { value: 0 },
-    uChroma: { value: 0.0012 },
+    uChroma: { value: 0.0005 },
     uVignette: { value: 0.55 },
     uSat: { value: 1.12 },
     uContrast: { value: 1.06 },
@@ -55,7 +58,7 @@ export const PersonaFXShader = {
       vec2 c = uv - 0.5;
       c.x *= uAspect;
       float r = length( c );
-      float ca = ( uChroma + uSpeed * 0.006 + uDamage * 0.01 ) * r * r * 4.0;
+      float ca = ( uChroma + uSpeed * 0.003 + uDamage * 0.005 ) * r * r * 4.0;
       vec2 dir = ( uv - 0.5 );
       vec3 col;
       col.r = texture2D( tDiffuse, uv + dir * ca ).r;
@@ -78,21 +81,24 @@ export const PersonaFXShader = {
         col = mix( col, col * 0.55, d * uHalftone );
       }
 
-      // anime speed lines
+      // anime speed lines: every line lives on its own clock and fades in and out while it streaks
+      // inwards (no synchronised strobing)
       if ( uSpeed > 0.01 ) {
         float a = atan( c.y, c.x ) / 6.2831853 + 0.5;
         float n = 170.0;
         float cell = floor( a * n );
-        float tick = floor( uTime * 16.0 );
+        float t = uTime * 5.0 + hash( cell * 0.731 ) * 7.0;
+        float tick = floor( t );
+        float life = fract( t );
         float h = hash( cell * 1.37 + tick * 3.1 );
-        float on = step( 0.62, h );
-        float start = 0.32 + 0.38 * hash( cell * 7.13 + tick );
+        float on = step( 0.62, h ) * smoothstep( 0.0, 0.2, life ) * ( 1.0 - smoothstep( 0.65, 1.0, life ) );
+        float start = 0.36 + 0.34 * hash( cell * 7.13 + tick ) - 0.12 * life;
         float grow = smoothstep( start, start + 0.3, r );
         float w = fract( a * n );
         float width = 0.12 + 0.4 * grow;
         float dd = abs( w - 0.5 );
         float lineMask = on * ( 1.0 - smoothstep( width * 0.5 - 0.08, width * 0.5, dd ) ) * grow;
-        col = mix( col, uLineColor, lineMask * clamp( uSpeed, 0.0, 1.0 ) * 0.6 );
+        col = mix( col, uLineColor, lineMask * clamp( uSpeed, 0.0, 1.0 ) * 0.45 );
       }
 
       // vignette

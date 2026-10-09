@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { ArenaBuilder, type Arena, type SignStyle } from '../ArenaBuilder';
-import { facadeMaterial, groundMaterial, skyMaterial, worldMaterial } from '../materials';
+import { facadeMaterial, groundMaterial, ledScreenMaterial, skyMaterial, worldMaterial } from '../materials';
 import { artTexture } from '../ArenaArt';
-import { equalizerMaterial, toon, type ToonMaterial } from '../../render/toon';
+import { toon, type ToonMaterial } from '../../render/toon';
 import { Rng } from '../../core/Random';
 import { arenaMeta } from '../../../shared/arenas';
 
@@ -234,7 +234,8 @@ export function buildNeonCity(): Arena {
   B.addStatic(new THREE.BoxGeometry(3.4, 60, 3.4), towerCore, [42, 30, 42], [0, 0, 0], 1, 1);
   for (let k = 0; k < 15; k++) B.piece('lattice', [42, k * 4, 42], [0, 0, 0], [5, 4, 5]);
   B.box([42, 62, 42], [18, 9, 1.2], signBody, { outline: 1.4 });
-  const eq = equalizerMaterial(0xe0405a, 0xffd27a, 24, 1.1);
+  // calm LED screen (same as the stage wall): slow sunset disc and smooth equalizer
+  const eq = ledScreenMaterial({ colorA: 0xffd27a, colorB: 0xe0405a, bg: 0x2a1222, pixels: [136, 64], intensity: 0.75 });
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(17, 8), eq);
   screen.position.set(42, 62, 41.3);
   screen.rotation.y = Math.PI;
