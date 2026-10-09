@@ -11,9 +11,20 @@ const _b = new THREE.Vector3();
 const _c1 = new THREE.Vector3();
 const _c2 = new THREE.Vector3();
 
+/** Beat Shot keeps full power up to ~28 m, then fades to 62% at 60 m (the rifle rewards closing in) */
+const BEAT_FALLOFF = { from: 28, to: 60, min: 0.62 };
+
+/** Bass Charge: seconds to full, then the perfect-release window, then overcharge */
+const CHARGE_SEC = 0.95;
+const PERFECT_SEC = 0.18;
+const OVER_AFTER = 0.6;
+const OVER_DECAY_SEC = 1;
+const OVER_MIN = 0.75;
+
 /**
  * REX — sharpshooter.
- * LMB: Beat Shot (auto, headshots crit) · RMB: Bass Charge (hold, zoom, piercing beam) ·
+ * LMB: Beat Shot (auto, headshots crit, loses power past ~28 m) · RMB: Bass Charge (hold,
+ * piercing beam; releasing right as it fills is a PERFECT shot, holding too long bleeds power) ·
  * F: Sub Bomb (bouncing sonic grenade) · R: Drop The Beat (12 homing note missiles).
  */
 export class RexKit extends BaseKit {
@@ -21,6 +32,9 @@ export class RexKit extends BaseKit {
   private bloom = 0;
   private aimHold = 0;
   private charging = false;
+  /** seconds the charge has been held */
+  private chargeT = 0;
+  chargeFx = 0;
   private ultShots = 0;
   private ultT = 0;
   private ultTargets: Fighter[] = [];
@@ -46,7 +60,7 @@ export class RexKit extends BaseKit {
       f.anim.play('ult', { hold: true });
       this.ultShots = 12;
       this.ultT = 0.15;
-      this.ultTargets = m.fighters.filter((o) => o !== f && o.alive && o.pos.distanceTo(f.pos) < this.data.abilities.ult.range);
+      this.ultTargets = m.fighters.filter((o) => o !== f && o.alive && (o.team === 0 || o.team !== f.team) && o.pos.distanceTo(f.pos) < this.data.abilities.ult.range);
       m.audio.play('ult', f.pos, 1);
       m.broadcastAction(f, { a: 'ult' });
       return;
@@ -62,13 +76,20 @@ export class RexKit extends BaseKit {
     if (this.charging) {
       f.ctrl.aim = 1;
       f.ctrl.speedMul = 0.5;
-      this.charge = Math.min(1, this.charge + dt / 0.95);
+      const before = this.chargeT;
+      this.chargeT += dt;
+      this.charge = Math.min(1, this.chargeT / CHARGE_SEC);
+      this.chargeFx = this.perfectWindow ? 1 : this.chargeT > CHARGE_SEC + OVER_AFTER ? 2 : 0;
+      // the perfect window opens: an audible cue (Gears of War active reload)
+      if (before < CHARGE_SEC && this.chargeT >= CHARGE_SEC) m.audio.play('perfectTick', f.pos, 1);
       if (!it.secondary || it.secondaryReleased) this.releaseCharge(f, m);
       return;
     }
     if (it.secondaryPressed && this.cd.sec <= 0 && !this.act) {
       this.charging = true;
       this.charge = 0;
+      this.chargeT = 0;
+      this.chargeFx = 0;
       f.anim.play('charge', { hold: true, fadeIn: 0.08 });
       m.audio.play('charge', f.pos, 0.8);
       m.broadcastAction(f, { a: 'charge', n: 1 });
@@ -107,17 +128,29 @@ export class RexKit extends BaseKit {
     dir.z += (Math.random() - 0.5) * spread * 2;
     dir.normalize();
     this.bloom = Math.min(1, this.bloom + 0.12);
-    m.projectiles.spawn({ owner: f, kind: 'bolt', pos: from, vel: dir.clone().multiplyScalar(150), radius: 0.12, life: 1.4, slot: 'atk', part: 'shot', color: f.champ.colors[0], color2: f.champ.colors[1], headshots: true });
+    m.projectiles.spawn({ owner: f, kind: 'bolt', pos: from, vel: dir.clone().multiplyScalar(150), radius: 0.12, life: 1.4, slot: 'atk', part: 'shot', color: f.champ.colors[0], color2: f.champ.colors[1], headshots: true, falloff: BEAT_FALLOFF });
     m.vfx.muzzle(from, dir, f.champ.colors[0]);
     m.audio.play('shot', from, 0.85);
     f.anim.recoil = Math.min(1, f.anim.recoil + 0.55);
     m.broadcastAction(f, { a: 'shot', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
   }
 
+  private get perfectWindow(): boolean {
+    return this.chargeT >= CHARGE_SEC && this.chargeT <= CHARGE_SEC + PERFECT_SEC;
+  }
+
+  /** past the overcharge point the beam bleeds power (down to OVER_MIN) and the aim wobbles */
+  private get overK(): number {
+    return THREE.MathUtils.clamp((this.chargeT - CHARGE_SEC - OVER_AFTER) / OVER_DECAY_SEC, 0, 1);
+  }
+
   private releaseCharge(f: Fighter, m: MatchContext): void {
     const k = this.charge;
+    const perfect = this.perfectWindow;
+    const over = this.overK;
     this.charging = false;
     this.charge = 0;
+    this.chargeFx = 0;
     f.anim.play('aim', { hold: true, fadeIn: 0.02 });
     this.aimHold = 0.5;
     if (k < 0.15) {
@@ -125,27 +158,46 @@ export class RexKit extends BaseKit {
       m.broadcastAction(f, { a: 'charge', n: 0 });
       return;
     }
-    this.cd.sec = this.data.abilities.sec.cooldown;
+    this.cd.sec = this.data.abilities.sec.cooldown * (perfect ? 0.5 : 1);
     const from = this.muzzle(f, new THREE.Vector3());
     const { point } = this.aimPoint(f, m, 180);
-    const wallHit = m.world.raycast(from, _v.subVectors(point, from).normalize(), from.distanceTo(point));
+    _v.subVectors(point, from).normalize();
+    if (over > 0) {
+      // overcharged: the shot shakes off the crosshair
+      const w = THREE.MathUtils.degToRad(2.2) * over;
+      _v.x += (Math.random() - 0.5) * w * 2;
+      _v.y += (Math.random() - 0.5) * w * 2;
+      _v.z += (Math.random() - 0.5) * w * 2;
+      _v.normalize();
+      point.copy(from).addScaledVector(_v, from.distanceTo(point));
+    }
+    const wallHit = m.world.raycast(from, _v, from.distanceTo(point));
     const to = wallHit ? wallHit.point.clone() : point.clone();
-    this.beamFx(f, m, from, to, k);
+    const fxK = perfect ? 1.4 : k;
+    this.beamFx(f, m, from, to, fxK);
+    if (perfect) {
+      m.audio.play('chord', from, 1);
+      m.vfx.ring(from.clone(), _v, 0xffffff, 0.2, 2.4, 0.3);
+    }
     if (m.isAuthority(f)) {
+      const radius = perfect ? 0.35 : 0.2;
+      const scale = perfect ? 1 : (0.3 + 0.7 * k) * (1 - (1 - OVER_MIN) * over);
       for (const o of m.fighters) {
         if (o === f || !o.alive) continue;
+        if (o.team !== 0 && o.team === f.team) continue;
         capsule(o, _c1, _c2);
         const d2 = segSegDist2(from, to, _c1, _c2, _a, _b);
-        if (d2 < (CAPSULE_R + 0.2) ** 2) {
-          const crit = _b.y > o.pos.y + 1.45;
-          m.reportHit(f, o, { slot: 'sec', part: 'charge', scale: 0.3 + 0.7 * k, crit, at: _a.clone(), kb: _v.clone().multiplyScalar(8 * k).setY(2), blockable: true });
+        if (d2 < (CAPSULE_R + radius) ** 2) {
+          const crit = !perfect && _b.y > o.pos.y + 1.45;
+          const kb = _v.clone().multiplyScalar(8 * Math.min(1, k) * (perfect ? 1.5 : 1)).setY(perfect ? 3 : 2);
+          m.reportHit(f, o, { slot: 'sec', part: perfect ? 'perfect' : 'charge', scale, crit, at: _a.clone(), kb, blockable: true });
         }
       }
     }
     f.anim.recoil = 1;
     f.vel.addScaledVector(_v, -6 * k);
-    m.shake(0.35 * k, from);
-    m.broadcastAction(f, { a: 'beam', p: [from.x, from.y, from.z], d: [to.x, to.y, to.z], n: k });
+    m.shake(0.35 * fxK, from);
+    m.broadcastAction(f, { a: 'beam', p: [from.x, from.y, from.z], d: [to.x, to.y, to.z], n: fxK });
   }
 
   private beamFx(f: Fighter, m: MatchContext, from: THREE.Vector3, to: THREE.Vector3, k: number): void {
@@ -205,6 +257,8 @@ export class RexKit extends BaseKit {
 
   cancel(f: Fighter): void {
     this.charging = false;
+    this.chargeT = 0;
+    this.chargeFx = 0;
     this.aimHold = 0;
     super.cancel(f);
   }
@@ -227,6 +281,7 @@ export class RexKit extends BaseKit {
         break;
       case 'beam':
         if (e.d) this.beamFx(f, m, p, new THREE.Vector3(...e.d), e.n ?? 1);
+        if ((e.n ?? 0) > 1.2) m.audio.play('chord', p, 1);
         f.anim.play('aim', { hold: true });
         this.aimHold = 0.5;
         break;

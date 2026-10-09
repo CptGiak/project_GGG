@@ -1,5 +1,6 @@
 import { CHAMPION_IDS, CHAMPIONS, type AbilitySlot, type ChampionId } from '../../shared/champions';
 import { ARENA_META } from '../../shared/arenas';
+import { MODES, MODE_IDS, type ModeId } from '../../shared/modes';
 import type { PlayerInfo } from '../../shared/protocol';
 import type { Settings } from '../core/Settings';
 
@@ -81,7 +82,7 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
 
 export interface SelectCallbacks {
   pick(id: ChampionId): void;
-  confirm(opts: { champ: ChampionId; arena: string; bots: number; difficulty: number; room: string; quick: boolean }): void;
+  confirm(opts: { champ: ChampionId; arena: string; bots: number; difficulty: number; room: string; quick: boolean; mode: ModeId }): void;
   back(): void;
   sfx(name: string): void;
 }
@@ -93,6 +94,7 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
   let arena = s.arena;
   let bots = s.bots;
   let diff = s.botDifficulty;
+  let gameMode: ModeId = s.mode ?? 'dm';
   const root = h('div', { class: 'screen fade-in' });
   const cards = h('div', { class: 'cs-cards' });
   const info = h('div', { class: 'cs-info' });
@@ -130,6 +132,15 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
   // options
   const opts = h('div', { class: 'cs-opts' });
   let roomInput: HTMLInputElement | null = null;
+  const modeSeg = h('div', { class: 'seg' });
+  const modeSub = h('div', { class: 'mode-sub' });
+  const renderMode = () => {
+    modeSeg.innerHTML = '';
+    for (const id of MODE_IDS) modeSeg.append(h('button', { class: id === gameMode ? 'on' : '', onclick: () => { gameMode = id; cb.sfx('uiMove'); renderMode(); } }, MODES[id].name));
+    modeSub.textContent = mode === 'practice' ? MODES[gameMode].sub : `${MODES[gameMode].sub}. Vale per le stanze private nuove: la partita veloce alterna le modalità.`;
+  };
+  renderMode();
+  const modeField = h('div', { class: 'field' }, h('label', {}, 'MODALITÀ'), h('div', {}, modeSeg, modeSub));
   if (mode === 'practice') {
     const arenaRow = h('div', { class: 'arena-pick' });
     const renderArenas = () => {
@@ -155,20 +166,20 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       for (const [lbl, v] of [['FACILE', 0.2], ['NORMALE', 0.5], ['DIFFICILE', 0.85]] as const) diffSeg.append(h('button', { class: Math.abs(v - diff) < 0.05 ? 'on' : '', onclick: () => { diff = v; cb.sfx('uiMove'); renderDiff(); } }, lbl));
     };
     renderDiff();
-    opts.append(h('div', { class: 'field' }, h('label', {}, 'ARENA'), arenaRow), h('div', { class: 'field' }, h('label', {}, 'BOT'), botSeg), h('div', { class: 'field' }, h('label', {}, 'LIVELLO'), diffSeg));
+    opts.append(modeField, h('div', { class: 'field' }, h('label', {}, 'ARENA'), arenaRow), h('div', { class: 'field' }, h('label', {}, 'BOT'), botSeg), h('div', { class: 'field' }, h('label', {}, 'LIVELLO'), diffSeg));
   } else {
     roomInput = h('input', { maxlength: 8, placeholder: 'CODICE (opz.)', value: s.room }) as HTMLInputElement;
-    opts.append(h('div', { class: 'field' }, h('label', {}, 'STANZA'), roomInput));
+    opts.append(h('div', { class: 'field' }, h('label', {}, 'STANZA'), roomInput), modeField);
   }
   const confirm = (quick: boolean) => {
     cb.sfx('uiSelect');
-    cb.confirm({ champ, arena, bots, difficulty: diff, room: quick ? '' : (roomInput?.value ?? '').toUpperCase(), quick });
+    cb.confirm({ champ, arena, bots, difficulty: diff, room: quick ? '' : (roomInput?.value ?? '').toUpperCase(), quick, mode: gameMode });
   };
   const bottom = h('div', { class: 'cs-bottom' });
   if (mode === 'practice') bottom.append(h('div', { class: 'btn red', onclick: () => confirm(true) }, h('span', {}, 'COMBATTI!')));
   else bottom.append(h('div', { class: 'btn dark', onclick: () => confirm(false) }, h('span', {}, 'ENTRA IN STANZA')), h('div', { class: 'btn red', onclick: () => confirm(true) }, h('span', {}, 'PARTITA VELOCE')));
   root.append(
-    h('div', { class: 'cs-head' }, 'SCEGLI IL TUO CAMPIONE', h('small', {}, mode === 'practice' ? 'ALLENAMENTO CONTRO BOT' : 'ONLINE PVP · DEATHMATCH')),
+    h('div', { class: 'cs-head' }, 'SCEGLI IL TUO CAMPIONE', h('small', {}, mode === 'practice' ? 'ALLENAMENTO CONTRO BOT' : 'ONLINE PVP · DEATHMATCH E RIFLETTORE')),
     cards,
     info,
     opts,
@@ -186,8 +197,14 @@ export function loadingScreen(text: string): HTMLElement {
     'Correndo contro un muro ad alta velocità ci corri sopra!',
     'SHIFT è uno scatto con frame di invulnerabilità.',
     'Puoi agganciare anche i nemici: puntali e premi Q/E.',
-    'KAISER: tieni RMB e para al momento giusto per stordire.',
-    'REX: i colpi alla testa sono CRITICI.',
+    'KAISER: tieni RMB e para al momento giusto per stordire, poi LMB per la RIPOSTA.',
+    'REX: i colpi alla testa sono CRITICI. Rilascia la carica appena è piena: COLPO PERFETTO.',
+    'SCHIVATA PERFETTA: scatta proprio mentre arriva il colpo. Il prossimo colpo è CRITICO.',
+    'Gli scatti a raffica perdono l\'invulnerabilità: aspetta un attimo tra uno e l\'altro.',
+    'Arriva in velocità: i colpi di slancio fanno fino al 60% di danni in più.',
+    'NOVA: Glitch Step marchia i nemici; Phantom Cut li insegue anche fuori mira.',
+    'SERA: tieni il raggio sullo stesso bersaglio per il CRESCENDO.',
+    'RIFLETTORE: resta da solo nella luce per fare punti a ogni battuta.',
   ];
   return h('div', { class: 'overlay loading' }, ransom(text, false, 3), h('div', { class: 'bar' }, h('i')), h('div', { class: 'tip' }, tips[Math.floor(Math.random() * tips.length)]));
 }
@@ -272,7 +289,9 @@ export function controlsPanel(onClose: () => void): HTMLElement {
 }
 
 export function resultsScreen(opts: { players: PlayerInfo[]; myId: string; winner: string | null; online: boolean; next?: number; onRematch?(): void; onMenu(): void; sfx(n: string): void }): HTMLElement {
-  const sorted = [...opts.players].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+  // RIFLETTORE: points decide the ranking
+  const spot = opts.players.some((p) => p.score !== undefined);
+  const sorted = [...opts.players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || b.kills - a.kills || a.deaths - b.deaths);
   const win = sorted.find((p) => p.id === opts.winner) ?? sorted[0];
   const iWon = win && win.id === opts.myId;
   const nextEl = h('div', { class: 'next' });
@@ -289,8 +308,8 @@ export function resultsScreen(opts: { players: PlayerInfo[]; myId: string; winne
     h('div', { class: 'win' }, iWon ? 'VITTORIA!' : 'FINE MATCH'),
     h('div', { class: 'who' }, 'MVP: ', h('b', {}, win ? `${win.name} · ${CHAMPIONS[win.champ].name}` : '—')),
     h('table', {},
-      h('tr', {}, h('th', {}, '#'), h('th', {}, 'GIOCATORE'), h('th', {}, 'CAMPIONE'), h('th', {}, 'K'), h('th', {}, 'D')),
-      ...sorted.map((p, i) => h('tr', { class: p.id === opts.myId ? 'me' : '' }, h('td', {}, String(i + 1)), h('td', {}, p.name), h('td', { style: `color:${CHAMPIONS[p.champ].colors[0]}` }, CHAMPIONS[p.champ].name), h('td', {}, String(p.kills)), h('td', {}, String(p.deaths))))),
+      h('tr', {}, h('th', {}, '#'), h('th', {}, 'GIOCATORE'), h('th', {}, 'CAMPIONE'), spot ? h('th', {}, 'PUNTI') : null, h('th', {}, 'K'), h('th', {}, 'D')),
+      ...sorted.map((p, i) => h('tr', { class: p.id === opts.myId ? 'me' : '' }, h('td', {}, String(i + 1)), h('td', {}, p.name), h('td', { style: `color:${CHAMPIONS[p.champ].colors[0]}` }, CHAMPIONS[p.champ].name), spot ? h('td', {}, String(p.score ?? 0)) : null, h('td', {}, String(p.kills)), h('td', {}, String(p.deaths))))),
     nextEl,
     h('div', { class: 'acts' },
       opts.onRematch ? h('div', { class: 'btn red', onclick: () => { opts.sfx('uiSelect'); opts.onRematch!(); } }, h('span', {}, 'RIVINCITA')) : null,

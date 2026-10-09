@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CHAMPION_IDS, MATCH_RULES, type ChampionId } from '../shared/champions';
+import { MODE_IDS, type ModeId } from '../shared/modes';
 import { PROTOCOL_VERSION, type C2S } from '../shared/protocol';
 import { Room } from './Room';
 
@@ -20,12 +21,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const rooms = new Map<string, Room>();
 
-function findRoom(code?: string): Room {
+function findRoom(code?: string, mode?: ModeId): Room {
   if (code) {
     const id = code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'PRIVATE';
     let r = rooms.get(id);
     if (!r) {
-      r = new Room(id, true, removeRoom);
+      // a private room keeps the mode its creator picked
+      r = new Room(id, true, removeRoom, mode);
       rooms.set(id, r);
     }
     return r;
@@ -131,7 +133,8 @@ function onConnection(ws: WebSocket): void {
       }
       const champ: ChampionId = CHAMPION_IDS.includes(msg.champ) ? msg.champ : 'kaiser';
       const name = String(msg.name ?? 'PLAYER').replace(/[^\p{L}\p{N} _\-.]/gu, '').slice(0, 16) || 'PLAYER';
-      room = findRoom(typeof msg.room === 'string' && msg.room.trim() ? msg.room : undefined);
+      const mode = MODE_IDS.includes(msg.mode as ModeId) ? msg.mode : undefined;
+      room = findRoom(typeof msg.room === 'string' && msg.room.trim() ? msg.room : undefined, mode);
       if (room.full) {
         ws.send(JSON.stringify({ t: 'error', msg: `Stanza piena (max ${MATCH_RULES.maxPlayers}).` }));
         ws.close();
