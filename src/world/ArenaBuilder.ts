@@ -76,6 +76,8 @@ const SIGN_FONT = '"Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Me
 
 /** static geometry is batched per material AND per spatial chunk so frustum culling works */
 const CHUNK = 56;
+/** batch key for outline-only geometry (never rendered as a surface) */
+const OUTLINE_ONLY = new THREE.MeshBasicMaterial();
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -143,6 +145,18 @@ export class ArenaBuilder {
       (o.getAttribute('aOutline') as THREE.BufferAttribute).array.fill(outline);
       b.outline.push(o);
     }
+  }
+
+  /** Inverted-hull outline only (for shapes drawn as separate faces, e.g. textured stands). */
+  addOutline(geo: THREE.BufferGeometry, matrix: THREE.Matrix4, width: number): void {
+    const o = smoothNormalGeometry(geo).clone().applyMatrix4(matrix);
+    (o.getAttribute('aOutline') as THREE.BufferAttribute).array.fill(width);
+    o.computeBoundingBox();
+    const c = o.boundingBox!.getCenter(_p);
+    const key = `outline:${Math.floor(c.x / CHUNK)}:${Math.floor(c.z / CHUNK)}`;
+    let b = this.batches.get(key);
+    if (!b) this.batches.set(key, (b = { mat: OUTLINE_ONLY, geos: [], outline: [] }));
+    b.outline.push(o);
   }
 
   /** Solid box: visual + collider. */
@@ -287,21 +301,47 @@ export class ArenaBuilder {
   }
 
   /**
+   * Box along local X (length `len`, cross-section `w` x `h`) whose four long faces repeat a tile
+   * every `tileLen` metres along the length, the full face across: trusses, girders. Ends get the
+   * whole tile once.
+   */
+  static beamBox(len: number, w: number, h: number, tileLen: number): THREE.BufferGeometry {
+    const g = new THREE.BoxGeometry(len, w, h);
+    // BoxGeometry faces: +x, -x, +y, -y, +z, -z (4 vertices each, uv 0..1 per face)
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+    const pos = g.getAttribute('position') as THREE.BufferAttribute;
+    const reps = Math.max(1, Math.round(len / tileLen));
+    for (let f = 0; f < 6; f++) {
+      for (let k = 0; k < 4; k++) {
+        const i = f * 4 + k;
+        if (f < 2) continue;
+        // u along the length, v across the face
+        const x = pos.getX(i);
+        const across = f < 4 ? pos.getZ(i) / h + 0.5 : pos.getY(i) / w + 0.5;
+        uv.setXY(i, (x / len + 0.5) * reps, f === 2 || f === 5 ? 1 - across : across);
+      }
+    }
+    return g;
+  }
+
+  /**
    * Lightbox sign (opaque face, text on both sides). The faces of every sign are packed into one
    * canvas atlas at finish(), so all signs cost a single draw call; the body is batched geometry.
    */
   lightbox(text: string, style: SignStyle, center: [number, number, number], size: [number, number, number], yaw: number, body: THREE.Material, intensity = 1.2, outline = 1): void {
     const [w, h, d] = size;
     this.addStatic(new THREE.BoxGeometry(w + 0.18, h + 0.18, d), body, center, [0, yaw, 0], 1, outline);
-    const key = `${text}|${style.bg}|${style.fg}|${style.vertical ? 1 : 0}|${w.toFixed(2)}x${h.toFixed(2)}`;
     for (const side of [0, Math.PI]) {
-      const m = new THREE.Matrix4().compose(
-        new THREE.Vector3(center[0] + Math.sin(yaw + side) * (d / 2 + 0.02), center[1], center[2] + Math.cos(yaw + side) * (d / 2 + 0.02)),
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw + side, 0)),
-        new THREE.Vector3(1, 1, 1),
-      );
-      this.signFaces.push({ key, text, style, w, h, m, intensity });
+      this.signFace(text, style, [center[0] + Math.sin(yaw + side) * (d / 2 + 0.02), center[1], center[2] + Math.cos(yaw + side) * (d / 2 + 0.02)], [w, h], yaw + side, intensity);
     }
+  }
+
+  /** One sign face (no body) facing `yaw`, packed into the shared sign atlas. */
+  signFace(text: string, style: SignStyle, center: [number, number, number], size: [number, number], yaw: number, intensity = 1.2): void {
+    const [w, h] = size;
+    const key = `${text}|${style.bg}|${style.fg}|${style.vertical ? 1 : 0}|${w.toFixed(2)}x${h.toFixed(2)}`;
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(...center), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
+    this.signFaces.push({ key, text, style, w, h, m, intensity });
   }
 
   private buildSigns(): void {
@@ -373,13 +413,15 @@ export class ArenaBuilder {
   /** Merges the pending batches into meshes under `target`. */
   private mergeBatches(target: THREE.Object3D): void {
     for (const b of this.batches.values()) {
-      const merged = mergeNonIndexed(b.geos);
-      merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, b.mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      target.add(mesh);
+      if (b.geos.length) {
+        const merged = mergeNonIndexed(b.geos);
+        merged.computeBoundingSphere();
+        const mesh = new THREE.Mesh(merged, b.mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        target.add(mesh);
+      }
       if (b.outline.length) {
         const og = mergeGeometries(b.outline, false);
         if (og) {
@@ -439,7 +481,8 @@ export class ArenaBuilder {
     if (eqs.size) {
       const base = new Map([...eqs].map((u) => [u, u.value] as const));
       this.tickers.push(() => {
-        for (const [u, v] of base) u.value = v * (0.85 + Beat.kick * 0.55 + Beat.snare * 0.3);
+        // gentle: screens follow the music without pumping
+        for (const [u, v] of base) u.value = v * (0.92 + Beat.kick * 0.18 + Beat.snare * 0.08);
       });
     }
     const tickers = this.tickers;

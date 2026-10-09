@@ -52,6 +52,8 @@ export interface FacadeOptions extends ToonOptions {
   /** share of lit windows */
   density?: number;
   intensity?: number;
+  /** selflit: every cell on at the same level (LED ribbons) instead of a random mix */
+  steady?: boolean;
 }
 
 /**
@@ -101,7 +103,7 @@ float fGlow = fTex.a;`,
   float far = smoothstep( 0.2, 0.65, max( fw.x, fw.y ) );
   ${
     selfLit
-      ? `float on = mix( 0.75 + 0.25 * h2, 0.85, far ) * step( 0.1, mix( h, 1.0, far ) );
+      ? `float on = ${opts.steady ? '0.9' : 'mix( 0.75 + 0.25 * h2, 0.85, far ) * step( 0.1, mix( h, 1.0, far ) )'};
   totalEmissiveRadiance += fTex.rgb * fGlow * on * uIntensity;`
       : `float lit = step( 1.0 - uDensity, h );
   // ceiling lights: a lit window is brighter towards its top
@@ -113,7 +115,7 @@ float fGlow = fTex.a;`,
 }`,
       );
   };
-  mat.customProgramCacheKey = () => `ggg-toon-facade-${selfLit ? 's' : 'w'}-v1`;
+  mat.customProgramCacheKey = () => `ggg-toon-facade-${selfLit ? (opts.steady ? 'S' : 's') : 'w'}-v1`;
   return mat;
 }
 
@@ -122,12 +124,12 @@ float fGlow = fTex.a;`,
 // ---------------------------------------------------------------------------------------------
 
 export interface WorldMaterialOptions extends ToonOptions {
-  /** texture on faces looking up, mapped on world XZ, one tile every `topScale` metres */
+  /** texture on faces looking up, mapped on world XZ, one tile every `topScale` metres (x, z) */
   topTex?: THREE.Texture;
-  topScale?: number;
-  /** texture on the sides (world XY / ZY) */
+  topScale?: number | [number, number];
+  /** texture on the sides (world XY / ZY), one tile every `sideScale` metres (along, up) */
   sideTex?: THREE.Texture;
-  sideScale?: number;
+  sideScale?: number | [number, number];
   /** tint of the sides relative to `color` */
   sideTint?: THREE.ColorRepresentation;
 }
@@ -136,11 +138,12 @@ export interface WorldMaterialOptions extends ToonOptions {
 export function worldMaterial(opts: WorldMaterialOptions): ToonMaterial {
   const mat = toon(opts);
   const base = mat.onBeforeCompile;
+  const vec = (v: number | [number, number] | undefined) => (Array.isArray(v) ? new THREE.Vector2(v[0], v[1]) : new THREE.Vector2(v ?? 4, v ?? 4));
   const uniforms = {
     uTop: { value: opts.topTex ?? null },
-    uTopScale: { value: opts.topScale ?? 4 },
+    uTopScale: { value: vec(opts.topScale) },
     uSide: { value: opts.sideTex ?? null },
-    uSideScale: { value: opts.sideScale ?? 4 },
+    uSideScale: { value: vec(opts.sideScale) },
     uSideTint: { value: new THREE.Color(opts.sideTint ?? 0xffffff) },
   };
   const defs = `${opts.topTex ? '#define W_TOP\n' : ''}${opts.sideTex ? '#define W_SIDE\n' : ''}`;
@@ -156,9 +159,9 @@ ${defs}
 varying vec3 vWPos;
 varying vec3 vWNor;
 uniform sampler2D uTop;
-uniform float uTopScale;
+uniform vec2 uTopScale;
 uniform sampler2D uSide;
-uniform float uSideScale;
+uniform vec2 uSideScale;
 uniform vec3 uSideTint;`,
       )
       .replace(
@@ -180,7 +183,7 @@ uniform vec3 uSideTint;`,
 }`,
       );
   };
-  mat.customProgramCacheKey = () => `ggg-toon-world-${opts.topTex ? 1 : 0}${opts.sideTex ? 1 : 0}-v1`;
+  mat.customProgramCacheKey = () => `ggg-toon-world-${opts.topTex ? 1 : 0}${opts.sideTex ? 1 : 0}-v2`;
   return mat;
 }
 
@@ -262,14 +265,17 @@ ${AA_GLSL}`,
     float far = smoothstep( 0.1, 0.4, max( fwidth( q.x ), fwidth( q.y ) ) );
     diffuseColor.rgb *= mix( 0.92 + 0.16 * gHash( floor( p / 4.0 ) ), 1.0, far );
   } else if ( uPat < 2.5 ) {
-    // stage: concentric rings + radial spokes
+    // stage pit: thin painted rings every 12 m (distance to the centre at a glance) and eight
+    // spokes (direction), constant 0.3 / 0.2 m line widths
     float r = length( p );
-    float a = atan( p.y, p.x ) / 6.2831853 * 24.0;
-    float wa = length( fwidth( p ) ) / max( r, 1e-3 ) * 24.0 / 6.2831853;
-    float rings = stripes( r / 6.0 - 0.92, 0.08 );
-    float spokes = stripesW( a - 0.97, 0.03, wa ) * aaStep( 10.0, r );
+    float rings = stripes( r / 12.0 + 0.0125, 0.025 ) * aaStep( 9.0, r );
+    float sector = 6.2831853 * max( r, 1.0 ) / 8.0;
+    float a = atan( p.y, p.x ) / 6.2831853 * 8.0;
+    float wa = length( fwidth( p ) ) / sector;
+    float d = 0.2 / sector;
+    float spokes = stripesW( a + 0.5 * d, d, wa ) * aaStep( 12.0, r ) * ( 1.0 - aaStep( 78.0, r ) );
     m = clamp( rings + spokes, 0.0, 1.0 );
-    totalEmissiveRadiance += uLine * m * uGlow * ( 0.85 + 0.15 * sin( uTime * 0.8 - r * 0.08 ) );
+    totalEmissiveRadiance += uLine * m * uGlow;
   } else {
     // water: slow ripple lines
     float w = sin( p.x * 0.35 + uTime * 0.35 ) * sin( p.y * 0.3 - uTime * 0.25 ) + sin( ( p.x + p.y ) * 0.21 + uTime * 0.4 );
@@ -282,8 +288,92 @@ ${AA_GLSL}`,
 }`,
       );
   };
-  mat.customProgramCacheKey = () => `ggg-toon-ground-${opts.tex ? 't' : 'n'}-v2`;
+  mat.customProgramCacheKey = () => `ggg-toon-ground-${opts.tex ? 't' : 'n'}-v3`;
   return mat;
+}
+
+// ---------------------------------------------------------------------------------------------
+// LED screens
+// ---------------------------------------------------------------------------------------------
+
+const LED_VERT = /* glsl */ `
+varying vec2 vUv;
+#include <common>
+#include <fog_pars_vertex>
+void main() {
+  vUv = uv;
+  vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}
+`;
+
+const LED_FRAG = /* glsl */ `
+varying vec2 vUv;
+uniform vec3 uColorA;
+uniform vec3 uColorB;
+uniform vec3 uBg;
+uniform vec2 uPixels;
+uniform float uIntensity;
+uniform float uEnergy;
+uniform float uTime;
+#include <common>
+#include <fog_pars_fragment>
+float h11( float n ) { return fract( sin( n * 127.1 ) * 43758.5453 ); }
+float sNoise( float x ) { float i = floor( x ); float f = fract( x ); f = f * f * ( 3.0 - 2.0 * f ); return mix( h11( i ), h11( i + 1.0 ), f ); }
+void main() {
+  vec2 px = vUv * uPixels;
+  // content is sampled once per LED, like a real screen
+  vec2 c = ( floor( px ) + 0.5 ) / uPixels;
+  float aspect = uPixels.x / uPixels.y;
+  // dim background with a slow sweep
+  vec3 col = uBg * ( 0.75 + 0.25 * sin( c.x * 4.0 + c.y * 2.5 - uTime * 0.3 ) );
+  // big sun disc, banded at the bottom (moves slowly)
+  vec2 q = vec2( ( c.x - 0.5 ) * aspect, c.y - 0.56 );
+  float disc = step( length( q ), 0.3 );
+  float band = step( 0.42, fract( c.y * 14.0 + uTime * 0.12 ) ) + step( 0.0, q.y );
+  col = mix( col, mix( uColorB, uColorA, clamp( ( q.y + 0.3 ) / 0.6, 0.0, 1.0 ) ), disc * clamp( band, 0.0, 1.0 ) );
+  // equalizer (smooth levels, nudged by the music)
+  float bars = 28.0;
+  float bi = floor( c.x * bars );
+  float bl = fract( c.x * bars );
+  float lvl = 0.1 + ( 0.22 * sNoise( uTime * 0.8 + bi * 3.7 ) + 0.1 * sNoise( uTime * 0.35 + bi * 1.9 ) ) * ( 0.75 + 0.3 * uEnergy );
+  float bar = step( 0.18, bl ) * step( bl, 0.82 ) * step( c.y, lvl );
+  col = mix( col, mix( uColorA, uColorB, c.y / 0.45 ), bar );
+  // LED grid; fades to its average once the LEDs get smaller than a few pixels (no moire)
+  vec2 f = abs( fract( px ) - 0.5 );
+  float fw = max( fwidth( px.x ), fwidth( px.y ) );
+  float led = 1.0 - smoothstep( 0.36 - fw, 0.36 + fw, max( f.x, f.y ) );
+  float grid = mix( led, 0.6, smoothstep( 0.2, 0.6, fw ) );
+  gl_FragColor = vec4( col * uIntensity * ( 0.2 + 0.8 * grid ), 1.0 );
+  #include <fog_fragment>
+}
+`;
+
+/**
+ * Stage / billboard screen: sunset disc and a slow equalizer on an LED grid. Calm by design: no
+ * hard cuts, levels drift smoothly, peak brightness stays under the bloom threshold.
+ * `uEnergy` follows the music (see ArenaBuilder.finish).
+ */
+export function ledScreenMaterial(opts: { colorA: THREE.ColorRepresentation; colorB: THREE.ColorRepresentation; bg: THREE.ColorRepresentation; pixels: [number, number]; intensity?: number }): THREE.ShaderMaterial {
+  const m = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uColorA: { value: new THREE.Color(opts.colorA) },
+        uColorB: { value: new THREE.Color(opts.colorB) },
+        uBg: { value: new THREE.Color(opts.bg) },
+        uPixels: { value: new THREE.Vector2(...opts.pixels) },
+        uIntensity: { value: opts.intensity ?? 0.85 },
+        uEnergy: { value: 1 },
+      },
+    ]),
+    vertexShader: LED_VERT,
+    fragmentShader: LED_FRAG,
+    fog: true,
+  });
+  m.uniforms.uTime = ToonEnv.time;
+  return m;
 }
 
 // ---------------------------------------------------------------------------------------------

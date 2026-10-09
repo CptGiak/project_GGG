@@ -36,6 +36,12 @@ JP_FONT_PATHS = [
     '/usr/share/fonts/truetype/fonts-japanese-gothic.ttf',
     '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
 ]
+# heavy sans for latin signage (falls back to Blender's built-in font)
+LATIN_FONT_PATHS = [
+    '/usr/share/fonts/opentype/inter/InterDisplay-Black.otf',
+    '/usr/share/fonts/opentype/inter/Inter-Black.otf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+]
 
 
 # =============================================================================================
@@ -191,6 +197,32 @@ def cbox(coll, name: str, center, size, m, bev: float = 0.0, segs: int = 1, rot_
     return ob
 
 
+def cut(ob: bpy.types.Object, cutters: Sequence[bpy.types.Object]) -> bpy.types.Object:
+    """Boolean difference with each cutter (the cutters are deleted)."""
+    for k, cu in enumerate(cutters):
+        md = ob.modifiers.new(f'cut{k}', 'BOOLEAN')
+        md.operation = 'DIFFERENCE'
+        md.solver = 'EXACT'
+        md.object = cu
+        cu.hide_render = True
+    apply_mods(ob)
+    for cu in cutters:
+        me = cu.data
+        bpy.data.objects.remove(cu)
+        if me.users == 0:
+            bpy.data.meshes.remove(me)
+    flat(ob)
+    return ob
+
+
+def rotate(ob: bpy.types.Object, axis: str, deg: float, pivot=(0, 0, 0)) -> bpy.types.Object:
+    """Rotates the mesh data about an axis through `pivot` (pieces keep identity transforms)."""
+    from mathutils import Matrix
+    p = V(pivot)
+    ob.data.transform(Matrix.Translation(p) @ Matrix.Rotation(math.radians(deg), 4, axis) @ Matrix.Translation(-p))
+    return ob
+
+
 def _rot_z(a: float):
     from mathutils import Matrix
     return Matrix.Rotation(a, 4, 'Z')
@@ -279,6 +311,18 @@ def smooth_by_angle(ob: bpy.types.Object, deg: float) -> None:
 def join(objs: Sequence[bpy.types.Object], name: str) -> bpy.types.Object:
     """Joins meshes (no modifiers left) into the first one, keeping material slots per face."""
     objs = [o for o in objs if o is not None]
+    # text / curves: evaluate to meshes first
+    dg = None
+    for i, o in enumerate(objs):
+        if o.type != 'MESH':
+            dg = dg or bpy.context.evaluated_depsgraph_get()
+            me = bpy.data.meshes.new_from_object(o.evaluated_get(dg), depsgraph=dg)
+            mo = bpy.data.objects.new(o.name + '_mesh', me)
+            mo.matrix_world = o.matrix_world.copy()
+            for c in o.users_collection:
+                c.objects.link(mo)
+            bpy.data.objects.remove(o)
+            objs[i] = mo
     base = objs[0]
     if len(objs) > 1:
         bm = bmesh.new()
@@ -314,8 +358,9 @@ def join(objs: Sequence[bpy.types.Object], name: str) -> bpy.types.Object:
 
 
 def text(coll, name: str, body: str, size: float, loc, m, jp: bool = False, align: str = 'CENTER',
-         extrude: float = 0.004, vertical: bool = False, rot_x: float = 90.0) -> bpy.types.Object:
-    """Text standing on the XZ plane facing -Y. `vertical` stacks the characters (tategaki)."""
+         extrude: float = 0.004, vertical: bool = False, rot_x: float = 90.0, latin: bool = False) -> bpy.types.Object:
+    """Text standing on the XZ plane facing -Y (rot_x=0: lying on XY facing +Z). `vertical` stacks
+    the characters (tategaki); `jp` / `latin` pick the japanese gothic or the heavy latin font."""
     cu = bpy.data.curves.new(name, type='FONT')
     cu.body = '\n'.join(body) if vertical else body
     cu.size = size
@@ -324,8 +369,8 @@ def text(coll, name: str, body: str, size: float, loc, m, jp: bool = False, alig
     cu.align_y = 'CENTER'
     if vertical:
         cu.space_line = 0.92
-    if jp:
-        for p in JP_FONT_PATHS:
+    if jp or latin:
+        for p in (JP_FONT_PATHS if jp else LATIN_FONT_PATHS):
             if os.path.exists(p):
                 cu.font = bpy.data.fonts.load(p, check_existing=True)
                 break
@@ -430,7 +475,8 @@ def render_tile(build: Callable[[bpy.types.Collection], None], W: float, H: floa
         cam.rotation_euler = (0, 0, 0)
     bpy.context.scene.camera = cam
     _world((0.93, 0.95, 1.0), sky)
-    sun_ob = _sun(sun_dir if view == 'front' else (sun_dir[0], -sun_dir[2] * 0.4, -abs(sun_dir[1]) - 0.6), sun)
+    # sun_dir points towards the sun (Blender axes, Z up) for both views
+    sun_ob = _sun(sun_dir if view == 'front' else (sun_dir[0], sun_dir[1], abs(sun_dir[2])), sun)
     os.makedirs(CACHE_DIR, exist_ok=True)
     albedo_path = os.path.join(CACHE_DIR, f'{name}_albedo.png')
     bpy.context.scene.render.filepath = albedo_path
@@ -556,11 +602,13 @@ def atlas_piece(ob: bpy.types.Object, atlas: Atlas, atlas_mat: bpy.types.Materia
         u, v = atlas.uv(atlas.slot(m))
         for li in p.loop_indices:
             uv.data[li].uv = (u, v)
-    for p in me.polygons:
-        p.material_index = 1 if glow_flags[p.material_index] else 0
+    face_glow = [glow_flags[p.material_index] for p in me.polygons]
+    # clearing the slots resets the face indices, so assign them afterwards
     me.materials.clear()
     me.materials.append(atlas_mat)
     me.materials.append(glow_mat)
+    for p, g in zip(me.polygons, face_glow):
+        p.material_index = 1 if g else 0
 
 
 def export_kit(pieces: Iterable[bpy.types.Object], path: str) -> None:
@@ -627,33 +675,90 @@ def prism(coll, name: str, profile, axis: str, a0: float, a1: float, m) -> bpy.t
     return ob
 
 
-def contact_sheet(pieces: Sequence[bpy.types.Object], path: str, cols: int = 6, cell: float = 6.0, px: int = 1600) -> None:
-    """Perspective render of every piece on a grid (for checking the kit)."""
-    import mathutils
+def contact_sheet(pieces: Sequence[bpy.types.Object], path: str, cols: int = 4, cell: float = 6.0, px: int = 1600) -> None:
+    """Perspective render of every piece standing on a grid (for checking the kit)."""
     sc = bpy.context.scene
+    cols = min(cols, len(pieces))
     rows = (len(pieces) + cols - 1) // cols
     for i, ob in enumerate(pieces):
-        bb = [ob.matrix_world @ V(c) for c in ob.bound_box]
+        bb = [V(c) for c in ob.bound_box]
         size = max(max(c[k] for c in bb) - min(c[k] for c in bb) for k in range(3))
-        s = min(1.0, (cell * 0.8) / max(size, 1e-3))
+        s = min(1.0, (cell * 0.75) / max(size, 1e-3))
+        zmin = min(c.z for c in bb)
         ob.scale = (s, s, s)
-        ob.location = ((i % cols) * cell, -(i // cols) * cell, 0)
-    floor = box(None, '_floor', (-cell, -rows * cell, -0.05), (cols * cell, cell, 0), mat('_floor', '#3a3a40'))
+        ob.location = ((i % cols) * cell, -(i // cols) * cell, -zmin * s)
+    w, d = cols * cell, rows * cell
+    floor = box(None, '_floor', (-cell, -d, -0.05), (w, cell, 0), mat('_floor', '#3a3a40'))
     _setup_cycles(px, int(px * 0.62), 48)
     sc.render.film_transparent = False
     _world((0.55, 0.6, 0.75), 0.9)
     _sun((-0.5, -0.8, 1.0), 2.4, 8)
     cam_d = bpy.data.cameras.new('sheet_cam')
-    cam_d.lens = 35
+    cam_d.lens = 30
     cam = link(bpy.data.objects.new('sheet_cam', cam_d), None)
     cx = (cols - 1) * cell / 2
     cy = -(rows - 1) * cell / 2
-    cam.location = (cx, cy - rows * cell * 1.15 - 6, rows * cell * 0.9 + 6)
-    direction = V((cx, cy, 1.5)) - cam.location
+    dist = max(w, d * 1.6) * 1.05
+    cam.location = (cx, cy - dist * 0.8, dist * 0.62)
+    direction = V((cx, cy, 0.8)) - cam.location
     cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
     sc.camera = cam
     sc.render.filepath = path
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.ops.render.render(write_still=True)
     bpy.data.objects.remove(floor)
-    _ = mathutils
+
+
+def build_kit(theme: str, pieces: dict, out_dir: str, export: bool = True, preview: bool = False,
+              cells: int = 8, cell_px: int = 8) -> None:
+    """Models every piece, maps it onto the palette atlas, exports <theme>.glb + <theme>_atlas.png."""
+    reset()
+    atlas = Atlas(cells=cells, cell_px=cell_px)
+    atlas_mat = mat('atlas', '#ffffff')
+    glow_mat = mat('glow', '#ffffff')
+    out = []
+    for name, fn in pieces.items():
+        coll = new_collection(f'c_{name}')
+        fn(coll)
+        ob = join(list(coll.objects), name)
+        for col in list(ob.users_collection):
+            col.objects.unlink(ob)
+        bpy.context.scene.collection.objects.link(ob)
+        atlas_piece(ob, atlas, atlas_mat, glow_mat)
+        out.append(ob)
+        print(f'  {name}: {tri_count([ob])} tris')
+    print(f'  atlas: {len(atlas.colors)} / {cells * cells} swatches')
+    save_rgba(os.path.join(out_dir, f'{theme}_atlas.png'), atlas.image())
+    if export:
+        export_kit(out, os.path.join(out_dir, f'{theme}.glb'))
+    if preview:
+        for ob in out:
+            _colorize(ob, atlas)
+        contact_sheet(out, os.path.join(CACHE_DIR, f'{theme}_kit.png'))
+
+
+def _colorize(ob: bpy.types.Object, atlas: Atlas) -> None:
+    """Preview only: per-face material from the atlas swatch under its UV."""
+    me = ob.data
+    uv = me.uv_layers['UVMap']
+    cache: dict = {}
+    me_mats = list(me.materials)
+    me.materials.clear()
+    for p in me.polygons:
+        u, v = uv.data[p.loop_indices[0]].uv
+        cx = int(u * atlas.cells)
+        cy = int((1 - v) * atlas.cells)
+        idx = cy * atlas.cells + cx
+        col = atlas.colors[idx]
+        glow = me_mats[p.material_index].name == 'glow'
+        key = (idx, glow)
+        if key not in cache:
+            m = bpy.data.materials.new(f'prev_{idx}_{glow}')
+            bsdf = m.node_tree.nodes.get('Principled BSDF')
+            bsdf.inputs['Base Color'].default_value = srgb(col)
+            if glow:
+                bsdf.inputs['Emission Color'].default_value = srgb(col)
+                bsdf.inputs['Emission Strength'].default_value = 2.0
+            me.materials.append(m)
+            cache[key] = len(me.materials) - 1
+        p.material_index = cache[key]
