@@ -41,10 +41,22 @@ export class Input {
   sensitivity = 1;
   invertY = false;
   onLockChange: ((locked: boolean) => void) | null = null;
+  /**
+   * Pointer lock refused (e.g. inside a sandboxed iframe): fall back to plain relative mouse
+   * deltas while the cursor is over the page, with ESC standing in for "lock lost".
+   */
+  private fallback = false;
 
   constructor(readonly target: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (isTyping(e)) return;
+      if (this.fallback && this.locked && e.code === 'Escape') {
+        // like a real pointer lock, the ESC that releases it is consumed (it must not also
+        // close the pause menu it opens)
+        e.stopImmediatePropagation();
+        this.setFallbackLocked(false);
+        return;
+      }
       if (e.code === 'Tab' || e.code === 'Space' || (e.code.startsWith('Arrow') && this.locked)) e.preventDefault();
       if (!this.down.has(e.code)) this.pressedSet.add(e.code);
       this.down.add(e.code);
@@ -82,17 +94,50 @@ export class Input {
       this.locked = document.pointerLockElement === this.target;
       this.onLockChange?.(this.locked);
     });
+    document.addEventListener('pointerlockerror', () => this.lockRefused());
   }
 
   requestLock(): void {
+    if (this.fallback) {
+      this.setFallbackLocked(true);
+      return;
+    }
     if (document.pointerLockElement !== this.target) {
-      const p = this.target.requestPointerLock() as unknown as Promise<void> | undefined;
-      if (p && typeof p.catch === 'function') p.catch(() => {});
+      try {
+        const p = this.target.requestPointerLock() as unknown as Promise<void> | undefined;
+        if (p && typeof p.catch === 'function') p.catch(() => this.lockRefused());
+      } catch {
+        this.lockRefused();
+      }
     }
   }
 
   exitLock(): void {
+    if (this.fallback) {
+      this.setFallbackLocked(false);
+      return;
+    }
     if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  /** only embedded pages switch to the fallback; a top-level page just retries on the next click */
+  private lockRefused(): void {
+    let embedded = false;
+    try {
+      embedded = window.self !== window.top;
+    } catch {
+      embedded = true;
+    }
+    if (!embedded || this.fallback) return;
+    this.fallback = true;
+    this.setFallbackLocked(true);
+  }
+
+  private setFallbackLocked(v: boolean): void {
+    if (this.locked === v) return;
+    this.locked = v;
+    this.target.style.cursor = v ? 'none' : '';
+    this.onLockChange?.(v);
   }
 
   /** action held */

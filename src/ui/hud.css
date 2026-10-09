@@ -150,7 +150,7 @@
 .hud-hint b { color: var(--accent); }
 .hud-hint.off { opacity: 0; }
 
-.pause-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-12deg); font-family: var(--font-display); font-size: 3vh; background: rgba(11,7,9,0.9); padding: 1vh 3vh; border: 0.3vh solid #fff; pointer-events: auto; cursor: pointer; display: none; }
+.pause-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-12deg); font-family: var(--font-display); font-size: 3vh; background: rgba(11,7,9,0.9); padding: 1vh 3vh; border: 0.3vh solid #fff; pointer-events: none; display: none; }
 .pause-hint.on { display: block; }
 
 /* ultimate cut-in (Persona "All-Out" style) */

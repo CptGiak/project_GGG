@@ -8,7 +8,7 @@ import { arenaMeta } from '../shared/arenas';
 import type { PlayerInfo } from '../shared/protocol';
 import { HUD } from './ui/HUD';
 import { MenuStage } from './ui/MenuStage';
-import { champSelect, controlsPanel, h, loadingScreen, mainMenu, pauseMenu, resultsScreen, settingsPanel, toast } from './ui/Menus';
+import { champSelect, controlsPanel, h, loadingScreen, mainMenu, pauseMenu, resultsScreen, settingsPanel, toast, STATIC_BUILD } from './ui/Menus';
 import { OnlineSession } from './net/OnlineSession';
 import { Beat } from './core/Beat';
 
@@ -116,7 +116,10 @@ export class App {
     this.audio.startMusic('menu');
     this.setScreen(mainMenu(this.settings, {
       practice: () => this.showSelect('practice'),
-      online: () => this.showSelect('online'),
+      online: () => {
+        if (STATIC_BUILD) toast(this.ui, 'IL PVP ONLINE RICHIEDE IL SERVER: SCARICA IL PROGETTO E AVVIA NPM RUN DEV');
+        else this.showSelect('online');
+      },
       settings: () => this.showSettings(),
       controls: () => this.setOverlay(controlsPanel(() => this.setOverlay(null))),
       setName: (n) => {

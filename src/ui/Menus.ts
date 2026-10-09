@@ -44,10 +44,13 @@ export interface MenuCallbacks {
   sfx(name: string): void;
 }
 
+/** static builds (no game server alongside, e.g. a hosted demo page) offer practice only */
+export const STATIC_BUILD = import.meta.env.VITE_STATIC === '1';
+
 export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
   const items: Array<[string, string, () => void]> = [
     ['ALLENAMENTO', 'Sfida i bot nelle arene', cb.practice],
-    ['ONLINE PVP', 'Partita veloce o stanza privata', cb.online],
+    ['ONLINE PVP', STATIC_BUILD ? 'Richiede il server di gioco (npm run dev)' : 'Partita veloce o stanza privata', cb.online],
     ['COMANDI', 'Rampini, gas, combo', cb.controls],
     ['IMPOSTAZIONI', 'Grafica, audio, mouse', cb.settings],
   ];
@@ -69,6 +72,10 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
     list,
     h('div', { class: 'mm-name' }, h('label', {}, 'CODENAME'), input),
     h('div', { class: 'mm-foot' }, 'Q/E RAMPINI · SPAZIO GAS · SHIFT SCATTO', h('br'), 'v0.1 — browser build'),
+    // touch-only devices: the game needs a keyboard and a mouse
+    window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
+      ? h('div', { class: 'mm-touch' }, 'PROJECT GGG si gioca da computer con tastiera e mouse.')
+      : null,
   );
 }
 
