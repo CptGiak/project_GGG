@@ -30,16 +30,50 @@ const MODEL_PATHS: Record<string, string> = {
 };
 const cache = new Map<string, GLTF>();
 
+/** static builds: every model as base64 in one models.json (hosts that do not serve .glb files) */
+async function packedModels(base: string): Promise<Record<string, string> | null> {
+  if (import.meta.env.VITE_STATIC !== '1') return null;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 90000);
+  try {
+    const res = await fetch(`${base}models.json`, { signal: ctl.signal });
+    return res.ok ? ((await res.json()) as Record<string, string>) : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function fromBase64(b64: string): ArrayBuffer {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+
 /** Loads the champion GLBs (call before building any visual). Never throws. */
 export async function preloadChampionModels(params?: URLSearchParams, timeoutMs = 12000): Promise<void> {
   if (params?.get('models') === '0') return;
   const loader = new GLTFLoader();
+  // static builds run inside sandboxed pages (Claude artifacts) whose policy may refuse fetch()
+  // of blob: URLs: decode the embedded textures through <img> instead of fetch + createImageBitmap
+  if (import.meta.env.VITE_STATIC === '1') {
+    loader.register((parser) => {
+      const tl = new THREE.TextureLoader(parser.options.manager);
+      tl.setCrossOrigin(parser.options.crossOrigin);
+      parser.textureLoader = tl;
+      return { name: 'ggg_img_textures' };
+    });
+  }
   const base = import.meta.env.BASE_URL ?? '/';
+  const packed = await packedModels(base);
   await Promise.all(
     Object.entries(MODEL_PATHS).map(async ([id, path]) => {
       try {
+        const data = packed?.[path];
         const gltf = await Promise.race([
-          loader.loadAsync(`${base}${path}`),
+          data ? loader.parseAsync(fromBase64(data), base) : loader.loadAsync(`${base}${path}`),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
         ]);
         cache.set(id, gltf);

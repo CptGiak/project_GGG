@@ -204,6 +204,9 @@ export function loadingScreen(text: string): HTMLElement {
     'Puoi agganciare anche i nemici: puntali e premi Q/E.',
     'KAISER: tieni RMB e para al momento giusto per stordire.',
     'REX: i colpi alla testa sono CRITICI.',
+    'AKALI: nella nube di fumo sei invisibile, ma attaccare ti rivela per un istante.',
+    'QIYANA: Terrashape vicino a un muro incanta l\'anello con la Terra.',
+    'LOCKE: i Chiodi Rituali lasciano cariche che il colpo successivo fa esplodere.',
   ];
   return h('div', { class: 'overlay loading' }, ransom(text, false, 3), h('div', { class: 'bar' }, h('i')), h('div', { class: 'tip' }, tips[Math.floor(Math.random() * tips.length)]));
 }

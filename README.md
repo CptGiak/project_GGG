@@ -28,6 +28,10 @@ npm run build        # compila il client in ./dist
 npm start            # serve ./dist + WebSocket PvP (porta 8080, configurabile con PORT=...)
 ```
 
+Versione statica senza server (solo allenamento contro i bot), come pagina unica da pubblicare
+anche come artifact di Claude: `node tools/build_static.mjs` scrive `dist-static/index.html`
+(three.js da jsDelivr, il resto inline) e `dist-static/models.json` (i modelli GLB in base64).
+
 Avvio diretto di una partita di test: `http://localhost:5173/?play&champ=nova&arena=stage&bots=3`
 Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&anims=idle,run@0.2,atk1@0.13`
 

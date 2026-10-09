@@ -4,11 +4,15 @@ import './ui/menu.css';
 import { startViewer } from './viewer';
 import { App } from './App';
 import { preloadChampionModels } from './champions/glbModels';
+import { loadingScreen } from './ui/Menus';
 import * as THREE from 'three';
 
 const params = new URLSearchParams(location.search);
 // champion GLB models first (falls back to the procedural models if missing; ?models=0 forces them)
+const loading = loadingScreen('CARICAMENTO');
+document.getElementById('ui')?.append(loading);
 void preloadChampionModels(params).then(() => {
+  loading.remove();
   if (params.has('viewer')) {
     startViewer(params);
   } else {
