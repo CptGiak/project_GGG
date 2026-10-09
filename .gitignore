@@ -8,3 +8,7 @@ docs/art/blender/_work/
 tools/blender/textures/
 tools/blender/__pycache__/
 tools/blender/_*_debug.png
+
+# League of Legends assets (downloaded/converted locally, never committed)
+tools/blender/lol/_cache/
+public/models/lol/
