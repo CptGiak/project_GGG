@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { clip, Ease, MASK_UPPER, pose, type Clip, type Pose, type PoseSpec } from '../fighter/Animator';
 import type { Rig } from '../fighter/Rig';
-import type { BodySphere, ClothChain, ClothSheet } from '../fighter/Cloth';
+import type { BodySphere } from '../fighter/Cloth';
 import type { ModelBuilder } from '../fighter/ModelBuilder';
 import type { ChampionAnimSet } from '../fighter/locomotion';
-import type { BladeRef, ChampionVisual } from './types';
+import type { BladeRef, ChampionVisual, ClothLike } from './types';
 import { blinker } from './face';
 import { Beat } from '../core/Beat';
 
@@ -12,7 +12,7 @@ import { Beat } from '../core/Beat';
 export function assembleVisual(args: {
   rig: Rig;
   builder: ModelBuilder;
-  cloth: Array<ClothChain | ClothSheet>;
+  cloth: ClothLike[];
   bodySpheres: BodySphere[];
   blades: BladeRef[];
   gear: { gearL: THREE.Object3D; gearR: THREE.Object3D; nozzle: THREE.Object3D };
@@ -40,7 +40,9 @@ export function assembleVisual(args: {
   };
   args.materials.forEach(boost);
   for (const c of args.cloth) {
-    const mats = (c.mesh.material as THREE.Material | THREE.Material[]);
+    const mesh = (c as { mesh?: THREE.Mesh }).mesh;
+    if (!mesh) continue;
+    const mats = mesh.material as THREE.Material | THREE.Material[];
     (Array.isArray(mats) ? mats : [mats]).forEach(boost);
   }
   const root = new THREE.Group();

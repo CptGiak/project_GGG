@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { Rig } from '../fighter/Rig';
-import type { BodySphere, ClothChain, ClothSheet } from '../fighter/Cloth';
+import type { BodySphere } from '../fighter/Cloth';
+import type { Pose } from '../fighter/Animator';
 import type { ChampionAnimSet } from '../fighter/locomotion';
 
 export interface BladeRef {
@@ -9,6 +10,14 @@ export interface BladeRef {
   colorA: THREE.Color;
   colorB: THREE.Color;
   width?: number;
+}
+
+/** Secondary-motion simulation driven every frame (cloth meshes, bone chains). */
+export interface ClothLike {
+  update(dt: number, wind?: THREE.Vector3): void;
+  reset(): void;
+  /** world-space render objects to add to the scene (none for bone-driven chains) */
+  readonly objects: THREE.Object3D[];
 }
 
 /** Everything the game needs from a champion's 3D model. */
@@ -20,7 +29,7 @@ export interface ChampionVisual {
   pivot: THREE.Group;
   /** objects simulated in world space (cloth); add them to the scene directly */
   worldObjects: THREE.Object3D[];
-  cloth: Array<ClothChain | ClothSheet>;
+  cloth: ClothLike[];
   bodySpheres: BodySphere[];
   blades: BladeRef[];
   /** hook launch points on the ODM gear */
@@ -40,4 +49,9 @@ export interface ChampionVisual {
   /** called every frame for champion-specific idle effects (weapon glow, floating rings...) */
   tick(dt: number, time: number, energy: number): void;
   anims: ChampionAnimSet;
+  /**
+   * Called after the animation pose and the weapon IK are applied to `rig` (before cloth):
+   * skinned models copy the driver skeleton onto their own bones here.
+   */
+  syncPose?(pose: Pose): void;
 }

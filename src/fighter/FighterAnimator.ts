@@ -21,7 +21,7 @@ const POLE_BARE: [number, number, number] = [0.6, -0.3, -0.1];
 
 /**
  * Drives one champion visual: locomotion blend -> action clip -> flinch overlay -> head look ->
- * FK -> weapon-driven IK for both hands -> off-hand grip -> cloth simulation.
+ * FK -> weapon-driven IK for both hands -> off-hand grip -> skinned model sync -> cloth simulation.
  */
 export class FighterAnimator {
   readonly loco: Locomotion;
@@ -113,6 +113,7 @@ export class FighterAnimator {
     applyPose(pose, this.v.rig);
     this.v.root.updateMatrixWorld(true);
     this.solveWeapons();
+    this.v.syncPose?.(pose);
 
     if (simulateCloth) {
       updateBodySpheres(this.v.bodySpheres);

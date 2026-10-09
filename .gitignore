@@ -2,3 +2,9 @@ node_modules
 dist
 *.log
 .DS_Store
+
+# Blender pipeline: intermediate renders / generated textures / caches (tools/blender)
+docs/art/blender/_work/
+tools/blender/textures/
+tools/blender/__pycache__/
+tools/blender/_*_debug.png
