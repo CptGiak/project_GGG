@@ -1,4 +1,5 @@
-import { CHAMPION_IDS, CHAMPIONS, type AbilitySlot, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, LOL_CHAMPIONS, type AbilitySlot, type ChampionId } from '../../shared/champions';
+import { championAvailable } from '../champions';
 import { ARENA_META } from '../../shared/arenas';
 import { MODES, MODE_IDS, type ModeId } from '../../shared/modes';
 import type { PlayerInfo } from '../../shared/protocol';
@@ -102,11 +103,25 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
     list,
     h('div', { class: 'mm-name' }, h('label', {}, 'CODENAME'), input),
     h('div', { class: 'mm-foot' }, 'Q/E RAMPINI · SPAZIO GAS · SHIFT SCATTO', h('br'), 'v0.1 — browser build'),
+    riotNotice(),
     // touch-only devices: the game needs a keyboard and a mouse
     window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
       ? h('div', { class: 'mm-touch' }, 'PROJECT GGG si gioca da computer con tastiera e mouse.')
       : null,
   );
+}
+
+/**
+ * Notice required by Riot's fan-project policy ("Legal Jibber Jabber") while League of Legends
+ * models are in the game (public/models/lol, see tools/blender/build_lol.py).
+ */
+function riotNotice(): HTMLElement | null {
+  const lol = LOL_CHAMPIONS.filter(championAvailable);
+  if (!lol.length) return null;
+  return h('div', { class: 'mm-legal' },
+    `${lol.map((id) => CHAMPIONS[id].name).join(', ')}: modelli e texture da League of Legends © Riot Games. `,
+    'PROJECT GGG isn\'t endorsed by Riot Games and doesn\'t reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. ',
+    'Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.');
 }
 
 export interface SelectCallbacks {
@@ -119,13 +134,14 @@ export interface SelectCallbacks {
 const SLOT_ORDER: AbilitySlot[] = ['atk', 'sec', 'abi', 'ult'];
 
 export function champSelect(mode: 'practice' | 'online', s: Settings, cb: SelectCallbacks): HTMLElement {
-  let champ: ChampionId = s.champ;
+  const ids = CHAMPION_IDS.filter(championAvailable);
+  let champ: ChampionId = ids.includes(s.champ) ? s.champ : ids[0];
   let arena = s.arena;
   let bots = s.bots;
   let diff = s.botDifficulty;
   let gameMode: ModeId = s.mode ?? 'dm';
   const root = h('div', { class: 'screen fade-in' });
-  const cards = h('div', { class: 'cs-cards' });
+  const cards = h('div', { class: ids.length > 4 ? 'cs-cards many' : 'cs-cards' });
   const info = h('div', { class: 'cs-info' });
   const renderInfo = () => {
     const c = CHAMPIONS[champ];
@@ -137,14 +153,14 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       h('div', { class: 'cs-title' }, c.title.toUpperCase()),
       h('div', { class: 'cs-meta' }, h('span', { class: 'role' }, c.role === 'melee' ? 'MISCHIA' : 'DISTANZA'), h('span', {}, `DIFFICOLTÀ ${'★'.repeat(c.difficulty)}${'☆'.repeat(3 - c.difficulty)}`), h('span', {}, `HP ${c.hp}`), h('span', {}, c.weapon.toUpperCase())),
       h('div', { class: 'cs-bio' }, c.bio),
-      h('div', { class: 'cs-abs' }, ...SLOT_ORDER.map((slot) => {
+      h('div', { class: 'cs-abs' }, ...(c.passive ? [h('div', { class: 'cs-ab passive' }, h('div', { class: 'k' }, 'P'), h('div', {}, h('div', { class: 'n' }, c.passive.name.toUpperCase() + '  ·  PASSIVA'), h('div', { class: 'd' }, c.passive.desc)))] : []), ...SLOT_ORDER.map((slot) => {
         const a = c.abilities[slot];
         return h('div', { class: `cs-ab ${slot === 'ult' ? 'ult' : ''}` }, h('div', { class: 'k' }, a.key), h('div', {}, h('div', { class: 'n' }, a.name.toUpperCase() + (a.cooldown >= 1 ? `  ·  ${a.cooldown}s` : slot === 'ult' ? '  ·  ULTIMATE' : '')), h('div', { class: 'd' }, a.desc)));
       })),
     );
     cards.querySelectorAll('.cs-card').forEach((e) => e.classList.toggle('sel', (e as HTMLElement).dataset.id === champ));
   };
-  for (const id of CHAMPION_IDS) {
+  for (const id of ids) {
     const c = CHAMPIONS[id];
     const card = h('div', { class: 'cs-card', 'data-id': id, style: `--c1:${c.colors[0]};--c2:${c.colors[1]}`, onclick: () => {
       if (champ !== id) {
@@ -234,6 +250,9 @@ export function loadingScreen(text: string): HTMLElement {
     'NOVA: Glitch Step marchia i nemici; Phantom Cut li insegue anche fuori mira.',
     'SERA: tieni il raggio sullo stesso bersaglio per il CRESCENDO.',
     'RIFLETTORE: resta da solo nella luce per fare punti a ogni battuta.',
+    'AKALI: nella nube di fumo sei invisibile, ma attaccare ti rivela per un istante.',
+    'QIYANA: Terrashape vicino a un muro incanta l\'anello con la Terra.',
+    'LOCKE: i Chiodi Rituali lasciano cariche che il colpo successivo fa esplodere.',
   ];
   return h('div', { class: 'overlay loading' }, ransom(text, false, 3), h('div', { class: 'bar' }, h('i')), h('div', { class: 'tip' }, tips[Math.floor(Math.random() * tips.length)]));
 }

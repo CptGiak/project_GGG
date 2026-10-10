@@ -698,8 +698,12 @@ export class Match implements MatchContext {
       if (f.punishT > 0 && f.alive) this.vfx.glitchMark(f, '#ffffff', f.champ.colors[1], simDt);
       // flash / spawn protection blink
       const blink = f.spawnProtect > 0 && Math.floor(this.time * 12) % 2 === 0;
-      f.visual.root.visible = f.alive ? !blink || f.spawnProtect <= 0 : f.deadTime < 0.55;
+      // stealth (smoke shroud...): hidden from the viewer, see-through for the stealthed player
+      const hidden = f.isHiddenFrom(this.local);
+      f.visual.root.visible = f.alive ? (!blink || f.spawnProtect <= 0) && !hidden : f.deadTime < 0.55;
+      f.setGhost(f === this.local && f.stealthed);
       for (const o of f.visual.worldObjects) o.visible = f.visual.root.visible;
+      if (hidden) for (const h of f.hooks) h.visual.setVisible(false);
       // death shatter + respawn (practice authority)
       if (!f.alive) {
         if (f.deadTime >= 0.55 && f.deadTime - simDt < 0.55) this.vfx.deathBurst(f.pos, f.champ.colors[0], f.champ.colors[1]);
@@ -710,8 +714,8 @@ export class Match implements MatchContext {
         if (this.opts.mode === 'practice') this.kill(f, null);
       }
       // boost gas trail
-      if (f.boosting && f.alive) this.vfx.gasTrail(f.nozzleWorld(_v), f.vel, f.champ.colors[0], simDt);
-      if (f.alive && f.speed > 24) this.vfx.speedStreaks(f.pos, f.vel, f.champ.colors[0], Math.min(1, (f.speed - 24) / 30));
+      if (f.boosting && f.alive && !hidden) this.vfx.gasTrail(f.nozzleWorld(_v), f.vel, f.champ.colors[0], simDt);
+      if (f.alive && !hidden && f.speed > 24) this.vfx.speedStreaks(f.pos, f.vel, f.champ.colors[0], Math.min(1, (f.speed - 24) / 30));
     }
 
     this.projectiles.update(simDt, this);

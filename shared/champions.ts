@@ -51,10 +51,15 @@ export interface ChampionData {
    * accepts them (a budget of `burst` uses, refilled one per `every` seconds)
    */
   invulnActs?: Record<string, { sec: number; every: number; burst?: number }>;
+  /** always-on effect (shown in champion select) */
+  passive?: { name: string; desc: string };
 }
 
-export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera';
-export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera'];
+export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera' | 'akali' | 'qiyana' | 'locke';
+export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera', 'akali', 'qiyana', 'locke'];
+
+/** champions modelled on League of Legends ones (models from tools/blender/build_lol.py) */
+export const LOL_CHAMPIONS: ChampionId[] = ['akali', 'qiyana', 'locke'];
 
 export const CHAMPIONS: Record<ChampionId, ChampionData> = {
   kaiser: {
@@ -134,6 +139,69 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
       sec: { slot: 'sec', key: 'RMB', name: 'Resonance', desc: 'Canalizza un raggio sonico continuo che rallenta. CRESCENDO: sullo stesso bersaglio il danno sale fino al doppio in 1 s.', cooldown: 2.5, damage: { tick: 22 }, range: 45, maxRate: 14, stream: ['tick'] },
       abi: { slot: 'abi', key: 'F', name: 'Echo Wave', desc: 'Onda sonora circolare: danni, respinta e rallentamento.', cooldown: 9, damage: { wave: 115 }, range: 11, maxRate: 4 },
       ult: { slot: 'ult', key: 'R', name: 'Grand Finale', desc: 'Un riflettore colpisce il punto mirato: colonna di luce devastante e cura per te.', cooldown: 0, damage: { pillar: 400 }, range: 90, maxRate: 4 },
+    },
+  },
+  // ---- League of Legends ports: League kits mapped onto LMB / RMB / F / R ----------------------
+  akali: {
+    id: 'akali',
+    name: 'AKALI',
+    title: 'La Ninja Ribelle',
+    role: 'melee',
+    difficulty: 3,
+    hp: 920,
+    speed: 1.12,
+    ultCharge: 850,
+    colors: ['#a15cff', '#ff6a3d'],
+    weapon: 'Kama e kunai',
+    bio: 'Rapper dei True Damage e assassina senza maestro. Sparisce nel fumo, marchia il bersaglio e chiude il conto prima del ritornello.',
+    invulnActs: { flipDash: { sec: 0.5, every: 9 }, exec: { sec: 0.45, every: 10, burst: 2 } },
+    passive: { name: 'Marchio dell\'Assassina', desc: 'Kunai, shuriken e scatti marchiano i nemici: il colpo seguente sul bersaglio marchiato infligge danni bonus.' },
+    abilities: {
+      atk: { slot: 'atk', key: 'LMB', name: 'Five Point Strike', desc: 'Due fendenti e un colpo rotante, poi un ventaglio di 5 kunai che marchia e rallenta i bersagli lontani. In aria: affondo ascendente.', cooldown: 0, damage: { c1: 42, c2: 42, c3: 50, q: 80, air: 56, mark: 70 }, range: 14, maxRate: 10 },
+      sec: { slot: 'sec', key: 'RMB', name: 'Twilight Shroud', desc: 'Bomba fumogena: per 5 s nella nube sei invisibile e più veloce. Attaccare ti rivela per un istante.', cooldown: 14, damage: {}, range: 0, maxRate: 0 },
+      abi: { slot: 'abi', key: 'F', name: 'Shuriken Flip', desc: 'Capriola all\'indietro lanciando uno shuriken che marchia il primo nemico. Premi di nuovo F entro 3 s per piombargli addosso.', cooldown: 9, damage: { flip1: 70, flip2: 95 }, range: 32, maxRate: 4 },
+      ult: { slot: 'ult', key: 'R', name: 'Perfect Execution', desc: 'Scatto attraverso i nemici. Entro 5 s premi di nuovo R: secondo scatto che giustizia, più danni quanta più vita manca.', cooldown: 0, damage: { ex1: 120, ex2: 330 }, range: 16, maxRate: 6 },
+    },
+  },
+  qiyana: {
+    id: 'qiyana',
+    name: 'QIYANA',
+    title: 'L\'Imperatrice degli Elementi',
+    role: 'melee',
+    difficulty: 3,
+    hp: 980,
+    speed: 1.08,
+    ultCharge: 900,
+    colors: ['#57d9ff', '#ffc94a'],
+    weapon: 'Lama ad anello d\'oro',
+    bio: 'Diva dei True Damage ed erede di Ixaocan. Piega terra, acqua ed erba al ritmo del suo anello d\'oro.',
+    passive: { name: 'Privilegio Reale', desc: 'Il primo colpo su ogni nemico infligge danni bonus (di nuovo dopo 12 s).' },
+    abilities: {
+      atk: { slot: 'atk', key: 'LMB', name: 'Edge of Ixtal', desc: 'Due fendenti, poi l\'Ira degli Elementi: taglio in linea potenziato dall\'elemento. Terra: più danni ai feriti · Acqua: blocca e rallenta · Erba: invisibilità e velocità.', cooldown: 0, damage: { c1: 46, c2: 46, q: 85, qRock: 125, qWater: 85, qGrass: 85, air: 58, royal: 55 }, range: 14, maxRate: 8 },
+      sec: { slot: 'sec', key: 'RMB', name: 'Terrashape', desc: 'Scatto che incanta l\'anello: Terra vicino a un muro, Acqua a terra, Erba in aria. Il colpo seguente è subito l\'Ira degli Elementi.', cooldown: 7, damage: {}, range: 0, maxRate: 0 },
+      abi: { slot: 'abi', key: 'F', name: 'Audacity', desc: 'Balzo sul nemico mirato fino a 18 m, ferendo chi incontra.', cooldown: 8, damage: { e: 100 }, range: 24, maxRate: 4 },
+      ult: { slot: 'ult', key: 'R', name: 'Supreme Display of Talent', desc: 'Onda d\'urto che respinge i nemici; dove incontra muri esplode e stordisce chi è vicino.', cooldown: 0, damage: { wave: 120, burst: 230 }, range: 30, maxRate: 8 },
+    },
+  },
+  locke: {
+    id: 'locke',
+    name: 'LOCKE',
+    title: 'L\'Esorcista Cinereo',
+    role: 'melee',
+    difficulty: 3,
+    hp: 1000,
+    speed: 1.06,
+    ultCharge: 950,
+    colors: ['#3fd6b0', '#7a5cff'],
+    weapon: 'Paletto d\'argento e chiodi',
+    bio: 'Esorcista demaciano. Inchioda i demoni con chiodi rituali e li sigilla per sempre nel suo reliquiario.',
+    invulnActs: { pursuit: { sec: 0.25, every: 9 } },
+    passive: { name: 'Paletto d\'Argento · Ignizione', desc: 'I colpi fanno danni bonus in base alla vita che manca al bersaglio. Sotto il 35% di vita l\'anima si accende: più velocità e cura sui danni inflitti (ogni 30 s).' },
+    abilities: {
+      atk: { slot: 'atk', key: 'LMB', name: 'Exorcism', desc: 'Combo di 4 colpi con paletto e chiodo; ogni colpo consuma i Chiodi Rituali sul bersaglio. In aria: affondo ascendente.', cooldown: 0, damage: { c1: 44, c2: 44, c3: 52, c4: 80, air: 56, stake: 60, nails: 105, dash: 70 }, range: 14, maxRate: 14 },
+      sec: { slot: 'sec', key: 'RMB', name: 'Ritual Nails', desc: 'Lancia una fila di chiodi che rallenta e lascia cariche sul bersaglio (max 3). Rilanciabile 2 volte entro 4 s.', cooldown: 7, damage: { q: 45 }, range: 30, maxRate: 9 },
+      abi: { slot: 'abi', key: 'F', name: 'Ashen Pursuit', desc: 'Teletrasporto fino a 10 m e fendente circolare all\'arrivo. Il colpo seguente entro 4 s ti fa scattare sul bersaglio.', cooldown: 9, damage: { e: 90 }, range: 16, maxRate: 4 },
+      ult: { slot: 'ult', key: 'R', name: 'Purgatory', desc: 'Lancia il reliquiario nel punto mirato: chiodi ad area che feriscono e rallentano. Per 3 s chi scende sotto il 25% di vita nel cerchio viene sigillato. Raccoglilo per recuperare ultimate.', cooldown: 0, damage: { purg: 140, seal: 300 }, range: 36, maxRate: 8 },
     },
   },
 };

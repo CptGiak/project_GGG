@@ -28,6 +28,8 @@ export interface MeleeHit {
   scale?: number;
   /** guard can block it (default true) */
   blockable?: boolean;
+  /** per-target damage scale (executions): overrides `scale` */
+  scaleFn?: (target: Fighter) => number;
 }
 
 /** Shared plumbing for champion kits: cooldowns, actions, melee sweeps, magnetism. */
@@ -158,7 +160,7 @@ export abstract class BaseKit implements Kit {
     const it = f.intent;
     const cos = Math.cos(THREE.MathUtils.degToRad(coneDeg));
     for (const o of m.fighters) {
-      if (o === f || !o.alive) continue;
+      if (o === f || !o.alive || o.isHiddenFrom(f)) continue;
       if (o.team !== 0 && o.team === f.team) continue;
       o.chest(_v);
       const d = _v.distanceTo(f.pos);
@@ -258,13 +260,13 @@ export abstract class BaseKit implements Kit {
         kb.multiplyScalar(1 + COMBAT.momentumKnockback * momentumK(mo));
       }
       const at = _b.clone().lerp(origin, 0.3);
-      m.reportHit(f, o, { slot: h.slot, part: h.part, kb, stun: h.stun, slow: h.slow, at, scale: h.scale, blockable: h.blockable ?? true, crit: this.isBackstab(f, o), mo: mo > COMBAT.momentumMinSpeed ? mo : undefined });
+      m.reportHit(f, o, { slot: h.slot, part: h.part, kb, stun: h.stun, slow: h.slow, at, scale: h.scaleFn ? h.scaleFn(o) : h.scale, blockable: h.blockable ?? true, crit: this.isBackstab(f, o), mo: mo > COMBAT.momentumMinSpeed ? mo : undefined });
       this.onSweepHit(f, o, h, m);
     }
   }
 
-  /** a melee sweep connected (kits hook follow-ups here) */
-  protected onSweepHit(_f: Fighter, _o: Fighter, _h: MeleeHit, _m: MatchContext): void {}
+  /** called for every enemy a melee sweep hits (passives: marks, bonus damage...) */
+  protected onSweepHit(_f: Fighter, _target: Fighter, _h: MeleeHit, _m: MatchContext): void {}
 
   protected isBackstab(f: Fighter, o: Fighter): boolean {
     forwardOf(o.facing, _v);
@@ -298,7 +300,7 @@ export abstract class BaseKit implements Kit {
     let bestF: Fighter | null = null;
     _b.copy(it.aimOrigin).addScaledVector(it.aimDir, max);
     for (const o of m.fighters) {
-      if (o === f || !o.alive) continue;
+      if (o === f || !o.alive || o.isHiddenFrom(f)) continue;
       if (o.team !== 0 && o.team === f.team) continue;
       capsule(o, _c1, _c2);
       const d2 = segSegDist2(it.aimOrigin, _b, _c1, _c2, _v, _w);

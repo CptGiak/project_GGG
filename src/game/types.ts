@@ -155,4 +155,13 @@ export interface Kit {
   onParry?(f: Fighter, attacker: Fighter, m: MatchContext, close: boolean): void;
   /** the champion took part in a takedown (kill, or assist when `kill` is false) */
   onTakedown?(f: Fighter, victim: Fighter, m: MatchContext, kill: boolean): void;
+  /** short HUD badge per slot (recast ready, active element...) */
+  hints?(): Partial<Record<'atk' | 'sec' | 'abi' | 'ult', string>>;
+  /**
+   * Effects that outlive the action (zones, thrown objects, auras): runs every frame for every
+   * fighter, alive or dead, simulated or remote.
+   */
+  tickWorld?(f: Fighter, dt: number, m: MatchContext): void;
+  /** kit-owned scene objects (added to / removed from the scene with the fighter) */
+  readonly sceneObjects?: THREE.Object3D[];
 }

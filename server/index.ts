@@ -54,6 +54,9 @@ const MIME: Record<string, string> = {
   '.json': 'application/json',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
+  '.glb': 'model/gltf-binary',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
 };
 
 async function main(): Promise<void> {

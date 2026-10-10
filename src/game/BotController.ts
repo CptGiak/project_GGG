@@ -83,12 +83,13 @@ export class BotController {
     const nearObj = (o: Fighter) => !!obj && Math.hypot(o.pos.x - obj.c[0], o.pos.z - obj.c[2]) < obj.r + 6 && Math.abs(o.pos.y - obj.c[1]) < obj.h + 4;
     // ---- target selection -------------------------------------------------------------------
     this.retargetT -= dt;
+    if (this.target?.isHiddenFrom(f)) this.target = null; // lost in the smoke
     if (this.retargetT <= 0 || !this.target || !this.target.alive) {
       this.retargetT = 0.6 + Math.random() * 0.5;
       let best: Fighter | null = null;
       let bestD = Infinity;
       for (const o of m.fighters) {
-        if (o === f || !o.alive) continue;
+        if (o === f || !o.alive || o.isHiddenFrom(f)) continue;
         if (o.team !== 0 && o.team === f.team) continue;
         // in the spotlight mode whoever stands in the light is the one to remove
         const d = o.pos.distanceTo(f.pos) * (o.kind === 'local' ? 0.85 : 1) * (this.objFocus && nearObj(o) ? 0.55 : 1);
@@ -259,7 +260,13 @@ export class BotController {
       }
       if (cds.abi <= 0 && dist > 5 && dist < 18 && onTarget && Math.random() < dt * (0.6 + diff)) it.abilityPressed = true;
       if (f.champId === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
+      // League ports: smoke when engaging or hurt, nails as a ranged poke, Terrashape to close in
+      if (f.champId === 'akali' && cds.sec <= 0 && (dist < 6 || f.hp < f.maxHp * 0.5) && Math.random() < dt * 0.5) it.secondaryPressed = true;
+      if (f.champId === 'locke' && cds.sec <= 0 && dist > 4 && dist < 22 && aimDot > 0.995 && Math.random() < dt * 1.2) it.secondaryPressed = true;
+      if (f.champId === 'qiyana' && cds.sec <= 0 && dist > 4 && dist < 14 && Math.random() < dt * 0.6) it.secondaryPressed = true;
       if (f.ult >= 1 && dist < 9 && Math.random() < dt * 0.8) it.ultimatePressed = true;
+      // second cast of a two-part ultimate
+      if (kit.hints?.().ult === 'x2' && dist < 12 && Math.random() < dt * 1.5) it.ultimatePressed = true;
     } else {
       if (onTarget && dist < 90) {
         // Bass Charge: release right as it fills (perfect window 0.95-1.13 s); weak bots overshoot
