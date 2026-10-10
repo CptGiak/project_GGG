@@ -273,7 +273,7 @@ export class Match implements MatchContext {
     this.hud?.ultCutIn(f, f.champ.abilities.ult.name, this.portraits.get(f.champId) ?? null, f !== this.local);
     if (f === this.local) {
       this.audio.play('cutin');
-      this.flash = Math.max(this.flash, 0.6);
+      this.flash = Math.max(this.flash, 0.2);
     } else this.audio.play('cutin', undefined, 0.5);
   }
 
@@ -384,7 +384,7 @@ export class Match implements MatchContext {
     this.hitStop(0.15);
     if (defender === this.local || attacker === this.local) {
       this.hud?.banner('PARRY!', 'parry');
-      this.flash = 0.35;
+      this.flash = Math.max(this.flash, 0.2);
     }
   }
 

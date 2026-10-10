@@ -85,8 +85,9 @@ autorate e le braccia seguono), scie delle lame, inclinazione/banking in volo e 
   rullante della colonna sonora procedurale.
 - **Immagini residue olografiche** delle armi durante i fendenti; durante l'**ultimate** l'arma si
   trasforma in un ologramma gigante (lo spadone di Kaiser diventa una colonna di luce).
-- **Cut-in stile Persona** all'attivazione dell'ultimate (primo piano degli occhi + nome della mossa);
-  le ultimate nemiche mostrano una striscia d'avviso.
+- **Cut-in stile Persona** all'attivazione dell'ultimate (primo piano degli occhi + nome della mossa),
+  compatti e ai bordi dello schermo per non coprire l'azione: i tuoi eventi (ultimate, TAKE DOWN,
+  parata) entrano da sinistra, le ultimate nemiche da destra sotto il kill feed.
 - In volo il corpo segue la tensione delle corde come un pendolo; lasciando i rampini mentre sali parte
   un **salto mortale** (o un avvitamento dopo uno swing laterale), anche nel doppio salto a gas.
 - Reazioni ai colpi **direzionali** (più forti con i colpi pesanti), avvitamento all'indietro quando

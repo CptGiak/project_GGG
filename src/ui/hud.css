@@ -21,6 +21,7 @@
 .feed-item.me { background: var(--red); border-left-color: #fff; }
 .feed-item.me .slash { color: #fff; }
 .feed-item.fade { opacity: 0; transition: opacity 0.4s; }
+.feed-item.note { border-left-color: var(--accent); font-size: 1.6vh; color: rgba(255,255,255,0.85); }
 @keyframes feedIn { from { transform: skewX(-14deg) translateX(20vh); opacity: 0; } to { transform: skewX(-14deg); opacity: 1; } }
 
 /* ---- player panel ------------------------------------------------------------------------ */
@@ -103,28 +104,30 @@
 .plate .pb i { display: block; height: 100%; background: var(--red2); transform-origin: left; }
 
 /* ---- banners, cut-ins, countdown --------------------------------------------------------- */
-.hud-banner { position: absolute; left: 50%; top: 24vh; transform: translateX(-50%); }
-.banner { font-family: var(--font-display); font-size: 5vh; letter-spacing: 0.3vh; padding: 0.4vh 3vh; background: #fff; color: var(--black); transform: skewX(-14deg) rotate(-3deg); box-shadow: 0.8vh 0.8vh 0 var(--red); animation: bannerIn 1.4s cubic-bezier(.2,1.5,.4,1) both; white-space: nowrap; }
-.banner.ult { background: var(--accent); }
-.banner.parry { background: #9fe8ff; box-shadow: 0.8vh 0.8vh 0 var(--black); }
-@keyframes bannerIn { 0% { transform: skewX(-14deg) rotate(-3deg) scale(2.2); opacity: 0; } 12% { transform: skewX(-14deg) rotate(-3deg) scale(1); opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: skewX(-14deg) rotate(-3deg) translateY(-3vh); } }
+/* Announcements live at the screen edges so the centre stays readable: your own events slide in
+   from the left, enemy ultimates from the right under the kill feed, ULTIMATE READY sits on the
+   R card and joins/leaves go to the feed. */
+.hud-banner { position: absolute; left: 2.4vh; top: 58vh; pointer-events: none; }
+.hud-banner.ult-tag { left: auto; top: auto; right: 2.4vh; bottom: 16.6vh; }
+.banner { font-family: var(--font-display); font-size: 3.4vh; letter-spacing: 0.25vh; padding: 0.3vh 2vh; background: #fff; color: var(--black); transform: skewX(-14deg) rotate(-3deg); transform-origin: left center; box-shadow: 0.6vh 0.6vh 0 var(--red); animation: bannerIn 1.5s cubic-bezier(.2,1.5,.4,1) both; white-space: nowrap; }
+.banner.ult { font-size: 2.3vh; padding: 0.2vh 1.4vh; background: var(--accent); transform-origin: right center; }
+.banner.parry { background: #9fe8ff; box-shadow: 0.6vh 0.6vh 0 var(--black); }
+@keyframes bannerIn { 0% { transform: skewX(-14deg) rotate(-3deg) scale(1.7); opacity: 0; } 12% { transform: skewX(-14deg) rotate(-3deg) scale(1); opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: skewX(-14deg) rotate(-3deg) translateY(-2vh); } }
 
 .hud-cutin { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.cutin { position: absolute; left: -10vw; right: -10vw; top: 30vh; height: 26vh; transform: rotate(-8deg); animation: cutBand 1.6s cubic-bezier(.3,1.2,.4,1) both; }
-.cutin .band { position: absolute; inset: 0; background: var(--red); box-shadow: 0 1.2vh 0 var(--black), 0 -1.2vh 0 var(--black); }
-.cutin .band::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, rgba(0,0,0,0.35) 22%, transparent 24%) 0 0 / 1.4vh 1.4vh; mix-blend-mode: multiply; }
-.cutin .stripe { position: absolute; left: 0; right: 0; height: 1.2vh; background: #fff; }
-.cutin .stripe.a { top: 2.2vh; } .cutin .stripe.b { bottom: 2.2vh; }
-.cutin .txt { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; white-space: nowrap; }
-.cutin .big { font-family: var(--font-display); font-size: 12vh; line-height: 0.95; color: #fff; -webkit-text-stroke: 0.5vh var(--black); paint-order: stroke fill; letter-spacing: 0.4vh; animation: cutTxt 1.6s ease-out both; }
-.cutin .sub { display: inline-block; font-family: var(--font-display); font-size: 3vh; background: var(--black); color: #fff; padding: 0.2vh 1.6vh; transform: skewX(-14deg); margin-top: 0.6vh; }
+/* TAKE DOWN: a red tag that punches in from the left edge */
+.cutin { position: absolute; left: 0; top: 43vh; animation: cutTag 1.5s cubic-bezier(.3,1.25,.4,1) both; }
+.cutin .band { position: relative; display: inline-block; background: var(--red); padding: 0.2vh 5vh 0 2.6vh; border-top: 0.5vh solid #fff; border-bottom: 0.5vh solid #fff; clip-path: polygon(0 0, 100% 0, calc(100% - 3.2vh) 100%, 0 100%); filter: drop-shadow(0.6vh 0.6vh 0 var(--black)); }
+.cutin .band::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, rgba(0,0,0,0.35) 22%, transparent 24%) 0 0 / 1vh 1vh; mix-blend-mode: multiply; }
+.cutin .big { position: relative; z-index: 1; font-family: var(--font-display); font-size: 6vh; line-height: 1; color: #fff; -webkit-text-stroke: 0.3vh var(--black); paint-order: stroke fill; letter-spacing: 0.3vh; white-space: nowrap; animation: cutTxt 1.5s ease-out both; }
+.cutin .sub { display: block; width: max-content; font-family: var(--font-display); font-size: 2vh; background: var(--black); color: #fff; padding: 0.2vh 1.4vh; transform: skewX(-14deg); margin: 0.5vh 0 0 2.4vh; white-space: nowrap; }
 .cutin .sub b { color: var(--accent); }
-@keyframes cutBand { 0% { transform: rotate(-8deg) translateX(-120vw); } 18% { transform: rotate(-8deg) translateX(0); } 82% { transform: rotate(-8deg) translateX(0); opacity: 1; } 100% { transform: rotate(-8deg) translateX(120vw); opacity: 0.9; } }
-@keyframes cutTxt { 0% { letter-spacing: 3vh; } 25% { letter-spacing: 0.4vh; } 100% { letter-spacing: 0.6vh; } }
+@keyframes cutTag { 0% { transform: translateX(-105%); } 14% { transform: translateX(1.5vh); } 20% { transform: translateX(0); } 84% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-105%); opacity: 0.6; } }
+@keyframes cutTxt { 0% { letter-spacing: 1.6vh; } 25% { letter-spacing: 0.3vh; } 100% { letter-spacing: 0.4vh; } }
 
 .hud-count { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-family: var(--font-display); color: #fff; -webkit-text-stroke: 0.6vh var(--black); paint-order: stroke fill; text-align: center; }
 .hud-count .n { font-size: 22vh; line-height: 1; animation: countPop 0.9s ease-out both; }
-.hud-count .go { font-size: 14vh; line-height: 1; color: var(--accent); background: var(--black); -webkit-text-stroke: 0; padding: 0 4vh; transform: skewX(-14deg) rotate(-4deg); animation: goPop 1.2s cubic-bezier(.2,1.6,.4,1) both; }
+.hud-count .go { font-size: 9vh; line-height: 1; color: var(--accent); background: var(--black); -webkit-text-stroke: 0; padding: 0 4vh; transform: skewX(-14deg) rotate(-4deg); animation: goPop 1.2s cubic-bezier(.2,1.6,.4,1) both; }
 @keyframes countPop { 0% { transform: scale(2.4) rotate(-10deg); opacity: 0; } 20% { transform: scale(1) rotate(-4deg); opacity: 1; } 100% { transform: scale(0.9) rotate(-4deg); opacity: 0; } }
 @keyframes goPop { 0% { transform: skewX(-14deg) rotate(-4deg) scale(3); opacity: 0; } 15% { transform: skewX(-14deg) rotate(-4deg) scale(1); opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 
@@ -153,26 +156,30 @@
 .pause-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-12deg); font-family: var(--font-display); font-size: 3vh; background: rgba(11,7,9,0.9); padding: 1vh 3vh; border: 0.3vh solid #fff; pointer-events: none; display: none; }
 .pause-hint.on { display: block; }
 
-/* ultimate cut-in (Persona "All-Out" style) */
-.ucut { position: absolute; left: -12vw; right: -12vw; pointer-events: none; }
-.ucut.me { top: 28vh; height: 30vh; transform: rotate(-7deg); animation: ucutIn 1.25s cubic-bezier(.25,1.25,.4,1) both; }
-.ucut.enemy { top: 9vh; height: 13vh; left: 30vw; right: -6vw; transform: rotate(-4deg); animation: ucutEnemy 1.6s cubic-bezier(.25,1.2,.4,1) both; }
-.ucut .band { position: absolute; inset: 0; background: var(--black); overflow: hidden; box-shadow: 0 1.1vh 0 var(--c1), 0 -1.1vh 0 var(--c2), 0 2.2vh 0 var(--black), 0 -2.2vh 0 var(--black); }
-.ucut .band::before { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 0 18%, var(--c2) 18% 19.5%, transparent 19.5% 80%, var(--c1) 80% 81.5%, transparent 81.5%); opacity: 0.9; }
-.ucut .eyes { position: absolute; left: 50%; top: 50%; width: 132vh; height: 44vh; transform: translate(-50%, -50%) rotate(7deg); background-size: cover; background-position: center; animation: ucutEyes 1.25s ease-out both; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 16%, #000 84%, transparent 100%); }
-.ucut.enemy .eyes { width: 60vh; height: 20vh; left: 36%; transform: translate(-50%, -50%) rotate(4deg); filter: saturate(1.3) contrast(1.1); }
-.ucut .shade { position: absolute; inset: 0; background: radial-gradient(circle, rgba(0,0,0,0.28) 22%, transparent 24%) 0 0 / 1.2vh 1.2vh; mix-blend-mode: multiply; }
-.ucut .txt { position: absolute; right: 16vw; bottom: -1vh; text-align: right; transform: skewX(-12deg); }
-.ucut.enemy .txt { right: 9vw; bottom: 0.4vh; }
-.ucut .who { display: inline-block; font-family: var(--font-display); font-size: 3vh; color: var(--black); background: #fff; padding: 0 1.4vh; letter-spacing: 0.3vh; }
+/* ultimate cut-in (Persona "All-Out" style), compact: a slanted card with the champion's eyes
+   that slides in from the left edge (yours) or the right edge under the kill feed (enemies) */
+.ucut { position: absolute; pointer-events: none; width: min(66vh, 40vw); height: 14vh; }
+.ucut.me { left: 0; top: 19vh; animation: ucutL 1.2s cubic-bezier(.25,1.2,.4,1) both; }
+.ucut.enemy { right: 0; top: 22vh; width: min(52vh, 32vw); height: 10vh; animation: ucutR 1.5s cubic-bezier(.25,1.2,.4,1) both; }
+.ucut .edge, .ucut .band { position: absolute; inset: 0; clip-path: polygon(0 0, 100% 0, calc(100% - 4vh) 100%, 0 100%); }
+.ucut.enemy .edge, .ucut.enemy .band { clip-path: polygon(4vh 0, 100% 0, 100% 100%, 0 100%); }
+.ucut .edge { background: linear-gradient(90deg, var(--c2), var(--c1)); transform: translate(1vh, 1vh); }
+.ucut.enemy .edge { background: linear-gradient(90deg, var(--red), var(--c1)); transform: translate(-1vh, 1vh); }
+.ucut .band { background: var(--black); overflow: hidden; border-top: 0.45vh solid var(--c1); }
+.ucut .eyes { position: absolute; inset: -12% -4%; background-size: cover; background-position: center 46%; animation: ucutEyes 1.2s ease-out both; -webkit-mask-image: linear-gradient(90deg, #000 0, #000 58%, transparent 97%); mask-image: linear-gradient(90deg, #000 0, #000 58%, transparent 97%); }
+.ucut.enemy .eyes { -webkit-mask-image: linear-gradient(270deg, #000 0, #000 58%, transparent 97%); mask-image: linear-gradient(270deg, #000 0, #000 58%, transparent 97%); }
+.ucut .shade { position: absolute; inset: 0; background: radial-gradient(circle, rgba(0,0,0,0.28) 22%, transparent 24%) 0 0 / 1vh 1vh; mix-blend-mode: multiply; }
+.ucut .txt { position: absolute; left: 2.6vh; top: calc(100% - 3.2vh); transform: skewX(-12deg); white-space: nowrap; }
+.ucut.enemy .txt { left: auto; right: 2.6vh; top: calc(100% - 2.4vh); text-align: right; }
+.ucut .who { display: inline-block; font-family: var(--font-display); font-size: 1.9vh; color: var(--black); background: #fff; padding: 0 1vh; letter-spacing: 0.2vh; }
 .ucut .who span { color: var(--red); }
-.ucut .move { font-family: var(--font-display); font-size: 9.5vh; line-height: 0.9; color: #fff; -webkit-text-stroke: 0.45vh var(--black); paint-order: stroke fill; letter-spacing: 0.3vh; text-shadow: 0.7vh 0.7vh 0 var(--red); animation: ucutTxt 1.25s ease-out both; }
-.ucut.enemy .who { font-size: 2vh; }
-.ucut.enemy .move { font-size: 5vh; text-shadow: 0.4vh 0.4vh 0 var(--red); }
-@keyframes ucutIn { 0% { transform: rotate(-7deg) translateX(120vw); } 14% { transform: rotate(-7deg) translateX(-1.5vw); } 20% { transform: rotate(-7deg) translateX(0); } 84% { transform: rotate(-7deg) translateX(0); opacity: 1; } 100% { transform: rotate(-7deg) translateX(-130vw); opacity: 0.8; } }
-@keyframes ucutEnemy { 0% { transform: rotate(-4deg) translateX(80vw); } 15% { transform: rotate(-4deg) translateX(0); } 85% { transform: rotate(-4deg) translateX(0); opacity: 1; } 100% { transform: rotate(-4deg) translateX(80vw); opacity: 0; } }
-@keyframes ucutEyes { 0% { transform: translate(-42%, -50%) rotate(7deg) scale(1.12); filter: brightness(2.2); } 22% { filter: brightness(1); } 100% { transform: translate(-50%, -50%) rotate(7deg) scale(1.02); } }
-@keyframes ucutTxt { 0% { letter-spacing: 2.6vh; opacity: 0; } 18% { letter-spacing: 0.3vh; opacity: 1; } 100% { letter-spacing: 0.5vh; } }
+.ucut .move { font-family: var(--font-display); font-size: 5.2vh; line-height: 0.95; color: #fff; -webkit-text-stroke: 0.3vh var(--black); paint-order: stroke fill; letter-spacing: 0.25vh; text-shadow: 0.45vh 0.45vh 0 var(--red); animation: ucutTxt 1.2s ease-out both; }
+.ucut.enemy .who { font-size: 1.6vh; }
+.ucut.enemy .move { font-size: 3.6vh; text-shadow: 0.35vh 0.35vh 0 var(--red); }
+@keyframes ucutL { 0% { transform: translateX(-105%); } 14% { transform: translateX(1.5vh); } 20% { transform: translateX(0); } 84% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-105%); opacity: 0.7; } }
+@keyframes ucutR { 0% { transform: translateX(105%); } 14% { transform: translateX(-1.5vh); } 20% { transform: translateX(0); } 86% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(105%); opacity: 0.7; } }
+@keyframes ucutEyes { 0% { transform: scale(1.14) translateX(-3%); filter: brightness(2.2); } 22% { filter: brightness(1); } 100% { transform: scale(1.02); } }
+@keyframes ucutTxt { 0% { letter-spacing: 1.6vh; opacity: 0; } 18% { letter-spacing: 0.25vh; opacity: 1; } 100% { letter-spacing: 0.4vh; } }
 
 /* empty-tank feedback */
 .gas-bar.denied { animation: gasDenied 0.45s ease-out; }

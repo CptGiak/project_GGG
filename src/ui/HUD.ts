@@ -47,6 +47,8 @@ export class HUD {
   private plates = new Map<string, { e: HTMLDivElement; bar: HTMLElement; lastHp: number }>();
   private floats: FloatNum[] = [];
   private bannerBox: HTMLDivElement;
+  /** ULTIMATE READY tag, sitting on the R card */
+  private ultTag: HTMLDivElement;
   private cutin: HTMLDivElement;
   private count: HTMLDivElement;
   private death: HTMLDivElement;
@@ -130,6 +132,7 @@ export class HUD {
     this.floatLayer = el('div', 'hud-float');
     this.plateLayer = el('div', 'hud-plates');
     this.bannerBox = el('div', 'hud-banner');
+    this.ultTag = el('div', 'hud-banner ult-tag');
     this.cutin = el('div', 'hud-cutin');
     this.count = el('div', 'hud-count');
     this.death = el('div', 'hud-death', '<div class="ko">KNOCKED OUT</div><div class="by"></div><div class="rs"></div>');
@@ -137,7 +140,7 @@ export class HUD {
     this.board = el('div', 'hud-board');
     this.hint = el('div', 'hud-hint', '<b>Q / E</b> rampini &nbsp;·&nbsp; <b>SPAZIO</b> gas &nbsp;·&nbsp; <b>SHIFT</b> scatto &nbsp;·&nbsp; <b>LMB/RMB/F/R</b> abilità');
     this.pauseHint = el('div', 'pause-hint', 'CLICCA PER COMBATTERE');
-    this.root.append(this.plateLayer, this.floatLayer, top, this.feed, player, crossWrap, abWrap, this.bannerBox, this.cutin, this.count, this.death, this.board, this.hint, this.pauseHint);
+    this.root.append(this.plateLayer, this.floatLayer, top, this.feed, player, crossWrap, abWrap, this.bannerBox, this.ultTag, this.cutin, this.count, this.death, this.board, this.hint, this.pauseHint);
     container.append(this.root);
     window.setTimeout(() => this.hint.classList.add('off'), 9000);
   }
@@ -363,12 +366,28 @@ export class HUD {
     this.hitm.classList.add('show');
   }
 
-  banner(text: string, kind: string): void {
+  /** short callouts kept off the centre: 'ult' sits on the R card, 'join' goes to the feed */
+  banner(text: string, kind: 'ult' | 'parry' | 'join'): void {
+    if (kind === 'join') {
+      this.feedNote(text);
+      return;
+    }
+    const box = kind === 'ult' ? this.ultTag : this.bannerBox;
     const b = el('div', `banner ${kind}`);
     b.textContent = text;
-    this.bannerBox.innerHTML = '';
-    this.bannerBox.append(b);
+    box.innerHTML = '';
+    box.append(b);
     window.setTimeout(() => b.remove(), 1500);
+  }
+
+  private feedNote(text: string): void {
+    const item = el('div', 'feed-item note');
+    item.append(el('span'));
+    (item.firstChild as HTMLElement).textContent = text;
+    this.feed.prepend(item);
+    while (this.feed.children.length > 5) this.feed.lastElementChild?.remove();
+    window.setTimeout(() => item.classList.add('fade'), 4000);
+    window.setTimeout(() => item.remove(), 4500);
   }
 
   countdown(n: number): void {
@@ -389,25 +408,29 @@ export class HUD {
     window.setTimeout(() => item.remove(), 5500);
   }
 
+  /** TAKE DOWN tag: punches in from the left edge, clear of the crosshair */
   killCutIn(me: Fighter, victim: Fighter): void {
-    const c = el('div', 'cutin', `<div class="band"></div><div class="stripe a"></div><div class="stripe b"></div><div class="txt"><div class="big">TAKE DOWN!</div><div class="sub">${esc(me.champ.name)} ✕ <b>${esc(victim.name)}</b></div></div>`);
-    this.cutin.innerHTML = '';
+    const c = el('div', 'cutin', `<div class="band"><div class="big">TAKE DOWN!</div></div><div class="sub">${esc(me.champ.name)} ✕ <b>${esc(victim.name)}</b></div>`);
+    this.cutin.querySelectorAll('.cutin').forEach((n) => n.remove());
     this.cutin.append(c);
-    window.setTimeout(() => c.remove(), 1700);
+    window.setTimeout(() => c.remove(), 1500);
   }
 
   /**
-   * Persona-style ultimate cut-in: a skewed band slams across the screen with the champion's
-   * eyes and the move name. Enemy ultimates get a smaller warning strip at the top.
+   * Persona-style ultimate cut-in, kept compact and off-centre: a slanted card with the
+   * champion's eyes and the move name slides in from the left edge for your own ultimate, and a
+   * smaller warning card from the right edge (under the kill feed) for enemies.
    */
   ultCutIn(f: Fighter, move: string, portrait: string | null, enemy: boolean): void {
     const [c1, c2] = f.champ.colors;
     const eyes = portrait ? `<div class="eyes" style="background-image:url(${portrait})"></div>` : '';
-    const c = el('div', `ucut ${enemy ? 'enemy' : 'me'}`, `<div class="band" style="--c1:${c1};--c2:${c2}">${eyes}<div class="shade"></div></div><div class="txt"><div class="who">${esc(f.champ.name)}${enemy ? ` · <span>${esc(f.name)}</span>` : ''}</div><div class="move">${esc(move.toUpperCase())}</div></div>`);
-    if (!enemy) this.cutin.innerHTML = '';
-    else this.cutin.querySelectorAll('.ucut.enemy').forEach((n) => n.remove());
+    const side = enemy ? 'enemy' : 'me';
+    const c = el('div', `ucut ${side}`, `<div class="edge"></div><div class="band">${eyes}<div class="shade"></div></div><div class="txt"><div class="who">${esc(f.champ.name)}${enemy ? ` · <span>${esc(f.name)}</span>` : ''}</div><div class="move">${esc(move.toUpperCase())}</div></div>`);
+    c.style.setProperty('--c1', c1);
+    c.style.setProperty('--c2', c2);
+    this.cutin.querySelectorAll(`.ucut.${side}`).forEach((n) => n.remove());
     this.cutin.append(c);
-    window.setTimeout(() => c.remove(), enemy ? 1600 : 1250);
+    window.setTimeout(() => c.remove(), enemy ? 1500 : 1200);
   }
 
   deathScreen(killer: Fighter | null): void {
