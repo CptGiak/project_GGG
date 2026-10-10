@@ -305,6 +305,12 @@ const SFX: Record<string, SfxFn> = {
     a.osc('square', 1600, 200, t, 0.15, o, 0.1);
     a.noiseHit(t, 0.12, o, 0.3, 'bandpass', 5000, 800, 3);
   },
+  hookDry: (a, o, t) => {
+    // empty launcher: a dry mechanical click and a short hiss
+    a.osc('square', 180, 90, t, 0.05, o, 0.18);
+    a.osc('square', 140, 70, t + 0.06, 0.05, o, 0.14);
+    a.noiseHit(t + 0.02, 0.12, o, 0.12, 'highpass', 4000, 4000);
+  },
   cutin: (a, o, t) => {
     a.noiseHit(t, 0.35, o, 0.5, 'bandpass', 900, 7000, 1.4, 0.01);
     for (const [f, d] of [[523, 0], [659, 0.02], [784, 0.04], [1046, 0.06]] as const) a.osc('sawtooth', f, f, t + 0.08 + d, 0.45, o, 0.09, 0.005);

@@ -173,3 +173,9 @@
 @keyframes ucutEnemy { 0% { transform: rotate(-4deg) translateX(80vw); } 15% { transform: rotate(-4deg) translateX(0); } 85% { transform: rotate(-4deg) translateX(0); opacity: 1; } 100% { transform: rotate(-4deg) translateX(80vw); opacity: 0; } }
 @keyframes ucutEyes { 0% { transform: translate(-42%, -50%) rotate(7deg) scale(1.12); filter: brightness(2.2); } 22% { filter: brightness(1); } 100% { transform: translate(-50%, -50%) rotate(7deg) scale(1.02); } }
 @keyframes ucutTxt { 0% { letter-spacing: 2.6vh; opacity: 0; } 18% { letter-spacing: 0.3vh; opacity: 1; } 100% { letter-spacing: 0.5vh; } }
+
+/* empty-tank feedback */
+.gas-bar.denied { animation: gasDenied 0.45s ease-out; }
+.gas-bar.denied i { background: #ff2440 !important; opacity: 0.9; }
+@keyframes gasDenied { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-0.6vh); } 40% { transform: translateX(0.6vh); } 60% { transform: translateX(-0.4vh); } 80% { transform: translateX(0.3vh); } }
+.hook-ind.nogas { color: #ff2440; opacity: 0.55; }

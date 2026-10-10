@@ -191,6 +191,7 @@ export class HUD {
       this.lastGas = gas;
     }
     this.gasBar.classList.toggle('boost', f.boosting);
+    this.gasBar.classList.toggle('denied', f.gasDenied > 0);
     // hooks
     this.hookPreviewT -= dt;
     if (this.hookPreviewT <= 0) {
@@ -201,7 +202,8 @@ export class HUD {
       const s = f.hooks[i].state;
       ind.classList.toggle('att', s === 'attached');
       ind.classList.toggle('fly', s === 'flying');
-      ind.classList.toggle('can', s === 'idle' && this.canHook);
+      ind.classList.toggle('can', s === 'idle' && this.canHook && f.gas >= MOVE.hookCost);
+      ind.classList.toggle('nogas', s === 'idle' && f.gas < MOVE.hookCost);
     }
     // crosshair on enemy
     const kit = f.kit;

@@ -61,6 +61,10 @@ export class Fighter {
   aimYaw = 0;
   aimPitch = 0;
   gas: number = MOVE.gasMax;
+  /** seconds until the gas tank starts refilling again */
+  private gasWait = 0;
+  /** tried to fire a hook with an empty tank (HUD feedback timer) */
+  gasDenied = 0;
   boosting = false;
   dashTime = 0;
   dashCd = 0;
@@ -183,6 +187,8 @@ export class Fighter {
     this.hp = this.maxHp;
     this.alive = true;
     this.gas = MOVE.gasMax;
+    this.gasWait = 0;
+    this.gasDenied = 0;
     this.stun = this.slow = this.dashTime = 0;
     this.spawnProtect = MATCH_RULES.spawnProtectSec;
     this.hooks.forEach((h) => h.reset());
@@ -300,6 +306,7 @@ export class Fighter {
     this.flipT = Math.max(0, this.flipT - dt);
     this.flipCd = Math.max(0, this.flipCd - dt);
     this.tumbleT = Math.max(0, this.tumbleT - dt);
+    this.gasDenied = Math.max(0, this.gasDenied - dt);
     if (this.wallRun > 0) this.wallRunTotal += dt;
     else if (this.hooked) this.wallRunTotal = 0;
     this.wallRun = Math.max(0, this.wallRun - dt);
@@ -350,7 +357,7 @@ export class Fighter {
         m.audio.play('wallkick', this.pos, 0.6);
       } else if (this.airJumps > 0 && this.gas >= MOVE.airJumpCost) {
         this.airJumps--;
-        this.gas -= MOVE.airJumpCost;
+        this.spendGas(MOVE.airJumpCost);
         this.vel.y = Math.max(this.vel.y * 0.3, 0) + MOVE.airJumpVel;
         this.vel.addScaledVector(wish, 3);
         m.vfx.gasBurst(this.nozzleWorld(_c), this.champ.colors[0]);
@@ -447,10 +454,11 @@ export class Fighter {
 
     // gas
     if (this.boosting) {
-      this.gas = Math.max(0, this.gas - MOVE.boostCost * dt);
+      this.spendGas(MOVE.boostCost * dt);
       if (this.gas <= 0) this.boosting = false;
     } else if (this.dashTime <= 0) {
-      this.gas = Math.min(MOVE.gasMax, this.gas + (this.grounded ? MOVE.gasRegenGround : MOVE.gasRegenAir) * dt);
+      if (this.gasWait > 0) this.gasWait = Math.max(0, this.gasWait - dt);
+      else this.gas = Math.min(MOVE.gasMax, this.gas + (this.grounded ? MOVE.gasRegenGround : MOVE.gasRegenAir) * dt);
     }
 
     // world bounds
@@ -567,7 +575,7 @@ export class Fighter {
   }
 
   private startDash(dir: THREE.Vector3, m: MatchContext): void {
-    this.gas -= MOVE.dashCost;
+    this.spendGas(MOVE.dashCost);
     this.dashTime = MOVE.dashTime;
     this.dashCd = MOVE.dashCooldown;
     this.invuln = Math.max(this.invuln, MOVE.dashIFrames);
@@ -600,6 +608,13 @@ export class Fighter {
     const hk = this.hooks[i];
     this.gearWorld(i, _g);
     if (pressed && !this.ctrl.noHooks && (hk.state === 'idle' || hk.state === 'retract')) {
+      if (this.gas < MOVE.hookCost) {
+        // empty tank: the launcher just clicks
+        if (this.gasDenied <= 0) m.audio.play('hookDry', this.pos, 0.8);
+        this.gasDenied = 0.45;
+        return;
+      }
+      this.spendGas(MOVE.hookCost);
       this.fireHook(i, m);
       return;
     }
@@ -678,6 +693,11 @@ export class Fighter {
       default:
         break;
     }
+  }
+
+  private spendGas(amount: number): void {
+    this.gas = Math.max(0, this.gas - amount);
+    this.gasWait = MOVE.gasRegenDelay;
   }
 
   private fireHook(i: number, m: MatchContext): void {

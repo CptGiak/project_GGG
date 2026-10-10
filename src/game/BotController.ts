@@ -240,6 +240,12 @@ export class BotController {
       it.move.set(0, 1);
       return;
     }
+    // hooks cost gas: keep a small reserve for dashes, otherwise run
+    if (f.gas < MOVE.hookCost + 12) {
+      this.hookTimer = 0.6;
+      it.move.set(0, 1);
+      return;
+    }
     // choose an anchor: aim above and beyond the target
     const side = Math.random() < 0.5 ? 0 : 1;
     const goal = _v.copy(t.pos).add(_w.set(0, 16 + Math.random() * 10, 0));

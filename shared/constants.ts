@@ -29,12 +29,17 @@ export const MOVE = {
   dashIFrames: 0.14,
   dashCooldown: 0.55,
 
-  gasMax: 100,
+  // gas: a big tank that refills slowly, so hooks, boosts and dashes are a resource to manage
+  gasMax: 200,
+  /** per hook shot (Q / E); no gas, no hook */
+  hookCost: 10,
   boostCost: 20,
   dashCost: 18,
   airJumpCost: 14,
-  gasRegenGround: 32,
-  gasRegenAir: 9,
+  gasRegenGround: 14,
+  gasRegenAir: 4,
+  /** seconds after the last spend before the tank starts refilling */
+  gasRegenDelay: 1.0,
 
   capsuleRadius: 0.4,
   capsuleHeights: [0.4, 0.95, 1.5] as const,

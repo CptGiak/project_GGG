@@ -39,7 +39,7 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 |---|---|
 | **W A S D** | movimento / sterzata in volo (orbita attorno al punto d'aggancio) |
 | **Mouse** | mira (clicca nella finestra per bloccare il cursore) |
-| **Q / E** | rampino sinistro / destro — tieni premuto per restare agganciato |
+| **Q / E** | rampino sinistro / destro — tieni premuto per restare agganciato (ogni lancio costa gas) |
 | **SPAZIO** | salto · agganciato: **boost a gas** · in aria: doppio salto a gas |
 | **SHIFT** | scatto con frame di invulnerabilità |
 | **LMB** | attacco base / fuoco |
@@ -56,7 +56,9 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 - Sbattendo contro un muro ad alta velocità mentre premi **W** ci **corri sopra** (wall-run) e scavalchi i tetti.
 - Puoi agganciare anche **i nemici** (puntali e premi Q/E) per raggiungerli.
 - Atterrando ad alta velocità esegui in automatico una **capriola** che conserva lo slancio.
-- Il gas si ricarica, più velocemente a terra.
+- Il serbatoio del gas è grande ma si ricarica lentamente (più veloce a terra), e solo dopo un secondo
+  dall'ultimo consumo. **Ogni lancio di rampino costa gas**: col serbatoio vuoto Q/E fanno solo *clic*,
+  e dovrai correre o cadere finché non si ricarica.
 
 ---
 
