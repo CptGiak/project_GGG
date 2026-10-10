@@ -1,0 +1,14 @@
+# Render Blueprint: one free web service that serves the game and the PvP WebSocket on the same URL.
+# Dashboard -> New -> Blueprint -> pick this repo. The free plan sleeps after ~15 min idle
+# (first visit then takes ~1 min to wake up).
+services:
+  - type: web
+    name: project-ggg
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

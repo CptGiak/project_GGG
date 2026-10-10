@@ -2,6 +2,7 @@ import { CHAMPION_IDS, CHAMPIONS, type AbilitySlot, type ChampionId } from '../.
 import { ARENA_META } from '../../shared/arenas';
 import type { PlayerInfo } from '../../shared/protocol';
 import type { Settings } from '../core/Settings';
+import { NetClient } from '../net/NetClient';
 
 type Attrs = Record<string, string | number | boolean | ((e: Event) => void) | undefined>;
 
@@ -44,8 +45,36 @@ export interface MenuCallbacks {
   sfx(name: string): void;
 }
 
-/** static builds (no game server alongside, e.g. a hosted demo page) offer practice only */
-export const STATIC_BUILD = import.meta.env.VITE_STATIC === '1';
+/** static builds (no game server alongside, e.g. a hosted demo page) offer practice only, unless
+ *  they are pointed at a remote game server (VITE_SERVER_URL or ?server=) */
+export const STATIC_BUILD = import.meta.env.VITE_STATIC === '1' && !NetClient.customServer();
+
+/** link that drops a friend straight into the given room */
+export function inviteLink(room: string): string {
+  const u = new URL(location.href);
+  u.search = '';
+  u.hash = '';
+  const server = new URLSearchParams(location.search).get('server');
+  if (server) u.searchParams.set('server', server);
+  u.searchParams.set('room', room);
+  return u.toString();
+}
+
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // clipboard API refused (insecure origin / embedded page): fall back to a hidden textarea
+    const ta = h('textarea', { style: 'position:fixed;opacity:0' }) as HTMLTextAreaElement;
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
 
 export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
   const items: Array<[string, string, () => void]> = [
@@ -198,12 +227,13 @@ export function toast(container: HTMLElement, msg: string): void {
   window.setTimeout(() => t.remove(), 4100);
 }
 
-export function pauseMenu(opts: { online: boolean; room?: string; onResume(): void; onChampion(): void; onSettings(): void; onQuit(): void; sfx(n: string): void }): HTMLElement {
+export function pauseMenu(opts: { online: boolean; room?: string; onInvite?(): void; onResume(): void; onChampion(): void; onSettings(): void; onQuit(): void; sfx(n: string): void }): HTMLElement {
   const b = (label: string, cls: string, fn: () => void) => h('div', { class: `btn ${cls}`, onclick: () => { opts.sfx('uiSelect'); fn(); } }, h('span', {}, label));
   return h('div', { class: 'overlay pause' }, h('div', { class: 'panel' },
     h('h2', {}, 'PAUSA'),
     opts.online && opts.room ? h('div', { class: 'info' }, 'STANZA ', h('b', {}, opts.room), ' — condividi il codice con gli amici') : null,
     b('RIPRENDI', 'red', opts.onResume),
+    opts.online && opts.room && opts.onInvite ? b('COPIA LINK INVITO', 'dark', opts.onInvite) : null,
     b(opts.online ? 'CAMBIA CAMPIONE (al respawn)' : 'CAMBIA CAMPIONE', 'dark', opts.onChampion),
     b('IMPOSTAZIONI', 'dark', opts.onSettings),
     b('ESCI AL MENU', 'dark', opts.onQuit),

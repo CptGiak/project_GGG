@@ -8,7 +8,7 @@ import { arenaMeta } from '../shared/arenas';
 import type { PlayerInfo } from '../shared/protocol';
 import { HUD } from './ui/HUD';
 import { MenuStage } from './ui/MenuStage';
-import { champSelect, controlsPanel, h, loadingScreen, mainMenu, pauseMenu, resultsScreen, settingsPanel, toast, STATIC_BUILD } from './ui/Menus';
+import { champSelect, controlsPanel, h, loadingScreen, mainMenu, pauseMenu, resultsScreen, settingsPanel, toast, STATIC_BUILD, inviteLink, copyText } from './ui/Menus';
 import { OnlineSession } from './net/OnlineSession';
 import { Beat } from './core/Beat';
 
@@ -75,6 +75,10 @@ export class App {
         bots: Number(this.params.get('bots') ?? 1),
         difficulty: Number(this.params.get('diff') ?? 0.5),
       });
+    } else if (this.params.get('room') && !STATIC_BUILD) {
+      // invite link: land on champion select with the friend's room filled in
+      this.settings.room = this.params.get('room')!.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+      this.showSelect('online');
     } else {
       this.showMenu();
     }
@@ -318,12 +322,20 @@ export class App {
     this.setOverlay(pauseMenu({
       online: this.mode === 'online',
       room: this.session?.room,
+      onInvite: () => void this.copyInvite(),
       onResume: () => this.resume(),
       onChampion: () => this.pickChampionInMatch(),
       onSettings: () => this.showSettings(() => this.pause()),
       onQuit: () => this.showMenu(),
       sfx: (n) => this.audio.play(n),
     }));
+  }
+
+  private async copyInvite(): Promise<void> {
+    const room = this.session?.room;
+    if (!room) return;
+    const ok = await copyText(inviteLink(room));
+    toast(this.ui, ok ? 'LINK COPIATO: INCOLLALO SU DISCORD' : inviteLink(room));
   }
 
   private resume(): void {

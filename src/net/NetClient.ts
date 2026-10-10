@@ -11,9 +11,25 @@ export class NetClient {
   private pingTimer: number | null = null;
   onClose: ((reason: string) => void) | null = null;
 
+  /**
+   * Game server address: `?server=` in the page URL, else VITE_SERVER_URL at build time, else the
+   * host serving the page. Accepts http(s)://, ws(s):// or a bare host; `/ws` is appended if missing.
+   */
   static defaultUrl(): string {
+    const custom = NetClient.customServer();
+    if (custom) return custom;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}/ws`;
+  }
+
+  static customServer(): string | null {
+    const raw = (new URLSearchParams(location.search).get('server') ?? import.meta.env.VITE_SERVER_URL ?? '').trim();
+    if (!raw) return null;
+    let url = raw.replace(/^http(s?):\/\//, 'ws$1://');
+    if (!/^wss?:\/\//.test(url)) url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${url}`;
+    url = url.replace(/\/+$/, '');
+    if (!url.endsWith('/ws')) url += '/ws';
+    return url;
   }
 
   connect(name: string, champ: ChampionId, room?: string, url = NetClient.defaultUrl()): Promise<Extract<S2C, { t: 'welcome' }>> {
@@ -63,7 +79,7 @@ export class NetClient {
         if (!settled) {
           settled = true;
           window.clearTimeout(timeout);
-          reject(new Error('Impossibile connettersi al server PvP. Avvia il gioco con "npm run dev".'));
+          reject(new Error('Impossibile connettersi al server PvP. Il server è acceso? (npm run dev / npm run share)'));
         }
       };
       ws.onclose = () => {

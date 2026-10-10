@@ -28,6 +28,30 @@ npm run build        # compila il client in ./dist
 npm start            # serve ./dist + WebSocket PvP (porta 8080, configurabile con PORT=...)
 ```
 
+### Giocare con gli amici (Discord)
+
+**Subito, dal tuo PC** — nessun account, nessuna porta da aprire:
+
+```bash
+npm install
+npm run share        # build + server + tunnel Cloudflare gratuito
+```
+
+Nel terminale compare un link `https://xxxx.trycloudflare.com`: mandalo su Discord. Tutti scelgono
+**ONLINE PVP** e inseriscono lo stesso codice **STANZA** (oppure *Partita veloce*). In partita,
+**ESC → COPIA LINK INVITO** copia un link che porta gli amici dritti nella tua stanza
+(`...?room=CODICE`). Il link resta valido finché il terminale è aperto; tu ospiti il server, quindi
+gli altri giocano col ping verso il tuo PC.
+
+**Server sempre acceso** — il server serve gioco e WebSocket sullo stesso URL:
+- **Render** (gratis): *New → Blueprint* e scegli questo repo; usa `render.yaml`. Il piano free va in
+  pausa dopo ~15 minuti di inattività (la prima apertura impiega ~1 minuto).
+- **Docker** (Fly.io, Railway, VPS): `Dockerfile` incluso, ascolta su `$PORT` (default 8080).
+
+Una build statica (`VITE_STATIC=1`) può puntare a un server remoto con
+`VITE_SERVER_URL=https://mio-server.onrender.com` in fase di build, oppure aggiungendo
+`?server=mio-server.onrender.com` all'indirizzo della pagina.
+
 Avvio diretto di una partita di test: `http://localhost:5173/?play&champ=nova&arena=stage&bots=3`
 Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&anims=idle,run@0.2,atk1@0.13`
 
@@ -125,5 +149,5 @@ I colpi sono rilevati dall'attaccante ma **validati dal server** (abilità/parte
 distanza plausibile, guardia/parata): il client non invia mai numeri di danno.
 
 ## Roadmap
-- nuovi campioni e skin, modalità a squadre, matchmaking pubblico su server dedicato
+- nuovi campioni e skin, modalità a squadre, matchmaking pubblico
 - rebinding dei tasti, supporto gamepad, ottimizzazioni per GPU integrate
