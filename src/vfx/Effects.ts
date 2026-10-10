@@ -168,7 +168,9 @@ export class Effects {
     r.r1 = r1;
     r.mesh.visible = true;
     r.mesh.position.copy(pos);
-    r.mesh.quaternion.setFromUnitVectors(_u.set(0, 0, 1), _v.copy(normal).normalize());
+    // read the normal before touching _u: callers often pass _u itself
+    _v.copy(normal).normalize();
+    r.mesh.quaternion.setFromUnitVectors(_u.set(0, 0, 1), _v);
     r.mesh.scale.setScalar(r0);
     r.mat.uniforms.uColor.value.set(color);
   }
@@ -349,6 +351,46 @@ export class Effects {
     }
     this.ring(_w.copy(pos).setY(pos.y + 0.05), _u.set(0, 1, 0), colorA, 0.3, 3.5, 0.6);
     this.add.emit({ pos: center.clone(), life: 0.3, size: 0.8, size1: 3.0, color: colorB, shape: Shape.glow });
+  }
+
+  /** perfect dodge: a glitchy afterimage left where the hit landed, rings and a shimmer */
+  dodgeFlash(chest: THREE.Vector3, colorA: THREE.ColorRepresentation, colorB: THREE.ColorRepresentation): void {
+    // afterimage column (body height) of glowing squares that drift apart
+    for (let i = 0; i < 22; i++) {
+      _w.set(chest.x + rnd(-0.3, 0.3), chest.y - 1.15 + Math.random() * 1.75, chest.z + rnd(-0.3, 0.3));
+      _v.set(rnd(-1.5, 1.5), rnd(-0.3, 0.6), rnd(-1.5, 1.5));
+      this.add.emit({ pos: _w.clone(), vel: _v.clone(), life: rnd(0.35, 0.6), size: rnd(0.12, 0.26), size1: 0.02, color: i % 3 === 0 ? 0xffffff : i % 2 ? colorA : colorB, shape: Shape.square, alpha: 0.85, drag: 2 });
+    }
+    for (let i = 0; i < 12; i++) {
+      randDir(_v);
+      _v.y *= 0.3;
+      this.add.emit({ pos: chest.clone(), vel: _v.multiplyScalar(rnd(7, 13)).clone(), life: rnd(0.15, 0.3), size: 0.06, color: 0xffffff, shape: Shape.streak, stretch: 3, drag: 5 });
+    }
+    this.add.emit({ pos: chest.clone(), life: 0.25, size: 0.6, size1: 2.2, color: colorA, shape: Shape.glow, alpha: 0.7 });
+    this.add.emit({ pos: chest.clone(), life: 0.14, size: 0.5, size1: 1.8, color: 0xffffff, shape: Shape.star });
+    this.ring(chest, _u.set(0, 1, 0), colorA, 0.3, 2.4, 0.35);
+    this.ring(_w.copy(chest).setY(chest.y + 0.4), _u.set(0, 1, 0), colorB, 0.2, 1.7, 0.3);
+  }
+
+  /** momentum strike: wind streaks along the attacker's travel and a speed ring (k 0..1) */
+  momentumBurst(pos: THREE.Vector3, vel: THREE.Vector3, color: THREE.ColorRepresentation, k: number): void {
+    const sp = vel.length();
+    const dir = sp > 0.5 ? vel.clone().divideScalar(sp) : randDir(new THREE.Vector3());
+    const n = Math.round(8 + 14 * k);
+    for (let i = 0; i < n; i++) {
+      _w.copy(pos).add(randDir(_v).multiplyScalar(rnd(0.2, 1.2)));
+      this.add.emit({ pos: _w.clone(), vel: dir.clone().multiplyScalar(rnd(18, 34) * (0.6 + k)), life: rnd(0.12, 0.26), size: 0.07, color: i % 3 === 0 ? color : 0xffffff, shape: Shape.streak, stretch: 4, drag: 4 });
+    }
+    this.ring(pos, dir, 0xffffff, 0.3, 2.2 + 2 * k, 0.25);
+    if (k > 0.45) this.ring(_w.copy(pos).addScaledVector(dir, 0.6), dir, color, 0.3, 3 + 2 * k, 0.32);
+    this.add.emit({ pos: pos.clone(), life: 0.16, size: 0.8, size1: 2.6 + 2 * k, color: 0xfff1c0, shape: Shape.glow, alpha: 0.6 });
+  }
+
+  /** a few glitch squares flickering around a marked fighter (call while the mark lasts) */
+  glitchMark(f: Fighter, colorA: THREE.ColorRepresentation, colorB: THREE.ColorRepresentation, dt: number): void {
+    if (Math.random() > dt * 18) return;
+    _w.set(f.pos.x + rnd(-0.5, 0.5), f.pos.y + rnd(0.2, 1.9), f.pos.z + rnd(-0.5, 0.5));
+    this.add.emit({ pos: _w.clone(), vel: _v.set(rnd(-0.6, 0.6), rnd(0, 0.8), rnd(-0.6, 0.6)).clone(), life: rnd(0.12, 0.3), size: rnd(0.08, 0.2), size1: 0.02, color: Math.random() < 0.5 ? colorA : colorB, shape: Shape.square, alpha: 0.9 });
   }
 
   spawnFx(pos: THREE.Vector3, color: THREE.ColorRepresentation): void {

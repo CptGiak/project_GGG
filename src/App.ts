@@ -11,8 +11,9 @@ import { MenuStage } from './ui/MenuStage';
 import { champSelect, controlsPanel, h, loadingScreen, mainMenu, pauseMenu, resultsScreen, settingsPanel, toast, STATIC_BUILD, inviteLink, copyText } from './ui/Menus';
 import { OnlineSession } from './net/OnlineSession';
 import { Beat } from './core/Beat';
+import { MODES, MODE_IDS, type ModeId } from '../shared/modes';
 
-type PracticeOpts = { champ: ChampionId; arena: string; bots: number; difficulty: number };
+type PracticeOpts = { champ: ChampionId; arena: string; bots: number; difficulty: number; mode: ModeId };
 
 const BOT_NAMES = ['VELVET', 'JOKER-B', 'MONA', 'NAVI', 'AKIRA', 'RYU', 'YUKI', 'ZERO'];
 
@@ -69,11 +70,13 @@ export class App {
   start(): void {
     if (this.params.has('play')) {
       const champ = (this.params.get('champ') as ChampionId) ?? 'kaiser';
+      const mode = this.params.get('mode') as ModeId;
       this.startPractice({
         champ: CHAMPION_IDS.includes(champ) ? champ : 'kaiser',
         arena: this.params.get('arena') ?? 'neon_city',
         bots: Number(this.params.get('bots') ?? 1),
         difficulty: Number(this.params.get('diff') ?? 0.5),
+        mode: MODE_IDS.includes(mode) ? mode : 'dm',
       });
     } else if (this.params.get('room') && !STATIC_BUILD) {
       // invite link: land on champion select with the friend's room filled in
@@ -151,12 +154,14 @@ export class App {
           this.settings.arena = o.arena;
           this.settings.bots = o.bots;
           this.settings.botDifficulty = o.difficulty;
+          this.settings.mode = o.mode;
           saveSettings(this.settings);
-          this.startPractice({ champ: o.champ, arena: o.arena, bots: o.bots, difficulty: o.difficulty });
+          this.startPractice({ champ: o.champ, arena: o.arena, bots: o.bots, difficulty: o.difficulty, mode: o.mode });
         } else {
           this.settings.room = o.room;
+          this.settings.mode = o.mode;
           saveSettings(this.settings);
-          void this.startOnline(o.champ, o.room || undefined);
+          void this.startOnline(o.champ, o.room || undefined, o.mode);
         }
       },
       sfx: (n) => this.audio.play(n),
@@ -224,7 +229,7 @@ export class App {
         difficulty: p.difficulty,
         name: BOT_NAMES[i % BOT_NAMES.length],
       }));
-      const m = this.createMatch({ arenaId: p.arena, mode: 'practice', localChampion: p.champ, localName: this.settings.name, bots });
+      const m = this.createMatch({ arenaId: p.arena, mode: 'practice', localChampion: p.champ, localName: this.settings.name, bots, gameMode: p.mode });
       m.onEnd = (winner) => this.showPracticeResults(winner?.id ?? null);
       this.setOverlay(null);
       this.audio.startMusic('battle');
@@ -232,7 +237,8 @@ export class App {
     }, 60);
   }
 
-  async startOnline(champ: ChampionId, room?: string): Promise<void> {
+  /** `mode`: what a new private room plays (quick matches rotate) */
+  async startOnline(champ: ChampionId, room?: string, mode?: ModeId): Promise<void> {
     this.mode = 'online';
     this.onlineChamp = champ;
     this.endMatch();
@@ -241,11 +247,11 @@ export class App {
     const session = new OnlineSession();
     this.session = session;
     try {
-      const w = await session.connect(this.settings.name, champ, room);
+      const w = await session.connect(this.settings.name, champ, room, room ? mode : undefined);
       if (this.session !== session) return;
       this.buildOnlineMatch(w.arena);
       if (w.phase === 'ended') this.match!.state = 'ended';
-      toast(this.ui, `STANZA ${w.room} · ${w.players.length} GIOCATOR${w.players.length === 1 ? 'E' : 'I'}`);
+      toast(this.ui, `STANZA ${w.room} · ${MODES[session.mode].name} · ${w.players.length} GIOCATOR${w.players.length === 1 ? 'E' : 'I'}`);
     } catch (e) {
       this.session = null;
       session.close();
@@ -256,6 +262,7 @@ export class App {
     session.onNewMatch = (arena) => {
       this.buildOnlineMatch(arena);
       this.setOverlay(null);
+      toast(this.ui, `${MODES[session.mode].name} · ${MODES[session.mode].sub.toUpperCase()}`);
     };
     session.onEnd = (winner, players, next) => this.showOnlineResults(winner, players, next);
     session.onDisconnect = () => {
@@ -271,7 +278,7 @@ export class App {
     const session = this.session!;
     const champ = session.players.get(session.myId)?.champ ?? this.onlineChamp;
     this.setOverlay(loadingScreen(arenaMeta(arena).name));
-    const m = this.createMatch({ arenaId: arena, mode: 'online', localChampion: champ, localName: this.settings.name, localId: session.myId });
+    const m = this.createMatch({ arenaId: arena, mode: 'online', localChampion: champ, localName: this.settings.name, localId: session.myId, gameMode: session.mode, seed: session.seed });
     m.state = 'playing';
     session.attach(m);
     this.setOverlay(null);
@@ -283,7 +290,7 @@ export class App {
     const m = this.match;
     if (!m) return;
     this.input.exitLock();
-    const players: PlayerInfo[] = m.fighters.map((f) => ({ id: f.id, name: f.name, champ: f.champId, kills: f.kills, deaths: f.deaths, hp: f.hp, alive: f.alive }));
+    const players: PlayerInfo[] = m.fighters.map((f) => ({ id: f.id, name: f.name, champ: f.champId, kills: f.kills, deaths: f.deaths, hp: f.hp, alive: f.alive, score: m.spot?.score(f) }));
     window.setTimeout(() => {
       if (this.match !== m) return;
       this.setOverlay(resultsScreen({

@@ -28,6 +28,8 @@ export interface ProjectileSpec {
   /** explode with this radius on impact / expiry (area damage) */
   explode?: number;
   headshots?: boolean;
+  /** damage falloff with distance travelled: full up to `from` m, down to `min` at `to` m */
+  falloff?: { from: number; to: number; min: number };
   /** remote-owned: visuals only, no hit reporting */
   visualOnly?: boolean;
   scale?: number;
@@ -35,6 +37,8 @@ export interface ProjectileSpec {
 
 interface Proj extends ProjectileSpec {
   obj: THREE.Object3D;
+  /** where it was fired from (falloff) */
+  origin: THREE.Vector3;
   age: number;
   hitIds: Set<string>;
   dead: boolean;
@@ -110,7 +114,13 @@ export class Projectiles {
     obj.position.copy(s.pos);
     obj.scale.setScalar(s.scale ?? 1);
     obj.visible = true;
-    this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), obj, age: 0, hitIds: new Set(), dead: false, bounces: 0 });
+    this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), origin: s.pos.clone(), obj, age: 0, hitIds: new Set(), dead: false, bounces: 0 });
+  }
+
+  private falloffScale(p: Proj): number {
+    const f = p.falloff!;
+    const k = THREE.MathUtils.clamp((p.pos.distanceTo(p.origin) - f.from) / (f.to - f.from), 0, 1);
+    return 1 - (1 - f.min) * k;
   }
 
   clear(): void {
@@ -256,8 +266,9 @@ export class Projectiles {
       if (!p.dead && hitFighter && (!worldHit || best < Infinity)) {
         const f = hitFighter;
         if (f.invuln > 0 && f.invuln < 5) {
-          // dodged through i-frames: keep flying
+          // dodged through i-frames: keep flying; the match (or server) rules a perfect dodge or a miss
           p.hitIds.add(f.id);
+          if (!p.explode && !p.visualOnly && m.isAuthority(p.owner)) m.reportHit(p.owner, f, { slot: p.slot, part: p.part, at: hitPoint, blockable: true, scale: p.falloff ? this.falloffScale(p) : undefined });
         } else {
           p.hitIds.add(f.id);
           if (p.explode) {
@@ -268,7 +279,7 @@ export class Projectiles {
             const crit = !!p.headshots && hitPoint.y > f.pos.y + 1.48;
             if (!p.visualOnly && m.isAuthority(p.owner)) {
               const kb = p.kb ? p.vel.clone().normalize().multiplyScalar(p.kb) : undefined;
-              m.reportHit(p.owner, f, { slot: p.slot, part: p.part, crit, kb, stun: p.stun, slow: p.slow, at: hitPoint, blockable: true });
+              m.reportHit(p.owner, f, { slot: p.slot, part: p.part, crit, kb, stun: p.stun, slow: p.slow, at: hitPoint, blockable: true, scale: p.falloff ? this.falloffScale(p) : undefined });
             }
             m.vfx.hitSpark(hitPoint, _n.copy(p.vel).normalize().negate(), p.color, crit);
             if (!p.pierce) p.dead = true;
