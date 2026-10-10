@@ -42,6 +42,11 @@ export abstract class BaseKit implements Kit {
   protected trailOn = false;
   /** yaw the body should face during the action (null = aim yaw) */
   faceYaw: number | null = null;
+  /**
+   * One lifted air attack per airtime: it is refilled on the ground, on a wall or when a hook
+   * bites, so mashing the attack button in the air can't keep a fighter afloat.
+   */
+  protected airLift = true;
 
   constructor(readonly champId: keyof typeof CHAMPIONS) {}
 
@@ -51,6 +56,7 @@ export abstract class BaseKit implements Kit {
 
   update(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
     for (const k of Object.keys(this.cd) as AbilitySlot[]) this.cd[k] = Math.max(0, this.cd[k] - dt);
+    if (f.grounded || f.hooked || f.wallRun > 0) this.airLift = true;
     if (this.act) {
       this.actT += dt;
       this.tickAction(f, it, dt, m);
@@ -99,6 +105,13 @@ export abstract class BaseKit implements Kit {
     this.charge = 0;
     f.guard = false;
     f.ctrl.aim = 0;
+  }
+
+  /** spends the air lift if still available: true = this air attack may rise / hang */
+  protected takeAirLift(): boolean {
+    const ok = this.airLift;
+    this.airLift = false;
+    return ok;
   }
 
   facesAim(f: Fighter): boolean {

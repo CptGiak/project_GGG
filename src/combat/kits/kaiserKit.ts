@@ -19,6 +19,8 @@ export class KaiserKit extends BaseKit {
   private guardCd = 0;
   private diveDir = new THREE.Vector3();
   private ultPhase: 'rise' | 'slam' | null = null;
+  /** the running air cleave got the airtime's lift (hangs with low gravity) */
+  private airHang = false;
 
   constructor() {
     super('kaiser');
@@ -80,8 +82,10 @@ export class KaiserKit extends BaseKit {
       this.startAction(f, 'atkAir', 0.5);
       f.anim.play('air', { speed: 1, fadeIn: 0.04 });
       const t = this.findTarget(f, m, 9, 40);
-      this.magnet(f, t, 16, 1.8, true);
-      f.vel.y = Math.max(f.vel.y, 2);
+      // only the first cleave of a jump homes vertically and hangs; the rest fall normally
+      this.airHang = this.takeAirLift();
+      this.magnet(f, t, 16, 1.8, this.airHang);
+      if (this.airHang) f.vel.y = Math.max(f.vel.y, 2);
       this.cd.atk = 0.62;
       this.setTrail(f, true);
       m.audio.play('swingHeavy', f.pos, 0.9);
@@ -131,7 +135,7 @@ export class KaiserKit extends BaseKit {
   protected tickAction(f: Fighter, _it: Intent, dt: number, m: MatchContext): void {
     switch (this.act) {
       case 'atkAir': {
-        f.ctrl.gravityScale = 0.35;
+        if (this.airHang) f.ctrl.gravityScale = 0.35;
         this.spin = Math.min(1, this.actT / 0.4) * 360;
         break;
       }

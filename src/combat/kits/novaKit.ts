@@ -28,6 +28,8 @@ export class NovaKit extends BaseKit {
   private barrage = 0;
   private barrageT = 0;
   private barrageIdx = 0;
+  /** the running air slash got the airtime's lift (rises with low gravity) */
+  private airHang = false;
 
   constructor() {
     super('nova');
@@ -63,8 +65,10 @@ export class NovaKit extends BaseKit {
       this.startAction(f, 'air', DUR.air);
       f.anim.play('air', { fadeIn: 0.03 });
       const t = this.findTarget(f, m, 8, 45);
-      this.magnet(f, t, 12, 1.5, true);
-      f.vel.y = Math.max(f.vel.y, 8.5);
+      // Rising Remix lifts once per airtime; further slashes in the same jump fall normally
+      this.airHang = this.takeAirLift();
+      this.magnet(f, t, 12, 1.5, this.airHang);
+      if (this.airHang) f.vel.y = Math.max(f.vel.y, 8.5);
       this.cd.atk = 0.45;
       m.broadcastAction(f, { a: 'air' });
       return;
@@ -76,7 +80,11 @@ export class NovaKit extends BaseKit {
     f.anim.play(name, { fadeIn: 0.03 });
     const t = this.findTarget(f, m, 7, 40);
     this.magnet(f, t, name === 'c4' ? 13 : 10, 1.5);
-    if (name === 'c4') f.vel.y = Math.max(f.vel.y, 5);
+    if (name === 'c4') {
+      // the finisher hops: it spends the air lift so mashing on into air slashes can't climb
+      f.vel.y = Math.max(f.vel.y, 5);
+      this.airLift = false;
+    }
     f.ctrl.lockMove = DUR[name] * 0.6;
     m.broadcastAction(f, { a: name });
   }
@@ -173,7 +181,7 @@ export class NovaKit extends BaseKit {
 
   protected tickAction(f: Fighter, _it: Intent, dt: number, m: MatchContext): void {
     if (this.act === 'c4' || this.act === 'cRemote4') this.spin = Math.min(1, this.actT / 0.38) * 360;
-    if (this.act === 'air') f.ctrl.gravityScale = 0.6;
+    if (this.act === 'air' && this.airHang) f.ctrl.gravityScale = 0.6;
     if (this.act === 'ult') {
       f.ctrl.noHooks = true;
       f.ctrl.lockMove = 0.1;
