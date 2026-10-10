@@ -161,11 +161,13 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
     difficulty: 3,
     hp: 920,
     speed: 1.12,
-    ultCharge: 850,
+    ultCharge: 1300,
     colors: ['#a15cff', '#ff6a3d'],
     weapon: 'Kama e kunai',
     bio: 'Rapper dei True Damage e assassina senza maestro. Sparisce nel fumo, marchia il bersaglio e chiude il conto prima del ritornello.',
-    invulnActs: { flipDash: { sec: 0.5, every: 9 }, exec: { sec: 0.45, every: 10, burst: 2 } },
+    // the 9 s cooldown runs from the throw and the recast dash can come up to 3.6 s later, so two
+    // flip dashes can be 5.4 s apart; the execution is two dashes
+    invulnActs: { flipDash: { sec: 0.5, every: 5 }, exec: { sec: 0.45, every: 10, burst: 2 } },
     passive: { name: 'Marchio dell\'Assassina', desc: 'Kunai, shuriken e scatti marchiano i nemici: il colpo seguente sul bersaglio marchiato infligge danni bonus.' },
     abilities: {
       sig: { slot: 'sig', key: 'LMB', name: 'Five Point Strike', desc: 'Ventaglio di 5 kunai davanti a sé: marchia i nemici colpiti e rallenta quelli sulla punta.', cooldown: 2.5, damage: { q: 80 }, range: 16, maxRate: 5 },
@@ -183,7 +185,7 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
     difficulty: 3,
     hp: 980,
     speed: 1.08,
-    ultCharge: 900,
+    ultCharge: 1400,
     colors: ['#57d9ff', '#ffc94a'],
     weapon: 'Lama ad anello d\'oro',
     bio: 'Diva dei True Damage ed erede di Ixaocan. Piega terra, acqua ed erba al ritmo del suo anello d\'oro.',
@@ -204,11 +206,12 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
     difficulty: 3,
     hp: 1000,
     speed: 1.06,
-    ultCharge: 950,
+    ultCharge: 1500,
     colors: ['#3fd6b0', '#7a5cff'],
     weapon: 'Paletto d\'argento e chiodi',
     bio: 'Esorcista demaciano. Inchioda i demoni con chiodi rituali e li sigilla per sempre nel suo reliquiario.',
-    invulnActs: { pursuit: { sec: 0.25, every: 9 } },
+    // used on its 9 s cooldown, network jitter can bring two casts a little closer
+    invulnActs: { pursuit: { sec: 0.25, every: 8 } },
     passive: { name: 'Paletto d\'Argento', desc: 'I colpi in mischia fanno danni bonus in base alla vita che manca al bersaglio; il colpo seguente fa esplodere i Chiodi Rituali.' },
     abilities: {
       sig: { slot: 'sig', key: 'LMB', name: 'Ritual Nails', desc: 'Lancia una fila di chiodi che rallenta e lascia cariche sul bersaglio (max 3). Rilanciabile 2 volte entro 4 s.', cooldown: 7, damage: { q: 45 }, range: 30, maxRate: 9 },
