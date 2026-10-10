@@ -1,7 +1,9 @@
 import type { WebSocket } from 'ws';
-import { CHAMPIONS, CHAMPION_IDS, MATCH_RULES, type ChampionId } from '../shared/champions';
+import { CHAMPIONS, CHAMPION_IDS, MATCH_RULES, type AbilityData, type ChampionId } from '../shared/champions';
+import { COMBAT, MOVE, dashIFrames, hitMultiplier } from '../shared/constants';
 import { ARENA_META, arenaMeta } from '../shared/arenas';
-import type { C2S, HitMsg, PlayerInfo, PlayerState, S2C, V3 } from '../shared/protocol';
+import { BEAT_MS, MODE_IDS, SPOT, SPOT_DURATION_SEC, SPOT_ZONES, inSpot, spotPhase, spotSchedule, spotTarget, type ModeId, type SpotZone } from '../shared/modes';
+import type { ActionMsg, C2S, HitMsg, MatchModeMsg, PlayerInfo, PlayerState, S2C, V3 } from '../shared/protocol';
 
 interface Player {
   id: string;
@@ -16,16 +18,91 @@ interface Player {
   respawnAt: number;
   spawnedAt: number;
   guard: boolean;
+  /** when the guard went up (a perfect parry window), or -1e9 when that raise opened none */
   guardStart: number;
+  /** when the guard last came down (a fresh raise needs a rest, like the client's guard cooldown) */
+  guardDropAt: number;
   /** recent hit timestamps per slot (rate limiting) */
   hitLog: Record<string, number[]>;
   lastHeal: number;
   pendingChamp: ChampionId | null;
   joinedAt: number;
+  /** recent movement speeds from states, [time, m/s] (momentum strike validation) */
+  spd: Array<[number, number]>;
+  /** recent positions from states, [time, position]: the distance really covered caps the speed */
+  trail: Array<[number, V3]>;
+  /** dash i-frames seen in states (a hit inside them is a perfect dodge) */
+  dodge: IFrames;
+  /** invulnerability granted by abilities (Nova's blinks and ultimate), opened by their actions */
+  invulnUntil: number;
+  /** budget of each invulnerable action (tokens refill once per its `every`, up to its `burst`) */
+  ivBudget: Map<string, { tokens: number; at: number }>;
+  /** last perfect dodge rewarded (one per COMBAT.dodgeRewardCd) and the counter window it opened */
+  dodgeRewardAt: number;
+  counterUntil: number;
+  /** the counter crit was already spent */
+  counterUsed: boolean;
+  /** off-beat (attacked a perfect dodge from close) or parried: hits on this player are punish counters */
+  punishUntil: number;
+  /** RIFLETTORE points this match */
+  score: number;
+}
+
+/**
+ * Tracks the dash i-frame state flag with the same rules the client plays by, so a client can't
+ * claim permanent or spammed invulnerability: a run lasts at most a dash's i-frames (plus network
+ * jitter), runs can't start faster than the dash cooldown, and chained dashes get shorter i-frames
+ * (none from the third) and never count as a perfect dodge.
+ */
+interface IFrames {
+  /** last state arrival that showed the flag (and passed the checks) */
+  seen: number;
+  /** start of the current run of states with the flag */
+  since: number;
+  /** start of the previous accepted run */
+  lastRun: number;
+  /** dashes in the current chain (0 = fresh) */
+  chain: number;
+  /** the run `seen` belongs to was a fresh dash (a hit in it is a perfect dodge) */
+  fresh: boolean;
+  on: boolean;
+  /** this run broke a limit: ignored until the flag drops */
+  bad: boolean;
+}
+
+function iframes(): IFrames {
+  return { seen: -1e9, since: 0, lastRun: -1e9, chain: 0, fresh: false, on: false, bad: false };
+}
+
+/** feed one state's dash i-frame flag */
+function trackIFrames(f: IFrames, on: boolean, t: number): void {
+  if (!on) {
+    f.on = false;
+    return;
+  }
+  if (!f.on) {
+    f.on = true;
+    f.since = t;
+    const gap = t - f.lastRun;
+    f.bad = gap < MOVE.dashCooldown * 800;
+    if (!f.bad) {
+      f.chain = gap < COMBAT.dashChainSec * 1000 ? f.chain + 1 : 0;
+      f.lastRun = t;
+      f.bad = dashIFrames(f.chain) <= 0;
+    }
+  }
+  if (f.bad || t - f.since > Math.min(COMBAT.maxDodgeMs, dashIFrames(f.chain) * 1000 + 60)) {
+    f.bad = true;
+    return;
+  }
+  f.seen = t;
+  f.fresh = f.chain === 0;
 }
 
 const TICK_MS = 50;
 const now = () => Date.now();
+/** a raise of the guard opens a parry window only after it rested this long (client: 500 ms) */
+const GUARD_REARM_MS = 350;
 
 function finite(v: unknown, fallback = 0): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -38,26 +115,72 @@ function vec(v: unknown): V3 | null {
 function dist(a: V3, b: V3): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
+function clampV(v: V3 | null, lim: number): V3 | undefined {
+  return v ? (v.map((x) => Math.max(-lim, Math.min(lim, x))) as V3) : undefined;
+}
+
+/** an action as relayed to the other clients: only the fields their handlers read, well formed */
+function cleanAction(e: unknown): ActionMsg | null {
+  if (!e || typeof e !== 'object') return null;
+  const r = e as Record<string, unknown>;
+  if (typeof r.a !== 'string' || !r.a || r.a.length >= 24) return null;
+  const out: ActionMsg = { a: r.a };
+  const p = clampV(vec(r.p), 1e4);
+  const d = clampV(vec(r.d), 1e4);
+  if (p) out.p = p;
+  if (d) out.d = d;
+  if (typeof r.t === 'string') out.t = r.t.slice(0, 32);
+  if (typeof r.n === 'number' && Number.isFinite(r.n)) out.n = Math.max(-100, Math.min(100, r.n));
+  return out;
+}
 
 /**
- * One deathmatch room: relays movement, validates hit claims against shared champion data,
- * owns HP / kills / respawns and the match clock. Rotates arenas between matches.
+ * One PvP room: relays movement, validates hit claims against shared champion data, owns HP /
+ * kills / respawns, the match clock and RIFLETTORE's score. Rotates arenas and modes between
+ * matches.
  */
 export class Room {
   readonly players = new Map<string, Player>();
   arena: string;
+  mode: ModeId;
   phase: 'playing' | 'ended' = 'playing';
   clockEnd = 0;
   nextStart = 0;
   private timer: NodeJS.Timeout;
   private arenaIdx: number;
   private readonly startedAt = now();
+  /** RIFLETTORE: the zone schedule's seed, the server time the match went live, the last scored beat */
+  private seed = 0;
+  private t0 = 0;
+  private schedule: SpotZone[] = [];
+  private beat = -1;
 
-  constructor(readonly id: string, readonly isPrivate: boolean, private onEmpty: (r: Room) => void) {
+  /** `fixedMode`: every match plays it (private rooms); otherwise modes rotate */
+  constructor(readonly id: string, readonly isPrivate: boolean, private onEmpty: (r: Room) => void, private readonly fixedMode?: ModeId) {
     this.arenaIdx = Math.floor(Math.random() * ARENA_META.length);
     this.arena = ARENA_META[this.arenaIdx].id;
-    this.clockEnd = now() + MATCH_RULES.durationSec * 1000;
+    this.mode = fixedMode ?? MODE_IDS[Math.floor(Math.random() * MODE_IDS.length)];
+    this.setupMode();
     this.timer = setInterval(() => this.tick(), TICK_MS);
+  }
+
+  /** match length for the current mode (s) */
+  private durationSec(): number {
+    return this.mode === 'spot' ? Math.ceil(SPOT_DURATION_SEC) : MATCH_RULES.durationSec;
+  }
+
+  /** a new match of the current mode on the current arena starts now */
+  private setupMode(): void {
+    if (!SPOT_ZONES[this.arena]) this.mode = 'dm';
+    this.seed = Math.floor(Math.random() * 1e9);
+    this.schedule = spotSchedule(this.arena, this.seed);
+    this.t0 = this.time();
+    this.beat = -1;
+    this.clockEnd = now() + this.durationSec() * 1000;
+  }
+
+  private modeMsg(): MatchModeMsg {
+    return { mode: this.mode, seed: this.seed, t0: this.t0 };
   }
 
   get full(): boolean {
@@ -91,11 +214,22 @@ export class Room {
       respawnAt: 0,
       spawnedAt: now(),
       guard: false,
-      guardStart: 0,
+      guardStart: -1e9,
+      guardDropAt: -1e9,
       hitLog: {},
       lastHeal: 0,
       pendingChamp: null,
       joinedAt: now(),
+      spd: [],
+      trail: [],
+      dodge: iframes(),
+      invulnUntil: 0,
+      ivBudget: new Map(),
+      dodgeRewardAt: -1e9,
+      counterUntil: 0,
+      counterUsed: true,
+      punishUntil: 0,
+      score: 0,
     };
     this.players.set(id, p);
     const spawn = this.pickSpawn(p);
@@ -104,11 +238,12 @@ export class Room {
       id,
       room: this.id,
       arena: this.arena,
-      rules: { killsToWin: MATCH_RULES.killsToWin, durationSec: MATCH_RULES.durationSec, respawnSec: MATCH_RULES.respawnSec },
+      rules: { killsToWin: MATCH_RULES.killsToWin, durationSec: this.durationSec(), respawnSec: MATCH_RULES.respawnSec },
       players: this.infos(),
       clock: Math.max(0, (this.clockEnd - now()) / 1000),
       time: this.time(),
       phase: this.phase,
+      ...this.modeMsg(),
     });
     this.broadcast({ t: 'join', p: this.info(p) }, p.id);
     this.broadcast({ t: 'spawn', id, pos: spawn.pos, yaw: spawn.yaw, champ: p.champ });
@@ -122,7 +257,7 @@ export class Room {
   }
 
   info(p: Player): PlayerInfo {
-    return { id: p.id, name: p.name, champ: p.champ, kills: p.kills, deaths: p.deaths, hp: Math.round(p.hp), alive: p.alive };
+    return { id: p.id, name: p.name, champ: p.champ, kills: p.kills, deaths: p.deaths, hp: Math.round(p.hp), alive: p.alive, score: this.mode === 'spot' ? p.score : undefined };
   }
 
   infos(): PlayerInfo[] {
@@ -138,15 +273,14 @@ export class Room {
       case 'state':
         this.onState(p, msg.s);
         break;
-      case 'act':
-        if (msg.e && typeof msg.e.a === 'string' && msg.e.a.length < 24) {
-          if (msg.e.a === 'guard') {
-            p.guard = !!msg.e.n;
-            if (p.guard) p.guardStart = now();
-          }
-          this.broadcast({ t: 'act', id: p.id, e: msg.e }, p.id);
-        }
+      case 'act': {
+        const e = cleanAction(msg.e);
+        if (!e) break;
+        if (e.a === 'guard') this.setGuard(p, !!e.n);
+        this.onActIFrames(p, e.a);
+        this.broadcast({ t: 'act', id: p.id, e }, p.id);
         break;
+      }
       case 'hit':
         this.onHit(p, msg);
         break;
@@ -180,12 +314,40 @@ export class Room {
       ha: vec(s.ha) ?? undefined,
       hb: vec(s.hb) ?? undefined,
     };
-    const g = (p.state.fl & 8) !== 0;
-    if (!g) p.guard = false;
-    else if (!p.guard) {
-      p.guard = true;
-      p.guardStart = now();
+    const t = now();
+    // speed history (momentum strikes are capped to it): the reported velocity, but never more
+    // than the distance the states actually covered
+    p.spd.push([t, Math.min(90, Math.hypot(vel[0], vel[1], vel[2]), this.movedSpeed(p, pos, t))]);
+    while (p.spd.length && t - p.spd[0][0] > COMBAT.momentumWindowMs) p.spd.shift();
+    // dash i-frames: no longer than a dash, no more often than the dash cooldown allows
+    trackIFrames(p.dodge, (p.state.fl & 32) !== 0, t);
+    // the guard also drops through states (a stun or a death cancels it without an action)
+    this.setGuard(p, (p.state.fl & 8) !== 0);
+  }
+
+  /**
+   * Raise / lower the guard (only champions that have one). A raise opens the perfect parry
+   * window only if the guard rested first, as the client's guard cooldown makes it: toggling it
+   * can't keep the window open.
+   */
+  private setGuard(p: Player, on: boolean): void {
+    if (on && !CHAMPIONS[p.champ].guard) return;
+    if (on === p.guard) return;
+    const t = now();
+    p.guard = on;
+    if (on) p.guardStart = t - p.guardDropAt >= GUARD_REARM_MS ? t : -1e9;
+    else p.guardDropAt = t;
+  }
+
+  /** how fast the states really moved (m/s): over at least 100 ms, with slack for arrival jitter */
+  private movedSpeed(p: Player, pos: V3, t: number): number {
+    p.trail.push([t, pos]);
+    while (p.trail.length && t - p.trail[0][0] > 600) p.trail.shift();
+    for (let i = p.trail.length - 2; i >= 0; i--) {
+      const [at, q] = p.trail[i];
+      if (t - at >= 100) return (dist(pos, q) / ((t - at) / 1000)) * 1.25 + 3;
     }
+    return 0;
   }
 
   private onHit(att: Player, h: HitMsg): void {
@@ -193,11 +355,13 @@ export class Room {
     const tgt = this.players.get(h.target);
     if (!tgt || tgt === att || !tgt.alive) return;
     if (now() - tgt.spawnedAt < MATCH_RULES.spawnProtectSec * 1000) return;
+    // own keys only: 'constructor' & co. would reach Object's prototype
     const champ = CHAMPIONS[att.champ];
+    if (typeof h.slot !== 'string' || typeof h.part !== 'string' || !Object.hasOwn(champ.abilities, h.slot)) return;
     const ab = champ.abilities[h.slot];
-    if (!ab) return;
+    if (!Object.hasOwn(ab.damage, h.part)) return;
     const base = ab.damage[h.part];
-    if (base === undefined) return;
+    if (typeof base !== 'number') return;
     // rate limit per slot
     const t = now();
     const log = (att.hitLog[h.slot] ??= []);
@@ -210,8 +374,39 @@ export class Room {
       const speedSlack = Math.hypot(...att.state.v) * 0.35 + Math.hypot(...tgt.state.v) * 0.35;
       if (d > ab.range + 10 + speedSlack) return;
     }
+    // i-frames: the attacker sees the target ~100-200 ms late, so a hit on a target that was
+    // invulnerable that recently misses; inside a fresh dash it is a perfect dodge (rewarded once
+    // per COMBAT.dodgeRewardCd, which opens a counter window for the dodger and puts a close
+    // attacker Fuori Tempo). Rapid-fire / channelled parts only miss.
+    const stream = !!ab.stream?.includes(h.part);
+    const dashed = t - tgt.dodge.seen <= COMBAT.dodgeLookbackMs;
+    if (dashed || t - COMBAT.dodgeLookbackMs <= tgt.invulnUntil) {
+      if (dashed && tgt.dodge.fresh && !stream && t - tgt.dodgeRewardAt >= COMBAT.dodgeRewardCd * 1000) {
+        tgt.dodgeRewardAt = t;
+        tgt.counterUntil = t + COMBAT.counterSec * 1000 + 250;
+        tgt.counterUsed = false;
+        const close = !!att.state && !!tgt.state && dist(att.state.p, tgt.state.p) <= COMBAT.offbeatRange + 3;
+        if (close) att.punishUntil = t + COMBAT.offbeatSec * 1000 + 150;
+        this.broadcast({ t: 'dodge', def: tgt.id, att: att.id, ft: close || undefined });
+      }
+      return;
+    }
     const scale = Math.min(1, Math.max(0, finite(h.scale, 1)));
-    let dmg = base * scale * (h.crit ? MATCH_RULES.critMultiplier : 1);
+    // criticals: checked per kind (always / from behind / on the head), or the counter hit after a
+    // perfect dodge or parry (one per window)
+    let crit = false;
+    let ctr = false;
+    if (h.crit) {
+      if (h.ctr && !stream && !att.counterUsed && t <= att.counterUntil) {
+        crit = ctr = true;
+        att.counterUsed = true;
+      } else crit = this.critValid(ab, h, att, tgt);
+    }
+    // momentum strike: the claimed impact speed can't beat the attacker's recent top speed
+    let mo = 0;
+    if (ab.momentum?.includes(h.part)) mo = Math.max(0, Math.min(finite(h.mo), this.peakSpeed(att, t) + COMBAT.momentumSlack));
+    const punish = t <= tgt.punishUntil;
+    let dmg = base * scale * hitMultiplier(crit, MATCH_RULES.critMultiplier, mo, punish);
     // guard: frontal block, parry window right after raising guard
     let blocked = false;
     if (tgt.guard && h.blockable !== false && att.state && tgt.state) {
@@ -221,7 +416,19 @@ export class Room {
       const front = Math.sin(tgt.state.f) * (dx / l) + Math.cos(tgt.state.f) * (dz / l);
       if (front > 0.2) {
         if (t - tgt.guardStart < 260) {
-          this.broadcast({ t: 'parry', def: tgt.id, att: att.id });
+          // perfect parry: a close attacker is stunned (punishable); the defender's counter window
+          // shares the perfect dodge's reward cooldown, as on the client
+          let rw = false;
+          if (l <= COMBAT.parryRange + 3) {
+            att.punishUntil = t + COMBAT.parryStun * 1000 + 150;
+            if (t - tgt.dodgeRewardAt >= COMBAT.dodgeRewardCd * 1000) {
+              rw = true;
+              tgt.dodgeRewardAt = t;
+              tgt.counterUntil = t + COMBAT.counterSec * 1000 + 250;
+              tgt.counterUsed = false;
+            }
+          }
+          this.broadcast({ t: 'parry', def: tgt.id, att: att.id, rw: rw || undefined });
           return;
         }
         blocked = true;
@@ -237,15 +444,71 @@ export class Room {
       tgt: tgt.id,
       amt: dmg,
       hp: Math.round(tgt.hp),
-      crit: !!h.crit,
+      crit,
       blocked,
       kb: kb && !blocked ? (kb.map((x) => Math.max(-40, Math.min(40, x))) as V3) : undefined,
       stun: blocked ? undefined : Math.min(1, finite(h.stun)) || undefined,
       slow: Math.min(2, finite(h.slow)) || undefined,
       at: vec(h.at) ?? undefined,
       slot: h.slot,
+      mo: mo >= COMBAT.momentumMinSpeed ? Math.round(mo) : undefined,
+      ctr: ctr || undefined,
+      pun: punish || undefined,
     });
     if (tgt.hp <= 0) this.kill(tgt, att, h.slot);
+  }
+
+  /**
+   * A claimed critical that isn't a counter: parts that always crit, backstabs (the target was
+   * facing away, by the server's copy of its state) and headshots (the hit point sits at head
+   * height on the target).
+   */
+  private critValid(ab: AbilityData, h: HitMsg, att: Player, tgt: Player): boolean {
+    if (ab.crit?.includes(h.part)) return true;
+    if (!att.state || !tgt.state) return false;
+    const tp = tgt.state.p;
+    if (ab.backstab?.includes(h.part)) {
+      const dx = att.state.p[0] - tp[0];
+      const dz = att.state.p[2] - tp[2];
+      const l = Math.hypot(dx, dz) || 1;
+      return Math.sin(tgt.state.f) * (dx / l) + Math.cos(tgt.state.f) * (dz / l) < -0.3;
+    }
+    if (ab.headshot?.includes(h.part)) {
+      const at = vec(h.at);
+      if (!at) return false;
+      // positions are ~100 ms stale: allow what the target could have moved
+      const slack = Math.hypot(...tgt.state.v) * 0.2;
+      const rise = at[1] - tp[1];
+      return rise >= 1.3 - slack && rise <= 2.3 + slack && Math.hypot(at[0] - tp[0], at[2] - tp[2]) <= 1.2 + slack;
+    }
+    return false;
+  }
+
+  /**
+   * Abilities with invulnerability open a server-side window. Each action has a small budget that
+   * refills once per `every` seconds: the kit's resets (Nova's takedowns) can chain a few quickly,
+   * spamming the action can't.
+   */
+  private onActIFrames(p: Player, a: string): void {
+    const acts = CHAMPIONS[p.champ].invulnActs;
+    if (!acts || !Object.hasOwn(acts, a) || !p.alive) return;
+    const iv = acts[a];
+    const burst = iv.burst ?? 1;
+    const t = now();
+    let b = p.ivBudget.get(a);
+    if (!b) p.ivBudget.set(a, (b = { tokens: burst, at: t }));
+    b.tokens = Math.min(burst, b.tokens + (t - b.at) / (iv.every * 1000));
+    b.at = t;
+    if (b.tokens < 1) return;
+    b.tokens -= 1;
+    p.invulnUntil = Math.max(p.invulnUntil, t + iv.sec * 1000);
+  }
+
+  /** top speed (m/s) the player's states showed in the momentum window */
+  private peakSpeed(p: Player, t: number): number {
+    let best = 0;
+    for (const [at, v] of p.spd) if (t - at <= COMBAT.momentumWindowMs && v > best) best = v;
+    return best;
   }
 
   private onHeal(p: Player, amount: number): void {
@@ -265,7 +528,56 @@ export class Room {
     victim.guard = false;
     if (killer && killer !== victim) killer.kills++;
     this.broadcast({ t: 'kill', killer: killer?.id ?? null, victim: victim.id, slot });
-    if (killer && killer.kills >= MATCH_RULES.killsToWin) this.endMatch(killer);
+    // in RIFLETTORE kills only clear the stage: points win
+    if (this.mode === 'dm' && killer && killer.kills >= MATCH_RULES.killsToWin) this.endMatch(killer);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // RIFLETTORE
+  // -------------------------------------------------------------------------------------------
+
+  private spotBeat(): number {
+    return Math.floor((this.time() - this.t0) / BEAT_MS);
+  }
+
+  /**
+   * Scores each new beat: whoever stands alone in the live zone (by the latest state they sent)
+   * gets a point, two in the Gran Finale. Every client runs the same beat clock from `t0`, so
+   * only the outcome is sent.
+   */
+  private spotTick(): void {
+    const beat = this.spotBeat();
+    if (beat <= this.beat) return;
+    this.beat = beat;
+    const ph = spotPhase(this.schedule, beat);
+    if (ph.over) {
+      this.endMatch(this.spotLeader());
+      return;
+    }
+    const z = ph.zone;
+    if (!z) return;
+    const inside: Player[] = [];
+    for (const p of this.players.values()) if (p.alive && p.state && inSpot(z, p.state.p[0], p.state.p[1], p.state.p[2])) inside.push(p);
+    const own = inside.length === 1 ? inside[0] : null;
+    if (own) own.score += z.finale ? SPOT.finaleMult : 1;
+    this.broadcast({
+      t: 'spot',
+      b: beat,
+      own: own?.id ?? null,
+      ctd: inside.length > 1 || undefined,
+      sc: [...this.players.values()].map((p) => [p.id, p.score]),
+    });
+    if (own && own.score >= SPOT.scoreToWin) this.endMatch(own);
+  }
+
+  /** most points (ties: most kills); nobody if no one scored */
+  private spotLeader(): Player | null {
+    let best: Player | null = null;
+    for (const p of this.players.values()) {
+      if (p.score <= 0) continue;
+      if (!best || p.score > best.score || (p.score === best.score && p.kills > best.kills)) best = p;
+    }
+    return best;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -274,6 +586,8 @@ export class Room {
 
   private pickSpawn(p: Player): { pos: V3; yaw: number } {
     const spawns = arenaMeta(this.arena).spawns;
+    // RIFLETTORE: nobody respawns on the stage
+    const z = this.mode === 'spot' ? spotTarget(spotPhase(this.schedule, this.spotBeat())) : null;
     let best = spawns[0];
     let bestScore = -Infinity;
     for (const s of spawns) {
@@ -282,7 +596,8 @@ export class Room {
         if (o === p || !o.alive || !o.state) continue;
         minD = Math.min(minD, dist(o.state.p, s.pos));
       }
-      const score = minD + Math.random() * 12;
+      let score = minD + Math.random() * 12;
+      if (z && Math.hypot(s.pos[0] - z.c[0], s.pos[2] - z.c[2]) < SPOT.spawnClear) score -= 60;
       if (score > bestScore) {
         bestScore = score;
         best = s;
@@ -316,18 +631,21 @@ export class Room {
     this.phase = 'playing';
     this.arenaIdx = (this.arenaIdx + 1) % ARENA_META.length;
     this.arena = ARENA_META[this.arenaIdx].id;
-    this.clockEnd = now() + MATCH_RULES.durationSec * 1000;
+    this.mode = this.fixedMode ?? MODE_IDS[(MODE_IDS.indexOf(this.mode) + 1) % MODE_IDS.length];
+    this.setupMode();
     for (const p of this.players.values()) {
       p.kills = 0;
       p.deaths = 0;
+      p.score = 0;
       p.alive = true;
+      p.guard = false;
       if (p.pendingChamp) {
         p.champ = p.pendingChamp;
         p.pendingChamp = null;
       }
       p.hp = CHAMPIONS[p.champ].hp;
     }
-    this.broadcast({ t: 'start', arena: this.arena, clock: MATCH_RULES.durationSec, players: this.infos() });
+    this.broadcast({ t: 'start', arena: this.arena, clock: this.durationSec(), players: this.infos(), ...this.modeMsg() });
     for (const p of this.players.values()) {
       p.spawnedAt = now();
       const s = this.pickSpawn(p);
@@ -339,8 +657,9 @@ export class Room {
     const t = now();
     if (this.phase === 'playing') {
       for (const p of this.players.values()) if (!p.alive && t >= p.respawnAt) this.respawn(p);
-      if (t >= this.clockEnd) {
-        const top = [...this.players.values()].sort((a, b) => b.kills - a.kills)[0] ?? null;
+      if (this.mode === 'spot') this.spotTick();
+      if (this.phase === 'playing' && t >= this.clockEnd) {
+        const top = this.mode === 'spot' ? this.spotLeader() : [...this.players.values()].sort((a, b) => b.kills - a.kills)[0] ?? null;
         this.endMatch(top);
       }
     } else if (t >= this.nextStart) {

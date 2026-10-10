@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION, type C2S, type S2C } from '../../shared/protocol';
 import type { ChampionId } from '../../shared/champions';
+import type { ModeId } from '../../shared/modes';
 
 /** Thin WebSocket wrapper with a message queue drained once per frame. */
 export class NetClient {
@@ -11,12 +12,28 @@ export class NetClient {
   private pingTimer: number | null = null;
   onClose: ((reason: string) => void) | null = null;
 
+  /**
+   * Game server address: `?server=` in the page URL, else VITE_SERVER_URL at build time, else the
+   * host serving the page. Accepts http(s)://, ws(s):// or a bare host; `/ws` is appended if missing.
+   */
   static defaultUrl(): string {
+    const custom = NetClient.customServer();
+    if (custom) return custom;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     return `${proto}://${location.host}/ws`;
   }
 
-  connect(name: string, champ: ChampionId, room?: string, url = NetClient.defaultUrl()): Promise<Extract<S2C, { t: 'welcome' }>> {
+  static customServer(): string | null {
+    const raw = (new URLSearchParams(location.search).get('server') ?? import.meta.env.VITE_SERVER_URL ?? '').trim();
+    if (!raw) return null;
+    let url = raw.replace(/^http(s?):\/\//, 'ws$1://');
+    if (!/^wss?:\/\//.test(url)) url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${url}`;
+    url = url.replace(/\/+$/, '');
+    if (!url.endsWith('/ws')) url += '/ws';
+    return url;
+  }
+
+  connect(name: string, champ: ChampionId, room?: string, mode?: ModeId, url = NetClient.defaultUrl()): Promise<Extract<S2C, { t: 'welcome' }>> {
     return new Promise((resolve, reject) => {
       let settled = false;
       const ws = new WebSocket(url);
@@ -30,7 +47,7 @@ export class NetClient {
       }, 8000);
       ws.onopen = () => {
         this.connected = true;
-        this.send({ t: 'hello', v: PROTOCOL_VERSION, name, champ, room });
+        this.send({ t: 'hello', v: PROTOCOL_VERSION, name, champ, room, mode });
       };
       ws.onmessage = (ev) => {
         let msg: S2C;
@@ -63,7 +80,7 @@ export class NetClient {
         if (!settled) {
           settled = true;
           window.clearTimeout(timeout);
-          reject(new Error('Impossibile connettersi al server PvP. Avvia il gioco con "npm run dev".'));
+          reject(new Error('Impossibile connettersi al server PvP. Il server è acceso? (npm run dev / npm run share)'));
         }
       };
       ws.onclose = () => {

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { ChampionId } from '../../shared/champions';
-import type { PlayerInfo, PlayerState, S2C, V3 } from '../../shared/protocol';
+import type { ModeId } from '../../shared/modes';
+import type { MatchModeMsg, PlayerInfo, PlayerState, S2C, V3 } from '../../shared/protocol';
 import type { Fighter } from '../game/Fighter';
 import { wrapAngle } from '../game/Fighter';
 import type { Match, NetBridge } from '../game/Match';
@@ -29,6 +30,11 @@ export class OnlineSession implements NetBridge {
   myId = '';
   room = '';
   arena = '';
+  /** the current match's mode and RIFLETTORE schedule seed */
+  mode: ModeId = 'dm';
+  seed = 0;
+  /** server time the current match went live (RIFLETTORE's beat 0) */
+  private t0 = 0;
   players = new Map<string, PlayerInfo>();
   private buffers = new Map<string, Sample[]>();
   private offset: number | null = null;
@@ -41,22 +47,33 @@ export class OnlineSession implements NetBridge {
   /** messages that arrived before the match existed */
   private pendingSpawns: Extract<S2C, { t: 'spawn' }>[] = [];
 
-  async connect(name: string, champ: ChampionId, room?: string): Promise<Extract<S2C, { t: 'welcome' }>> {
-    const w = await this.net.connect(name, champ, room);
+  /** `mode`: what a new private room plays */
+  async connect(name: string, champ: ChampionId, room?: string, mode?: ModeId): Promise<Extract<S2C, { t: 'welcome' }>> {
+    const w = await this.net.connect(name, champ, room, mode);
     this.myId = w.id;
     this.room = w.room;
     this.arena = w.arena;
+    this.setMode(w);
     for (const p of w.players) this.players.set(p.id, p);
     this.offset = w.time - performance.now();
     this.net.onClose = (r) => this.onDisconnect?.(r);
     return w;
   }
 
+  private setMode(msg: MatchModeMsg): void {
+    this.mode = msg.mode === 'spot' ? 'spot' : 'dm';
+    this.seed = msg.seed ?? 0;
+    this.t0 = msg.t0 ?? 0;
+  }
+
   /** attach to a freshly built Match (also after arena changes) */
   attach(m: Match): void {
     this.match = m;
     m.net = this;
+    // joining mid-match: the first blood is already history
+    m.medals.seed([...this.players.values()].some((p) => p.kills > 0));
     for (const p of this.players.values()) {
+      if (p.score) m.spot?.scores.set(p.id, p.score);
       if (p.id === this.myId) {
         m.local.kills = p.kills;
         m.local.deaths = p.deaths;
@@ -109,6 +126,8 @@ export class OnlineSession implements NetBridge {
       slow: info.slow,
       blockable: info.blockable,
       at: info.at ? (info.at.toArray().map((v) => +v.toFixed(2)) as V3) : undefined,
+      mo: info.mo,
+      ctr: info.counter || undefined,
     });
   }
 
@@ -130,9 +149,19 @@ export class OnlineSession implements NetBridge {
 
   update(dt: number): void {
     // drain messages
-    while (this.net.queue.length) this.handle(this.net.queue.shift()!);
+    while (this.net.queue.length) {
+      const msg = this.net.queue.shift()!;
+      // one bad message (another client's malformed action) must not stop the frame loop
+      try {
+        this.handle(msg);
+      } catch (e) {
+        console.error(`[net] bad '${msg.t}' message`, e);
+      }
+    }
     const m = this.match;
     if (!m) return;
+    // RIFLETTORE runs on the server's beat clock
+    if (m.spot) m.spot.timeMs = Math.max(0, this.serverNow() - this.t0);
     // send local state at 20 Hz
     this.sendT -= dt;
     if (this.sendT <= 0 && m.local.alive) {
@@ -151,7 +180,7 @@ export class OnlineSession implements NetBridge {
       f: r(f.facing),
       ay: r(f.aimYaw),
       ap: r(f.aimPitch),
-      fl: (f.grounded ? 1 : 0) | (f.boosting ? 2 : 0) | (f.dashTime > 0 ? 4 : 0) | (f.guard ? 8 : 0) | (f.wallRun > 0 ? 16 : 0),
+      fl: (f.grounded ? 1 : 0) | (f.boosting ? 2 : 0) | (f.dashTime > 0 ? 4 : 0) | (f.guard ? 8 : 0) | (f.wallRun > 0 ? 16 : 0) | (f.dashIv > 0 ? 32 : 0),
       h: [HOOK_CODES.indexOf(hk[0].state), HOOK_CODES.indexOf(hk[1].state)],
     };
     if (hk[0].state !== 'idle') s.ha = [r(hk[0].anchor.x), r(hk[0].anchor.y), r(hk[0].anchor.z)];
@@ -198,6 +227,11 @@ export class OnlineSession implements NetBridge {
       f.dashTime = (fl & 4) !== 0 ? 0.05 : 0;
       f.guard = (fl & 8) !== 0;
       f.wallRun = (fl & 16) !== 0 ? 0.1 : 0;
+      if ((fl & 32) !== 0) {
+        // dash i-frames: hits on this puppet are left to the server (likely a perfect dodge)
+        f.dodgeT = Math.max(f.dodgeT, 0.06);
+        f.invuln = Math.max(f.invuln, 0.06);
+      }
       // hooks
       for (let i = 0; i < 2; i++) {
         const code = HOOK_CODES[b.h[i]] ?? 'idle';
@@ -254,7 +288,7 @@ export class OnlineSession implements NetBridge {
         } else if (msg.e.a === 'flip') {
           f.startFlip(Math.sign(msg.e.n ?? 0));
         } else if (msg.e.a === 'hookL' || msg.e.a === 'hookR') {
-          f.applyRemoteHook(msg.e.a === 'hookL' ? 0 : 1, 'flying', msg.e.p);
+          f.applyRemoteHook(msg.e.a === 'hookL' ? 0 : 1, 'flying', msg.e.p, msg.e.t ?? null);
           m.audio.play('hookFire', f.pos, 0.6);
         } else f.kit?.playRemote(f, msg.e, m);
         break;
@@ -271,6 +305,9 @@ export class OnlineSession implements NetBridge {
           crit: msg.crit,
           at: msg.at ? new THREE.Vector3(...msg.at) : undefined,
           slot: msg.slot as HitInfo['slot'] | undefined,
+          mo: msg.mo,
+          counter: msg.ctr,
+          punish: msg.pun,
         }, msg.blocked);
         tgt.hp = msg.hp;
         break;
@@ -279,7 +316,18 @@ export class OnlineSession implements NetBridge {
         if (!m) break;
         const def = m.getFighter(msg.def);
         const att = m.getFighter(msg.att);
-        if (def && att) m.applyParry(def, att);
+        // the server decides whether the parry paid the counter window (its cooldown is the truth)
+        if (def && att) m.applyParry(def, att, !!msg.rw);
+        break;
+      }
+      case 'dodge': {
+        if (!m) break;
+        const def = m.getFighter(msg.def);
+        // the server already rate-limits the reward: clear the local cooldown so it always shows
+        if (def) {
+          def.dodgeCd = 0;
+          m.applyDodge(def, m.getFighter(msg.att) ?? null, !!msg.ft);
+        }
         break;
       }
       case 'heal': {
@@ -316,8 +364,16 @@ export class OnlineSession implements NetBridge {
         }
         this.onEnd?.(msg.winner, msg.players, msg.next);
         break;
+      case 'spot':
+        for (const [id, sc] of msg.sc) {
+          const p = this.players.get(id);
+          if (p) p.score = sc;
+        }
+        m?.spot?.applyServer(msg.own, !!msg.ctd, msg.sc);
+        break;
       case 'start':
         this.arena = msg.arena;
+        this.setMode(msg);
         this.players.clear();
         for (const p of msg.players) this.players.set(p.id, p);
         this.buffers.clear();

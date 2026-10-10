@@ -108,6 +108,8 @@ export interface MatchContext {
   shake(amount: number, at?: THREE.Vector3): void;
   /** hit-stop / freeze frames */
   hitStop(seconds: number): void;
+  /** objective area of the game mode (RIFLETTORE zone), for bots */
+  objective?(): { c: [number, number, number]; r: number; h: number } | null;
 }
 
 export interface HitInfo {
@@ -124,6 +126,12 @@ export interface HitInfo {
   at?: THREE.Vector3;
   /** guard can block it (most melee & projectiles) */
   blockable?: boolean;
+  /** momentum strike: impact speed in m/s (the server re-checks it against the attacker's speed) */
+  mo?: number;
+  /** first hit after a perfect dodge or parry (set by the match when it consumes the counter window) */
+  counter?: boolean;
+  /** the target was off-beat or parried: punish counter (decided by the match / server) */
+  punish?: boolean;
 }
 
 /** Per-champion combat logic. */
@@ -148,4 +156,19 @@ export interface Kit {
   tickRemote?(f: Fighter, dt: number, m: MatchContext): void;
   /** currently charging (0..1) for HUD / anims */
   charge: number;
+  /** charge ring state for the HUD: 1 = perfect window / max crescendo, 2 = overcharged */
+  chargeFx?: number;
+  /** the champion's guard parried `attacker` (close = near enough to stun it) */
+  onParry?(f: Fighter, attacker: Fighter, m: MatchContext, close: boolean): void;
+  /** the champion took part in a takedown (kill, or assist when `kill` is false) */
+  onTakedown?(f: Fighter, victim: Fighter, m: MatchContext, kill: boolean): void;
+  /** short HUD badge per slot (recast ready, active element...) */
+  hints?(): Partial<Record<AbilitySlot, string>>;
+  /**
+   * Effects that outlive the action (zones, thrown objects, auras): runs every frame for every
+   * fighter, alive or dead, simulated or remote.
+   */
+  tickWorld?(f: Fighter, dt: number, m: MatchContext): void;
+  /** kit-owned scene objects (added to / removed from the scene with the fighter) */
+  readonly sceneObjects?: THREE.Object3D[];
 }

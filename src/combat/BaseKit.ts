@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { AbilitySlot } from '../../shared/champions';
 import { CHAMPIONS } from '../../shared/champions';
+import { COMBAT, momentumK } from '../../shared/constants';
 import type { Fighter } from '../game/Fighter';
 import { forwardOf } from '../game/Fighter';
 import type { ActionEvent, Intent, Kit, MatchContext } from '../game/types';
@@ -25,6 +26,10 @@ export interface MeleeHit {
   stun?: number;
   slow?: number;
   scale?: number;
+  /** guard can block it (default true) */
+  blockable?: boolean;
+  /** per-target damage scale (executions): overrides `scale` */
+  scaleFn?: (target: Fighter) => number;
 }
 
 /** Shared plumbing for champion kits: cooldowns, actions, melee sweeps, magnetism. */
@@ -51,6 +56,9 @@ export abstract class BaseKit implements Kit {
   protected skillBuf = 0;
   /** visual-only events scheduled a little later (wave fronts...), for local and remote */
   private fx: Array<{ due: number; run: () => void }> = [];
+  /** momentum the current action started with: speed (m/s) and travel direction */
+  protected entrySpeed = 0;
+  protected entryDir = new THREE.Vector3(0, 0, 1);
 
   constructor(readonly champId: keyof typeof CHAMPIONS) {}
 
@@ -83,7 +91,34 @@ export abstract class BaseKit implements Kit {
     this.faceYaw = faceYaw;
     this.swingHits.clear();
     this.hitActive = null;
-    void f;
+    this.captureEntry(f);
+  }
+
+  /** remember how fast (and where) the fighter was travelling when the action started */
+  protected captureEntry(f: Fighter): void {
+    this.entrySpeed = f.speedPeak;
+    const s = f.vel.length();
+    if (s > 0.5) this.entryDir.copy(f.vel).divideScalar(s);
+    else forwardOf(f.facing, this.entryDir);
+  }
+
+  /** 0..1: how much momentum the current action carries */
+  protected get entryK(): number {
+    return momentumK(this.entrySpeed);
+  }
+
+  /** impact speed of a momentum strike on `o`: relative speed, never more than your own; 0 when flying away */
+  protected impactSpeed(f: Fighter, o: Fighter): number {
+    if (this.entrySpeed < COMBAT.momentumMinSpeed) return 0;
+    _v.subVectors(o.pos, f.pos);
+    if (_v.lengthSq() > 1e-6 && _v.normalize().dot(this.entryDir) < -0.3) return 0;
+    _v.copy(this.entryDir).multiplyScalar(this.entrySpeed).sub(o.vel);
+    return Math.min(_v.length(), this.entrySpeed);
+  }
+
+  /** the ability part gets the momentum bonus (shared table, also checked by the server) */
+  protected momentumPart(slot: AbilitySlot, part: string): boolean {
+    return !!this.data.abilities[slot].momentum?.includes(part);
   }
 
   protected endAction(f: Fighter): void {
@@ -166,7 +201,7 @@ export abstract class BaseKit implements Kit {
     const it = f.intent;
     const cos = Math.cos(THREE.MathUtils.degToRad(coneDeg));
     for (const o of m.fighters) {
-      if (o === f || !o.alive) continue;
+      if (o === f || !o.alive || o.isHiddenFrom(f)) continue;
       if (o.team !== 0 && o.team === f.team) continue;
       o.chest(_v);
       const d = _v.distanceTo(f.pos);
@@ -197,6 +232,21 @@ export abstract class BaseKit implements Kit {
 
   /** Magnetism: face the target and lunge toward it, stopping at `stopDist`. */
   protected magnet(f: Fighter, target: Fighter | null, lunge: number, stopDist = 1.7, vertical = false): void {
+    const k = this.entryK;
+    if (target && k > 0) {
+      // momentum strike: keep most of the speed and bend it toward the target (fly through them)
+      target.chest(_a);
+      f.chest(_b);
+      const toT = _a.sub(_b).normalize();
+      const spd = f.vel.length();
+      const dir = spd > 1 ? _w.copy(f.vel).divideScalar(spd) : _w.copy(toT);
+      if (dir.dot(toT) < 0) dir.copy(toT);
+      else dir.lerp(toT, 0.55).normalize();
+      f.vel.copy(dir).multiplyScalar(Math.max(lunge, spd * (0.6 + 0.3 * k)));
+      if (f.grounded && f.vel.y < 0) f.vel.y = 0;
+      this.faceYaw = Math.atan2(toT.x, toT.z);
+      return;
+    }
     if (!target) {
       this.faceYaw = f.aimYaw;
       forwardOf(f.aimYaw, _v);
@@ -221,7 +271,10 @@ export abstract class BaseKit implements Kit {
     if (!m.isAuthority(f)) return;
     const yaw = this.faceYaw ?? f.facing;
     forwardOf(yaw, _w);
-    const cosArc = Math.cos(THREE.MathUtils.degToRad(h.arc));
+    const mom = this.momentumPart(h.slot, h.part);
+    // at speed the blade sweeps a wider arc (you are flying past, not standing in front)
+    const arc = mom && this.entryK >= 0.3 ? Math.max(h.arc, 120) : h.arc;
+    const cosArc = Math.cos(THREE.MathUtils.degToRad(arc));
     const origin = _a.set(f.pos.x, f.pos.y + 1.1, f.pos.z);
     for (const o of m.fighters) {
       if (o === f || !o.alive || this.swingHits.has(o.id)) continue;
@@ -240,15 +293,21 @@ export abstract class BaseKit implements Kit {
         if (_v.dot(_w) < cosArc) continue;
       }
       this.swingHits.add(o.id);
+      const mo = mom ? Math.round(this.impactSpeed(f, o)) : 0;
       const kb = new THREE.Vector3();
       if (h.kb || h.kbUp) {
         kb.subVectors(o.pos, f.pos).setY(0).normalize().multiplyScalar(h.kb ?? 0);
         kb.y = h.kbUp ?? 0;
+        kb.multiplyScalar(1 + COMBAT.momentumKnockback * momentumK(mo));
       }
       const at = _b.clone().lerp(origin, 0.3);
-      m.reportHit(f, o, { slot: h.slot, part: h.part, kb, stun: h.stun, slow: h.slow, at, scale: h.scale, blockable: true, crit: this.isBackstab(f, o) });
+      m.reportHit(f, o, { slot: h.slot, part: h.part, kb, stun: h.stun, slow: h.slow, at, scale: h.scaleFn ? h.scaleFn(o) : h.scale, blockable: h.blockable ?? true, crit: this.isBackstab(f, o), mo: mo > COMBAT.momentumMinSpeed ? mo : undefined });
+      this.onSweepHit(f, o, h, m);
     }
   }
+
+  /** called for every enemy a melee sweep hits (passives: marks, bonus damage...) */
+  protected onSweepHit(_f: Fighter, _target: Fighter, _h: MeleeHit, _m: MatchContext): void {}
 
   protected isBackstab(f: Fighter, o: Fighter): boolean {
     forwardOf(o.facing, _v);
@@ -282,7 +341,8 @@ export abstract class BaseKit implements Kit {
     let bestF: Fighter | null = null;
     _b.copy(it.aimOrigin).addScaledVector(it.aimDir, max);
     for (const o of m.fighters) {
-      if (o === f || !o.alive) continue;
+      if (o === f || !o.alive || o.isHiddenFrom(f)) continue;
+      if (o.team !== 0 && o.team === f.team) continue;
       capsule(o, _c1, _c2);
       const d2 = segSegDist2(it.aimOrigin, _b, _c1, _c2, _v, _w);
       if (d2 < CAPSULE_R * CAPSULE_R) {

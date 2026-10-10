@@ -263,6 +263,63 @@ export function outlineMaterial(color: THREE.ColorRepresentation = 0x07040c, wid
   return m;
 }
 
+/** Same hull as OUTLINE_VERT, deformed by the skeleton (GLB champions). */
+const OUTLINE_SKIN_VERT = /* glsl */ `
+uniform float uWidth;
+uniform float uRefDist;
+uniform vec2 uResolution;
+uniform float uOutlineScale;
+attribute float aOutline;
+#include <common>
+#include <skinning_pars_vertex>
+#include <fog_pars_vertex>
+void main() {
+  #include <beginnormal_vertex>
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <begin_vertex>
+  #include <skinning_vertex>
+  vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
+  vec3 nView = normalize( normalMatrix * objectNormal );
+  vec4 clip = projectionMatrix * mvPosition;
+  vec2 nc = ( projectionMatrix * vec4( nView, 0.0 ) ).xy;
+  float l = length( nc );
+  nc = l > 1e-5 ? nc / l : vec2( 0.0 );
+  float dist = max( -mvPosition.z, 0.05 );
+  float px = uWidth * aOutline * uOutlineScale * clamp( uRefDist / dist, 0.28, 1.25 ) * ( uResolution.y / 1080.0 );
+  clip.xy += nc * px * 2.0 / uResolution * clip.w;
+  clip.z += 0.00002 * clip.w;
+  gl_Position = clip;
+  #include <fog_vertex>
+}
+`;
+
+/** Inverted-hull outline for SkinnedMesh hulls (needs smooth `normal` + `aOutline`). */
+export function outlineMaterialSkinned(color: THREE.ColorRepresentation = 0x07040c, width = 2.4, refDist = 6): THREE.ShaderMaterial {
+  const key = `skin_${new THREE.Color(color).getHexString()}_${width}_${refDist}`;
+  let m = outlineCache.get(key);
+  if (!m) {
+    m = new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+          uColor: { value: new THREE.Color(color) },
+          uWidth: { value: width },
+          uRefDist: { value: refDist },
+        },
+      ]),
+      vertexShader: OUTLINE_SKIN_VERT,
+      fragmentShader: OUTLINE_FRAG,
+      side: THREE.BackSide,
+      fog: true,
+    });
+    m.uniforms.uResolution = ToonEnv.resolution;
+    m.uniforms.uOutlineScale = ToonEnv.outlineScale;
+    outlineCache.set(key, m);
+  }
+  return m;
+}
+
 const smoothCache = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 
 /** Geometry with only position + smooth (welded) normals, ideal for inverted-hull outlines. */

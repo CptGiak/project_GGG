@@ -5,7 +5,7 @@ import { neon, toon, addOutline } from '../render/toon';
 import { noteGeometry } from '../fighter/shapes';
 import { Shape } from '../vfx/Particles';
 
-export type ProjKind = 'bolt' | 'orb' | 'note' | 'grenade';
+export type ProjKind = 'bolt' | 'orb' | 'note' | 'grenade' | 'blade' | 'star';
 
 export interface ProjectileSpec {
   owner: Fighter;
@@ -28,12 +28,14 @@ export interface ProjectileSpec {
   /** explode with this radius on impact / expiry (area damage) */
   explode?: number;
   headshots?: boolean;
+  /** damage falloff with distance travelled: full up to `from` m, down to `min` at `to` m */
+  falloff?: { from: number; to: number; min: number };
   /** remote-owned: visuals only, no hit reporting */
   visualOnly?: boolean;
   scale?: number;
   /** hit set shared by a volley (each target is hit once by the whole fan) */
   sharedHits?: Set<string>;
-  /** authority only: called when this projectile damages a fighter */
+  /** authority side: called when the projectile hits a fighter (marks, stacks, refunds...) */
   onHit?: (target: Fighter) => void;
   /** explosions: targets within this radius take `corePart` (sweet spot) at full damage */
   coreRadius?: number;
@@ -44,6 +46,8 @@ export interface ProjectileSpec {
 
 interface Proj extends ProjectileSpec {
   obj: THREE.Object3D;
+  /** where it was fired from (falloff) */
+  origin: THREE.Vector3;
   age: number;
   hitIds: Set<string>;
   dead: boolean;
@@ -119,7 +123,13 @@ export class Projectiles {
     obj.position.copy(s.pos);
     obj.scale.setScalar(s.scale ?? 1);
     obj.visible = true;
-    this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), obj, age: 0, hitIds: s.sharedHits ?? new Set(), dead: false, bounces: 0 });
+    this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), origin: s.pos.clone(), obj, age: 0, hitIds: s.sharedHits ?? new Set(), dead: false, bounces: 0 });
+  }
+
+  private falloffScale(p: Proj): number {
+    const f = p.falloff!;
+    const k = THREE.MathUtils.clamp((p.pos.distanceTo(p.origin) - f.from) / (f.to - f.from), 0, 1);
+    return 1 - (1 - f.min) * k;
   }
 
   clear(): void {
@@ -176,6 +186,30 @@ export class Projectiles {
       const glow = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), neon(0xffffff, 1.5, { additive: true, opacity: 0.35 }));
       glow.userData = { tint: 2, k: 1.2 };
       g.add(note, glow);
+    } else if (kind === 'blade') {
+      // kunai / soul nail: long steel diamond with a coloured glow
+      const blade = new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 0), neon(0xffffff, 2.6));
+      blade.scale.set(0.55, 0.55, 3.4);
+      blade.userData = { tint: 2, k: 2.2 };
+      const glow = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.55, 4, 8), neon(0xffffff, 2, { additive: true, opacity: 0.55 }));
+      glow.rotation.x = Math.PI / 2;
+      glow.userData = { tint: 1, k: 1.5 };
+      g.add(blade, glow);
+    } else if (kind === 'star') {
+      // shuriken: four blades around a hub, spinning flat
+      const star = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const b = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.34, 4), neon(0xffffff, 2.6));
+        b.userData = { tint: 2, k: 2.2 };
+        b.rotation.z = (i * Math.PI) / 2;
+        b.position.set(-Math.sin((i * Math.PI) / 2) * 0.17, Math.cos((i * Math.PI) / 2) * 0.17, 0);
+        star.add(b);
+      }
+      star.rotation.x = Math.PI / 2;
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), neon(0xffffff, 1.6, { additive: true, opacity: 0.4 }));
+      glow.userData = { tint: 1, k: 1.3 };
+      g.add(star, glow);
+      g.userData.twirl = 1;
     } else {
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), toon({ color: 0x1b1622, spec: 0.6 }));
       addOutline(body, 1.6);
@@ -265,8 +299,9 @@ export class Projectiles {
       if (!p.dead && hitFighter && (!worldHit || best < Infinity)) {
         const f = hitFighter;
         if (f.invuln > 0 && f.invuln < 5) {
-          // dodged through i-frames: keep flying
+          // dodged through i-frames: keep flying; the match (or server) rules a perfect dodge or a miss
           p.hitIds.add(f.id);
+          if (!p.explode && !p.visualOnly && m.isAuthority(p.owner)) m.reportHit(p.owner, f, { slot: p.slot, part: p.part, at: hitPoint, blockable: true, scale: p.falloff ? this.falloffScale(p) : undefined });
         } else {
           p.hitIds.add(f.id);
           if (p.explode) {
@@ -277,7 +312,7 @@ export class Projectiles {
             const crit = !!p.headshots && hitPoint.y > f.pos.y + 1.48;
             if (!p.visualOnly && m.isAuthority(p.owner)) {
               const kb = p.kb ? p.vel.clone().normalize().multiplyScalar(p.kb) : undefined;
-              m.reportHit(p.owner, f, { slot: p.slot, part: p.part, crit, kb, stun: p.stun, slow: p.slow, at: hitPoint, blockable: true });
+              m.reportHit(p.owner, f, { slot: p.slot, part: p.part, crit, kb, stun: p.stun, slow: p.slow, at: hitPoint, blockable: true, scale: p.falloff ? this.falloffScale(p) : undefined });
               p.onHit?.(f);
             }
             m.vfx.hitSpark(hitPoint, _n.copy(p.vel).normalize().negate(), p.color, crit);
@@ -288,10 +323,11 @@ export class Projectiles {
       if (!p.dead && !worldHit) p.pos.copy(to);
       // visuals
       p.obj.position.copy(p.pos);
-      if (p.kind === 'bolt' || p.kind === 'note') {
+      if (p.kind === 'bolt' || p.kind === 'note' || p.kind === 'blade') {
         _n.copy(p.vel).normalize();
         if (_n.lengthSq() > 0) p.obj.quaternion.setFromUnitVectors(Z, _n);
       }
+      if (p.obj.userData.twirl) p.obj.rotation.y += dt * 24;
       p.obj.children.forEach((c) => {
         if (c.userData.spin) c.rotation.z += dt * 6 * c.userData.spin;
       });

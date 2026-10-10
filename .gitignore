@@ -1,4 +1,18 @@
 node_modules
 dist
+dist-static
 *.log
 .DS_Store
+
+# Blender pipeline: intermediate renders / generated textures / caches (tools/blender)
+docs/art/blender/_work/
+tools/blender/textures/
+tools/blender/__pycache__/
+tools/blender/lol/__pycache__/
+tools/blender/_*_debug.png
+
+# League of Legends downloads (raw game files) stay local; the converted GLBs in
+# public/models/lol/ are committed so the game has them
+tools/blender/lol/_cache/
+# League of Legends renders (derived from Riot assets): local only
+docs/art/lol/

@@ -18,17 +18,29 @@ const NOTE_RANGE = 42;
 const NOTE_R = 3.8;
 const NOTE_CORE = 1.6;
 
+/** Resonance CRESCENDO: per-tick damage climbs from TICK_MIN to the table value over RAMP_SEC on one target */
+const TICK_MIN = 12;
+const RAMP_SEC = 1;
+/** losing the target for longer than this (s) restarts the crescendo */
+const RAMP_GRACE = 0.25;
+
 /**
  * SERA — holo diva caster.
  * Skill: High Note (lobbed note that bursts at the aimed point, stronger at the centre) ·
- * Attack: Note Orb (homing) · Secondary: Resonance (channelled beam, slows) · F: Echo Wave
- * (knockback ring) · R: Grand Finale (spotlight pillar at the aimed point + self heal).
+ * Attack: Note Orb (homing) · Secondary: Resonance (channelled beam, slows; CRESCENDO: held on
+ * the same target its damage builds up to double) · F: Echo Wave (knockback ring) · R: Grand
+ * Finale (spotlight pillar at the aimed point + self heal).
  */
 export class SeraKit extends BaseKit {
   private fireT = 0;
   private aimHold = 0;
   private channel = 0;
   private tickT = 0;
+  /** crescendo: who the beam is locked on, for how long, and when it last connected */
+  private focus: Fighter | null = null;
+  private focusT = 0;
+  private focusAt = -10;
+  chargeFx = 0;
   private finale: THREE.Vector3 | null = null;
   private finaleT = 0;
   /** remote: channel visual on */
@@ -85,12 +97,21 @@ export class SeraKit extends BaseKit {
       const end = this.beamUpdate(f, m, this.tickT <= 0);
       if (this.tickT <= 0) this.tickT = 0.1;
       void end;
+      // the slipped target restarts the crescendo
+      if (this.focus && m.time - this.focusAt > RAMP_GRACE + 0.1) {
+        this.focus = null;
+        this.focusT = 0;
+      }
+      this.charge = this.ramp;
+      this.chargeFx = this.ramp >= 1 ? 1 : 0;
       if (!it.secondary || this.channel <= 0) this.stopChannel(f, m);
       return;
     }
     if (it.secondaryPressed && this.cd.sec <= 0 && !this.act) {
       this.channel = 2.2;
       this.tickT = 0;
+      this.focus = null;
+      this.focusT = 0;
       f.anim.play('aim', { hold: true, fadeIn: 0.06 });
       m.audio.play('beam', f.pos, 0.8);
       m.broadcastAction(f, { a: 'res', n: 1 });
@@ -168,25 +189,61 @@ export class SeraKit extends BaseKit {
     const wh = m.world.raycast(from, dir, from.distanceTo(to));
     if (wh) to.copy(wh.point);
     const [c0, c1] = f.champ.colors;
-    m.vfx.beam(from, to, c0, 0.16 + Math.sin(m.time * 40) * 0.03, 0.07);
-    m.vfx.beam(from, to, 0xffffff, 0.05, 0.07);
+    // the beam swells with the crescendo
+    const ramp = this.ramp;
+    m.vfx.beam(from, to, c0, 0.16 + ramp * 0.14 + Math.sin(m.time * 40) * 0.03, 0.07);
+    m.vfx.beam(from, to, 0xffffff, 0.05 + ramp * 0.05, 0.07);
     if (Math.random() < 0.7) m.vfx.add.emit({ pos: to.clone(), vel: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), life: 0.25, size: 0.18, size1: 0.02, color: Math.random() < 0.5 ? c0 : c1, shape: Shape.star });
     if (Math.random() < 0.3) m.vfx.ring(from.clone().addScaledVector(dir, Math.random() * from.distanceTo(to)), dir, c1, 0.1, 0.5, 0.25);
     if (tick && m.isAuthority(f)) {
+      const hits: Array<{ o: Fighter; at: THREE.Vector3 }> = [];
+      let first: Fighter | null = null;
+      let firstD = Infinity;
       for (const o of m.fighters) {
         if (o === f || !o.alive) continue;
+        if (o.team !== 0 && o.team === f.team) continue;
         capsule(o, _c1, _c2);
         if (segSegDist2(from, to, _c1, _c2, _a, _b) < (CAPSULE_R + 0.35) ** 2) {
-          m.reportHit(f, o, { slot: 'sec', part: 'tick', at: _a.clone(), slow: 0.5, blockable: true });
+          hits.push({ o, at: _a.clone() });
+          const d = _a.distanceTo(from);
+          if (d < firstD) {
+            firstD = d;
+            first = o;
+          }
         }
       }
-      m.audio.play('beam', from, 0.35);
+      // crescendo: the nearest target on the beam; keeping it there builds the damage up
+      if (first) {
+        const wasMax = this.ramp >= 1;
+        if (first === this.focus && m.time - this.focusAt <= RAMP_GRACE + 0.1) this.focusT += 0.1;
+        else {
+          this.focus = first;
+          this.focusT = 0;
+        }
+        this.focusAt = m.time;
+        if (!wasMax && this.ramp >= 1) m.audio.play('chord', from, 0.8);
+      }
+      const full = this.data.abilities.sec.damage.tick;
+      for (const { o, at } of hits) {
+        const r = o === this.focus ? this.ramp : 0;
+        m.reportHit(f, o, { slot: 'sec', part: 'tick', at, slow: 0.5 + 0.4 * r, blockable: true, scale: (TICK_MIN + (full - TICK_MIN) * r) / full });
+      }
+      m.audio.play('beam', from, 0.35 + 0.3 * this.ramp);
     }
     return to;
   }
 
+  /** 0..1 crescendo on the current focus target (drops when it slips off the beam) */
+  private get ramp(): number {
+    if (!this.focus || this.channel <= 0) return 0;
+    return Math.min(1, this.focusT / RAMP_SEC);
+  }
+
   private stopChannel(f: Fighter, m: MatchContext): void {
     this.channel = 0;
+    this.charge = 0;
+    this.chargeFx = 0;
+    this.focus = null;
     this.cd.sec = this.data.abilities.sec.cooldown;
     f.anim.action.stop(0.15);
     this.aimHold = 0.2;
@@ -255,6 +312,8 @@ export class SeraKit extends BaseKit {
       this.channel = 0;
       this.cd.sec = this.data.abilities.sec.cooldown;
     }
+    this.focus = null;
+    this.chargeFx = 0;
     this.finale = null;
     super.cancel(f);
   }

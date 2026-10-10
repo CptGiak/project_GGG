@@ -21,7 +21,7 @@ const POLE_BARE: [number, number, number] = [0.6, -0.3, -0.1];
 
 /**
  * Drives one champion visual: locomotion blend -> action clip -> flinch overlay -> head look ->
- * FK -> weapon-driven IK for both hands -> off-hand grip -> cloth simulation.
+ * FK -> weapon-driven IK for both hands -> off-hand grip -> skinned model sync -> cloth simulation.
  */
 export class FighterAnimator {
   readonly loco: Locomotion;
@@ -86,6 +86,13 @@ export class FighterAnimator {
     this.flinch.update(dt);
     this.flinch.apply(pose, airborne);
     this.applyReact(dt, pose);
+    // clips authored for another body size: weapon targets and hip offsets scale with the body
+    const k = this.v.animScale ?? 1;
+    if (k !== 1) {
+      pose.wR.p.multiplyScalar(k);
+      pose.wL.p.multiplyScalar(k);
+      pose.hips.multiplyScalar(k);
+    }
 
     // head / chest look-at
     const lp = THREE.MathUtils.clamp(st.lookPitch, -55, 55);
@@ -113,6 +120,7 @@ export class FighterAnimator {
     applyPose(pose, this.v.rig);
     this.v.root.updateMatrixWorld(true);
     this.solveWeapons();
+    this.v.syncPose?.(pose);
 
     if (simulateCloth) {
       updateBodySpheres(this.v.bodySpheres);

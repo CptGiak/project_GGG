@@ -1,8 +1,11 @@
-import { CHAMPION_IDS, CHAMPIONS, SLOT_ORDER, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, LOL_CHAMPIONS, SLOT_ORDER, type ChampionId } from '../../shared/champions';
+import { championAvailable } from '../champions';
 import { ARENA_META } from '../../shared/arenas';
+import { MODES, MODE_IDS, type ModeId } from '../../shared/modes';
 import type { PlayerInfo } from '../../shared/protocol';
 import type { Settings } from '../core/Settings';
 import { DEFAULT_BINDINGS, REBINDABLE, SLOT_ACTION, actionLabel, keyLabel, resolveBindings, type Action } from '../core/Input';
+import { NetClient } from '../net/NetClient';
 
 type Attrs = Record<string, string | number | boolean | ((e: Event) => void) | undefined>;
 
@@ -45,8 +48,36 @@ export interface MenuCallbacks {
   sfx(name: string): void;
 }
 
-/** static builds (no game server alongside, e.g. a hosted demo page) offer practice only */
-export const STATIC_BUILD = import.meta.env.VITE_STATIC === '1';
+/** static builds (no game server alongside, e.g. a hosted demo page) offer practice only, unless
+ *  they are pointed at a remote game server (VITE_SERVER_URL or ?server=) */
+export const STATIC_BUILD = import.meta.env.VITE_STATIC === '1' && !NetClient.customServer();
+
+/** link that drops a friend straight into the given room */
+export function inviteLink(room: string): string {
+  const u = new URL(location.href);
+  u.search = '';
+  u.hash = '';
+  const server = new URLSearchParams(location.search).get('server');
+  if (server) u.searchParams.set('server', server);
+  u.searchParams.set('room', room);
+  return u.toString();
+}
+
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // clipboard API refused (insecure origin / embedded page): fall back to a hidden textarea
+    const ta = h('textarea', { style: 'position:fixed;opacity:0' }) as HTMLTextAreaElement;
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
 
 export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
   const items: Array<[string, string, () => void]> = [
@@ -73,6 +104,7 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
     list,
     h('div', { class: 'mm-name' }, h('label', {}, 'CODENAME'), input),
     h('div', { class: 'mm-foot' }, 'Q/E RAMPINI · SPAZIO GAS · SHIFT SCATTO', h('br'), 'v0.1 — browser build'),
+    riotNotice(),
     // touch-only devices: the game needs a keyboard and a mouse
     window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
       ? h('div', { class: 'mm-touch' }, 'PROJECT GGG si gioca da computer con tastiera e mouse.')
@@ -80,21 +112,36 @@ export function mainMenu(s: Settings, cb: MenuCallbacks): HTMLElement {
   );
 }
 
+/**
+ * Notice required by Riot's fan-project policy ("Legal Jibber Jabber") while League of Legends
+ * models are in the game (public/models/lol, see tools/blender/build_lol.py).
+ */
+function riotNotice(): HTMLElement | null {
+  const lol = LOL_CHAMPIONS.filter(championAvailable);
+  if (!lol.length) return null;
+  return h('div', { class: 'mm-legal' },
+    `${lol.map((id) => CHAMPIONS[id].name).join(', ')}: modelli e texture da League of Legends © Riot Games. `,
+    'PROJECT GGG isn\'t endorsed by Riot Games and doesn\'t reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. ',
+    'Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.');
+}
+
 export interface SelectCallbacks {
   pick(id: ChampionId): void;
-  confirm(opts: { champ: ChampionId; arena: string; bots: number; difficulty: number; room: string; quick: boolean }): void;
+  confirm(opts: { champ: ChampionId; arena: string; bots: number; difficulty: number; room: string; quick: boolean; mode: ModeId }): void;
   back(): void;
   sfx(name: string): void;
 }
 
 export function champSelect(mode: 'practice' | 'online', s: Settings, cb: SelectCallbacks): HTMLElement {
-  let champ: ChampionId = s.champ;
+  const ids = CHAMPION_IDS.filter(championAvailable);
+  let champ: ChampionId = ids.includes(s.champ) ? s.champ : ids[0];
   let arena = s.arena;
   let bots = s.bots;
   let diff = s.botDifficulty;
   const keys = resolveBindings(s.bindings);
+  let gameMode: ModeId = s.mode ?? 'dm';
   const root = h('div', { class: 'screen fade-in' });
-  const cards = h('div', { class: 'cs-cards' });
+  const cards = h('div', { class: ids.length > 4 ? 'cs-cards many' : 'cs-cards' });
   const info = h('div', { class: 'cs-info' });
   const renderInfo = () => {
     const c = CHAMPIONS[champ];
@@ -106,14 +153,14 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       h('div', { class: 'cs-title' }, c.title.toUpperCase()),
       h('div', { class: 'cs-meta' }, h('span', { class: 'role' }, c.role === 'melee' ? 'MISCHIA' : 'DISTANZA'), h('span', {}, `DIFFICOLTÀ ${'★'.repeat(c.difficulty)}${'☆'.repeat(3 - c.difficulty)}`), h('span', {}, `HP ${c.hp}`), h('span', {}, c.weapon.toUpperCase())),
       h('div', { class: 'cs-bio' }, c.bio),
-      h('div', { class: 'cs-abs' }, ...SLOT_ORDER.map((slot) => {
+      h('div', { class: 'cs-abs' }, ...(c.passive ? [h('div', { class: 'cs-ab passive' }, h('div', { class: 'k' }, 'P'), h('div', {}, h('div', { class: 'n' }, c.passive.name.toUpperCase() + '  ·  PASSIVA'), h('div', { class: 'd' }, c.passive.desc)))] : []), ...SLOT_ORDER.map((slot) => {
         const a = c.abilities[slot];
         return h('div', { class: `cs-ab ${slot === 'ult' ? 'ult' : ''}` }, h('div', { class: 'k' }, actionLabel(keys, SLOT_ACTION[slot])), h('div', {}, h('div', { class: 'n' }, a.name.toUpperCase() + (a.cooldown >= 1 ? `  ·  ${a.cooldown}s` : slot === 'ult' ? '  ·  ULTIMATE' : '')), h('div', { class: 'd' }, a.desc)));
       })),
     );
     cards.querySelectorAll('.cs-card').forEach((e) => e.classList.toggle('sel', (e as HTMLElement).dataset.id === champ));
   };
-  for (const id of CHAMPION_IDS) {
+  for (const id of ids) {
     const c = CHAMPIONS[id];
     const card = h('div', { class: 'cs-card', 'data-id': id, style: `--c1:${c.colors[0]};--c2:${c.colors[1]}`, onclick: () => {
       if (champ !== id) {
@@ -130,6 +177,15 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
   // options
   const opts = h('div', { class: 'cs-opts' });
   let roomInput: HTMLInputElement | null = null;
+  const modeSeg = h('div', { class: 'seg' });
+  const modeSub = h('div', { class: 'mode-sub' });
+  const renderMode = () => {
+    modeSeg.innerHTML = '';
+    for (const id of MODE_IDS) modeSeg.append(h('button', { class: id === gameMode ? 'on' : '', onclick: () => { gameMode = id; cb.sfx('uiMove'); renderMode(); } }, MODES[id].name));
+    modeSub.textContent = mode === 'practice' ? MODES[gameMode].sub : `${MODES[gameMode].sub}. Vale per le stanze private nuove: la partita veloce alterna le modalità.`;
+  };
+  renderMode();
+  const modeField = h('div', { class: 'field' }, h('label', {}, 'MODALITÀ'), h('div', {}, modeSeg, modeSub));
   if (mode === 'practice') {
     const arenaRow = h('div', { class: 'arena-pick' });
     const renderArenas = () => {
@@ -155,20 +211,20 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       for (const [lbl, v] of [['FACILE', 0.2], ['NORMALE', 0.5], ['DIFFICILE', 0.85]] as const) diffSeg.append(h('button', { class: Math.abs(v - diff) < 0.05 ? 'on' : '', onclick: () => { diff = v; cb.sfx('uiMove'); renderDiff(); } }, lbl));
     };
     renderDiff();
-    opts.append(h('div', { class: 'field' }, h('label', {}, 'ARENA'), arenaRow), h('div', { class: 'field' }, h('label', {}, 'BOT'), botSeg), h('div', { class: 'field' }, h('label', {}, 'LIVELLO'), diffSeg));
+    opts.append(modeField, h('div', { class: 'field' }, h('label', {}, 'ARENA'), arenaRow), h('div', { class: 'field' }, h('label', {}, 'BOT'), botSeg), h('div', { class: 'field' }, h('label', {}, 'LIVELLO'), diffSeg));
   } else {
     roomInput = h('input', { maxlength: 8, placeholder: 'CODICE (opz.)', value: s.room }) as HTMLInputElement;
-    opts.append(h('div', { class: 'field' }, h('label', {}, 'STANZA'), roomInput));
+    opts.append(h('div', { class: 'field' }, h('label', {}, 'STANZA'), roomInput), modeField);
   }
   const confirm = (quick: boolean) => {
     cb.sfx('uiSelect');
-    cb.confirm({ champ, arena, bots, difficulty: diff, room: quick ? '' : (roomInput?.value ?? '').toUpperCase(), quick });
+    cb.confirm({ champ, arena, bots, difficulty: diff, room: quick ? '' : (roomInput?.value ?? '').toUpperCase(), quick, mode: gameMode });
   };
   const bottom = h('div', { class: 'cs-bottom' });
   if (mode === 'practice') bottom.append(h('div', { class: 'btn red', onclick: () => confirm(true) }, h('span', {}, 'COMBATTI!')));
   else bottom.append(h('div', { class: 'btn dark', onclick: () => confirm(false) }, h('span', {}, 'ENTRA IN STANZA')), h('div', { class: 'btn red', onclick: () => confirm(true) }, h('span', {}, 'PARTITA VELOCE')));
   root.append(
-    h('div', { class: 'cs-head' }, 'SCEGLI IL TUO CAMPIONE', h('small', {}, mode === 'practice' ? 'ALLENAMENTO CONTRO BOT' : 'ONLINE PVP · DEATHMATCH')),
+    h('div', { class: 'cs-head' }, 'SCEGLI IL TUO CAMPIONE', h('small', {}, mode === 'practice' ? 'ALLENAMENTO CONTRO BOT' : 'ONLINE PVP · DEATHMATCH E RIFLETTORE')),
     cards,
     info,
     opts,
@@ -186,10 +242,19 @@ export function loadingScreen(text: string): HTMLElement {
     'Correndo contro un muro ad alta velocità ci corri sopra!',
     'SHIFT è uno scatto con frame di invulnerabilità.',
     'Puoi agganciare anche i nemici: puntali e premi Q/E.',
-    'KAISER: alza la Mute Guard al momento giusto per una parata perfetta che stordisce.',
-    'Il click sinistro è l\'abilità firma del campione, il destro l\'attacco base.',
+    'Il click sinistro è l\'abilità firma del campione (la sua Q), il destro l\'attacco base.',
     'Ogni lancio di rampino costa gas: col serbatoio vuoto non ti agganci.',
-    'REX: i colpi alla testa sono CRITICI.',
+    'KAISER: tieni la guardia (C) e para al momento giusto per stordire, poi l\'attacco base per la RIPOSTA.',
+    'REX: i colpi alla testa sono CRITICI. Rilascia la carica appena è piena: COLPO PERFETTO.',
+    'SCHIVATA PERFETTA: scatta proprio mentre arriva il colpo. Il prossimo colpo è CRITICO.',
+    'Gli scatti a raffica perdono l\'invulnerabilità: aspetta un attimo tra uno e l\'altro.',
+    'Arriva in velocità: i colpi di slancio fanno fino al 60% di danni in più.',
+    'NOVA: Glitch Step marchia i nemici; Phantom Cut li insegue anche fuori mira.',
+    'SERA: tieni il raggio sullo stesso bersaglio per il CRESCENDO.',
+    'RIFLETTORE: resta da solo nella luce per fare punti a ogni battuta.',
+    'AKALI: nella nube di fumo sei invisibile, ma attaccare ti rivela per un istante.',
+    'QIYANA: Terrashape vicino a un muro incanta l\'anello con la Terra.',
+    'LOCKE: i Chiodi Rituali lasciano cariche che il colpo successivo fa esplodere.',
   ];
   return h('div', { class: 'overlay loading' }, ransom(text, false, 3), h('div', { class: 'bar' }, h('i')), h('div', { class: 'tip' }, tips[Math.floor(Math.random() * tips.length)]));
 }
@@ -200,12 +265,13 @@ export function toast(container: HTMLElement, msg: string): void {
   window.setTimeout(() => t.remove(), 4100);
 }
 
-export function pauseMenu(opts: { online: boolean; room?: string; onResume(): void; onChampion(): void; onSettings(): void; onQuit(): void; sfx(n: string): void }): HTMLElement {
+export function pauseMenu(opts: { online: boolean; room?: string; onInvite?(): void; onResume(): void; onChampion(): void; onSettings(): void; onQuit(): void; sfx(n: string): void }): HTMLElement {
   const b = (label: string, cls: string, fn: () => void) => h('div', { class: `btn ${cls}`, onclick: () => { opts.sfx('uiSelect'); fn(); } }, h('span', {}, label));
   return h('div', { class: 'overlay pause' }, h('div', { class: 'panel' },
     h('h2', {}, 'PAUSA'),
     opts.online && opts.room ? h('div', { class: 'info' }, 'STANZA ', h('b', {}, opts.room), ' — condividi il codice con gli amici') : null,
     b('RIPRENDI', 'red', opts.onResume),
+    opts.online && opts.room && opts.onInvite ? b('COPIA LINK INVITO', 'dark', opts.onInvite) : null,
     b(opts.online ? 'CAMBIA CAMPIONE (al respawn)' : 'CAMBIA CAMPIONE', 'dark', opts.onChampion),
     b('IMPOSTAZIONI', 'dark', opts.onSettings),
     b('ESCI AL MENU', 'dark', opts.onQuit),
@@ -349,7 +415,9 @@ export function controlsPanel(custom: Partial<Record<Action, string[]>>, onChang
 }
 
 export function resultsScreen(opts: { players: PlayerInfo[]; myId: string; winner: string | null; online: boolean; next?: number; onRematch?(): void; onMenu(): void; sfx(n: string): void }): HTMLElement {
-  const sorted = [...opts.players].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+  // RIFLETTORE: points decide the ranking
+  const spot = opts.players.some((p) => p.score !== undefined);
+  const sorted = [...opts.players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || b.kills - a.kills || a.deaths - b.deaths);
   const win = sorted.find((p) => p.id === opts.winner) ?? sorted[0];
   const iWon = win && win.id === opts.myId;
   const nextEl = h('div', { class: 'next' });
@@ -366,8 +434,8 @@ export function resultsScreen(opts: { players: PlayerInfo[]; myId: string; winne
     h('div', { class: 'win' }, iWon ? 'VITTORIA!' : 'FINE MATCH'),
     h('div', { class: 'who' }, 'MVP: ', h('b', {}, win ? `${win.name} · ${CHAMPIONS[win.champ].name}` : '—')),
     h('table', {},
-      h('tr', {}, h('th', {}, '#'), h('th', {}, 'GIOCATORE'), h('th', {}, 'CAMPIONE'), h('th', {}, 'K'), h('th', {}, 'D')),
-      ...sorted.map((p, i) => h('tr', { class: p.id === opts.myId ? 'me' : '' }, h('td', {}, String(i + 1)), h('td', {}, p.name), h('td', { style: `color:${CHAMPIONS[p.champ].colors[0]}` }, CHAMPIONS[p.champ].name), h('td', {}, String(p.kills)), h('td', {}, String(p.deaths))))),
+      h('tr', {}, h('th', {}, '#'), h('th', {}, 'GIOCATORE'), h('th', {}, 'CAMPIONE'), spot ? h('th', {}, 'PUNTI') : null, h('th', {}, 'K'), h('th', {}, 'D')),
+      ...sorted.map((p, i) => h('tr', { class: p.id === opts.myId ? 'me' : '' }, h('td', {}, String(i + 1)), h('td', {}, p.name), h('td', { style: `color:${CHAMPIONS[p.champ].colors[0]}` }, CHAMPIONS[p.champ].name), spot ? h('td', {}, String(p.score ?? 0)) : null, h('td', {}, String(p.kills)), h('td', {}, String(p.deaths))))),
     nextEl,
     h('div', { class: 'acts' },
       opts.onRematch ? h('div', { class: 'btn red', onclick: () => { opts.sfx('uiSelect'); opts.onRematch!(); } }, h('span', {}, 'RIVINCITA')) : null,

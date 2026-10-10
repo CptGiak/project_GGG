@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MOVE } from '../../shared/constants';
+import { COMBAT, MOVE, dashIFrames } from '../../shared/constants';
 import { CHAMPIONS, MATCH_RULES, type ChampionData, type ChampionId } from '../../shared/champions';
 import type { ChampionVisual } from '../champions/types';
 import { FighterAnimator } from '../fighter/FighterAnimator';
@@ -104,7 +104,29 @@ export class Fighter {
   alive = true;
   deadTime = 0;
   ult = 0;
+  /** any invulnerability (dash i-frames, blinks, ultimates): every hit misses */
   invuln = 0;
+  /** dash i-frames (any dash of a chain): replicated so the server honours them */
+  dashIv = 0;
+  /** i-frames of a fresh dash only: a hit landing here is a perfect dodge */
+  dodgeT = 0;
+  /** a perfect dodge pays out at most once per this cooldown (no infinite dodge chains) */
+  dodgeCd = 0;
+  /** perfect dodges this life (medals / stats) */
+  dodges = 0;
+  /** Fuori Tempo: attacked a perfect dodge from close, runs at half speed (real seconds left) */
+  offbeatT = 0;
+  /** punishable (off-beat or parried): hits on this fighter are punish counters */
+  punishT = 0;
+  /** dashes in the current chain (0 = fresh) and when the last one started */
+  private dashChain = 0;
+  private lastDashAt = -10;
+  /** counter window after a perfect dodge: the next hit is a guaranteed critical */
+  counterT = 0;
+  /** recent top traversal speed (decays slowly): what a momentum strike measures */
+  speedPeak = 0;
+  /** right after a dash its burst of speed does not count as momentum */
+  private dashRecover = 0;
   stun = 0;
   slow = 0;
   guard = false;
@@ -118,6 +140,17 @@ export class Fighter {
   hitFlash = 0;
   /** weapon slash trails emitting */
   trailOn = false;
+  /** invisibility seconds left (smoke shroud, grass veil); 0 = visible */
+  stealth = 0;
+  /** stealth zone: while stealthRadius > 0 the fighter is hidden only inside it */
+  readonly stealthZone = new THREE.Vector3();
+  stealthRadius = 0;
+  /** briefly visible while stealthed (attacking reveals) */
+  reveal = 0;
+  /** see-through look for the stealthed player's own view */
+  private ghost = false;
+  private ghostSaved = new Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }>();
+  private ghostHidden: THREE.Object3D[] = [];
 
   /** per-frame overrides written by the kit */
   readonly ctrl = { lockMove: 0, gravityScale: 1, speedMul: 1, noHooks: false, aim: 0, noDash: false };
@@ -167,7 +200,7 @@ export class Fighter {
 
   /** objects to add to the scene */
   get sceneObjects(): THREE.Object3D[] {
-    return [this.visual.root, ...this.visual.worldObjects, ...this.hooks.flatMap((h) => [h.visual.rope, h.visual.head])];
+    return [this.visual.root, ...this.visual.worldObjects, ...this.hooks.flatMap((h) => [h.visual.rope, h.visual.head]), ...(this.kit?.sceneObjects ?? [])];
   }
 
   /** chest position (aim target) */
@@ -190,6 +223,10 @@ export class Fighter {
     this.gasWait = 0;
     this.gasDenied = 0;
     this.stun = this.slow = this.dashTime = 0;
+    this.invuln = this.dashIv = this.dodgeT = this.dodgeCd = this.counterT = this.speedPeak = 0;
+    this.offbeatT = this.punishT = this.dodges = 0;
+    this.stealth = this.reveal = this.stealthRadius = 0;
+    this.setGhost(false);
     this.spawnProtect = MATCH_RULES.spawnProtectSec;
     this.hooks.forEach((h) => h.reset());
     this.kit?.cancel(this);
@@ -234,6 +271,7 @@ export class Fighter {
       this.puppet(dt);
       this.kit?.tickRemote?.(this, dt, m);
     }
+    this.kit?.tickWorld?.(this, dt, m);
     this.updateVisual(dt, m);
   }
 
@@ -275,6 +313,7 @@ export class Fighter {
     m.broadcastAction(this, { a: 'flip', n: kind });
   }
 
+  /** kind 0 = front flip, +-1 = barrel roll, 2 = back flip */
   startFlip(kind: number): void {
     this.flipKind = kind;
     this.flipDur = kind === 0 ? 0.62 : 0.55;
@@ -293,8 +332,21 @@ export class Fighter {
   }
 
   private timers(dt: number): void {
+    this.stealth = Math.max(0, this.stealth - dt);
+    this.reveal = Math.max(0, this.reveal - dt);
+    if (this.stealth <= 0) this.stealthRadius = 0;
     this.invuln = Math.max(0, this.invuln - dt);
-    this.stun = Math.max(0, this.stun - dt);
+    this.dashIv = Math.max(0, this.dashIv - dt);
+    this.dodgeT = Math.max(0, this.dodgeT - dt);
+    this.dodgeCd = Math.max(0, this.dodgeCd - dt);
+    this.counterT = Math.max(0, this.counterT - dt);
+    this.dashRecover = Math.max(0, this.dashRecover - dt);
+    this.speedPeak = Math.max(this.dashRecover > 0 ? 0 : this.speed, this.speedPeak - COMBAT.speedPeakDecay * dt);
+    if (this.stun > 0) {
+      this.stun = Math.max(0, this.stun - dt);
+      // the stun pose is a held clip: let go of it when the stun ends
+      if (this.stun <= 0 && this.alive && this.anim.action.name === 'stun') this.anim.action.stop(0.18);
+    }
     this.slow = Math.max(0, this.slow - dt);
     this.dashTime = Math.max(0, this.dashTime - dt);
     this.dashCd = Math.max(0, this.dashCd - dt);
@@ -578,7 +630,14 @@ export class Fighter {
     this.spendGas(MOVE.dashCost);
     this.dashTime = MOVE.dashTime;
     this.dashCd = MOVE.dashCooldown;
-    this.invuln = Math.max(this.invuln, MOVE.dashIFrames);
+    // chained dashes lose their i-frames; only a fresh one can be a perfect dodge
+    this.dashChain = m.time - this.lastDashAt < COMBAT.dashChainSec ? this.dashChain + 1 : 0;
+    this.lastDashAt = m.time;
+    const iv = dashIFrames(this.dashChain);
+    this.invuln = Math.max(this.invuln, iv);
+    this.dashIv = iv;
+    this.dodgeT = this.dashChain === 0 ? iv : 0;
+    this.dashRecover = COMBAT.dashMomentumLockout;
     this.dashDir.copy(dir);
     const keep = this.vel.clone().multiplyScalar(0.35);
     this.vel.copy(dir).multiplyScalar(MOVE.dashSpeed).add(keep);
@@ -805,13 +864,16 @@ export class Fighter {
   // ---------------------------------------------------------------------------------------------
 
   /** network: apply a remote hook state (from snapshots or action events) */
-  applyRemoteHook(i: number, code: HookState, anchor?: [number, number, number]): void {
+  applyRemoteHook(i: number, code: HookState, anchor?: [number, number, number], targetId?: string | null): void {
     const hk = this.hooks[i];
     const now = performance.now();
     if (anchor) hk.anchor.set(anchor[0], anchor[1], anchor[2]);
+    // a fired hook knows whether it is flying at a fighter (their HUD warns them)
+    if (targetId !== undefined && code === 'flying') hk.targetId = targetId;
     if (code === hk.state) return;
     // snapshots lag behind action events: don't cancel a fresh flight with a stale 'idle'
     if ((code === 'idle' || code === 'retract') && hk.state === 'flying' && now - hk.remoteAt < 350) return;
+    if (code === 'idle' || code === 'retract') hk.targetId = null;
     if (code === 'flying') {
       if (hk.state === 'attached') return;
       this.gearWorld(i, hk.tip);
@@ -950,6 +1012,7 @@ export class Fighter {
       const u = 1 - this.flipT / this.flipDur;
       const a = u * u * (3 - 2 * u) * Math.PI * 2;
       if (this.flipKind === 0) rx += a;
+      else if (this.flipKind === 2) rx -= a; // back flip
       else rz += a * this.flipKind;
     }
     if (this.tumbleT > 0) {
@@ -1074,6 +1137,53 @@ export class Fighter {
     if (l < 1e-3) return 0;
     out.divideScalar(l);
     return taut;
+  }
+
+  /** stealthed right now (inside the zone, if any, and not revealed) */
+  get stealthed(): boolean {
+    if (this.stealth <= 0 || this.reveal > 0 || !this.alive) return false;
+    return this.stealthRadius <= 0 || this.pos.distanceTo(this.stealthZone) <= this.stealthRadius;
+  }
+
+  /** invisible to `viewer` (stealthed and not right next to them) */
+  isHiddenFrom(viewer: Fighter | null): boolean {
+    if (!viewer || viewer === this || !this.stealthed) return false;
+    return this.pos.distanceTo(viewer.pos) > 2.4;
+  }
+
+  /** see-through model (own view while stealthed): transparent materials, no outlines */
+  setGhost(on: boolean): void {
+    if (on === this.ghost) return;
+    this.ghost = on;
+    if (on) {
+      this.visual.root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (/outline/i.test(mesh.name) && mesh.visible) {
+          mesh.visible = false;
+          this.ghostHidden.push(mesh);
+          return;
+        }
+        for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (!mat || this.ghostSaved.has(mat)) continue;
+          this.ghostSaved.set(mat, { transparent: mat.transparent, opacity: mat.opacity, depthWrite: mat.depthWrite });
+          mat.transparent = true;
+          mat.opacity = 0.32;
+          mat.depthWrite = false;
+          mat.needsUpdate = true;
+        }
+      });
+    } else {
+      for (const [mat, st] of this.ghostSaved) {
+        mat.transparent = st.transparent;
+        mat.opacity = st.opacity;
+        mat.depthWrite = st.depthWrite;
+        mat.needsUpdate = true;
+      }
+      this.ghostSaved.clear();
+      for (const o of this.ghostHidden) o.visible = true;
+      this.ghostHidden.length = 0;
+    }
   }
 
   isMovingBack(): boolean {

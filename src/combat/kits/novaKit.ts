@@ -15,6 +15,8 @@ const _c2 = new THREE.Vector3();
 
 const COMBO = ['c1', 'c2', 'c3', 'c4'] as const;
 const DUR: Record<string, number> = { c1: 0.3, c2: 0.3, c3: 0.4, c4: 0.58, air: 0.42 };
+/** Glitch Step marks whoever it cuts for this long (s) */
+const MARK_SEC = 4;
 
 /** Five Beat Strike: kunai count, fan half-angle, speed and flight time (range ≈ 12.6 m) */
 const FAN_N = 5;
@@ -24,9 +26,11 @@ const FAN_LIFE = 0.17;
 
 /**
  * NOVA — dual-blade assassin.
- * Skill: Five Beat Strike (fan of glitch kunai, slows) · Attack: 4-hit Sample Flurry (air:
- * Rising Remix) · Secondary: Glitch Step (invulnerable blink through enemies) · F: Phantom Cut
- * (teleport behind the target, guaranteed crit) · R: Remix Barrage.
+ * Skill: Cross Fade (X-shaped slash wave that pierces and marks) · Attack: 4-hit Sample Flurry
+ * (air: Rising Remix) · Secondary: Glitch Step (invulnerable blink through enemies, marks them) ·
+ * F: Phantom Cut (teleport behind the target, guaranteed crit; prefers a marked target, half
+ * cooldown on one) · R: Remix Barrage. A takedown resets Glitch Step and halves Phantom Cut's
+ * cooldown (Katarina / Akali style resets).
  */
 export class NovaKit extends BaseKit {
   private combo = 0;
@@ -37,11 +41,35 @@ export class NovaKit extends BaseKit {
   private barrageIdx = 0;
   /** the running air slash got the airtime's lift (rises with low gravity) */
   private airHang = false;
+  /** glitch marks: target -> match time they expire */
+  private marks = new Map<Fighter, number>();
 
   constructor() {
     super('nova');
   }
 
+  update(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
+    super.update(f, it, dt, m);
+    for (const [t, until] of this.marks) {
+      if (!t.alive || m.time > until) this.marks.delete(t);
+      else m.vfx.glitchMark(t, f.champ.colors[0], f.champ.colors[1], dt);
+    }
+  }
+
+  onTakedown(f: Fighter, _victim: Fighter, m: MatchContext): void {
+    this.cd.sec = 0;
+    this.cd.abi *= 0.5;
+    m.audio.play('chord', f.pos, 0.7);
+    m.vfx.ring(f.chest(new THREE.Vector3()), new THREE.Vector3(0, 1, 0), f.champ.colors[0], 0.4, 2.4, 0.35);
+  }
+
+  /** clear line between two chests (Phantom Cut can't go through walls) */
+  private los(f: Fighter, t: Fighter, m: MatchContext): boolean {
+    const from = f.chest(_a);
+    const d = _b.subVectors(t.chest(_v), from);
+    const len = d.length();
+    return len < 1 || !m.world.raycast(from, d.divideScalar(len), len - 0.6);
+  }
   protected handleInput(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
     this.comboTimer -= dt;
     if (this.comboTimer <= 0 && !this.act) this.combo = 0;
@@ -140,13 +168,15 @@ export class NovaKit extends BaseKit {
     const hit = m.world.raycast(from, dir, dist + 0.8);
     const travel = hit ? Math.max(0, hit.distance - 0.8) : dist;
     const to = from.clone().addScaledVector(dir, travel);
-    // damage along the path
+    // damage along the path; everyone cut is marked for Phantom Cut
     if (m.isAuthority(f)) {
       for (const o of m.fighters) {
         if (o === f || !o.alive) continue;
+        if (o.team !== 0 && o.team === f.team) continue;
         capsule(o, _c1, _c2);
         if (segSegDist2(from, to, _c1, _c2, _a, _b) < (CAPSULE_R + 0.9) ** 2) {
-          m.reportHit(f, o, { slot: 'sec', part: 'pass', at: _b.clone(), kb: dir.clone().multiplyScalar(5), stun: 0.2, blockable: false });
+          m.reportHit(f, o, { slot: 'sec', part: 'pass', at: _b.clone(), kb: dir.clone().multiplyScalar(5), stun: 0.2, blockable: false, mo: this.passMomentum(f, o) });
+          if (o.invuln <= 0) this.marks.set(o, m.time + MARK_SEC);
         }
       }
     }
@@ -176,14 +206,43 @@ export class NovaKit extends BaseKit {
     m.audio.play('teleport', to, 1);
   }
 
+  /** Glitch Step momentum: the speed Nova carried into the blink (the blink itself is instant) */
+  private passMomentum(f: Fighter, o: Fighter): number | undefined {
+    this.captureEntry(f);
+    const mo = Math.round(this.impactSpeed(f, o));
+    return mo >= 15 ? mo : undefined;
+  }
+
+  /** Phantom Cut target: a marked enemy in range with line of sight, else the one under the crosshair */
+  private phantomPick(f: Fighter, m: MatchContext): { t: Fighter; marked: boolean } | null {
+    let best: Fighter | null = null;
+    let bestD = Infinity;
+    for (const [t, until] of this.marks) {
+      if (!t.alive || m.time > until) continue;
+      const d = t.pos.distanceTo(f.pos);
+      if (d < this.data.abilities.abi.range && d < bestD && this.los(f, t, m)) {
+        best = t;
+        bestD = d;
+      }
+    }
+    if (best) return { t: best, marked: true };
+    const t = this.findTarget(f, m, 30, 12);
+    return t && this.los(f, t, m) ? { t, marked: false } : null;
+  }
+
   /** teleport behind the target under the crosshair */
   private phantom(f: Fighter, m: MatchContext): boolean {
-    const t = this.findTarget(f, m, 30, 12);
-    if (!t) {
+    const pick = this.phantomPick(f, m);
+    if (!pick) {
       m.audio.play('uiBack', f.pos, 0.6);
       return false;
     }
-    this.cd.abi = this.data.abilities.abi.cooldown;
+    const t = pick.t;
+    this.cd.abi = this.data.abilities.abi.cooldown * (pick.marked ? 0.5 : 1);
+    if (pick.marked) {
+      this.marks.delete(t);
+      m.audio.play('glitch', f.pos, 0.8);
+    }
     const from = f.chest(new THREE.Vector3());
     forwardOf(t.facing, _v);
     const dest = t.pos.clone().addScaledVector(_v, -1.5);
@@ -234,7 +293,7 @@ export class NovaKit extends BaseKit {
   }
 
   private barrageStrike(f: Fighter, m: MatchContext): void {
-    const enemies = m.fighters.filter((o) => o !== f && o.alive && o.pos.distanceTo(f.pos) < 16);
+    const enemies = m.fighters.filter((o) => o !== f && o.alive && (o.team === 0 || o.team !== f.team) && o.pos.distanceTo(f.pos) < 16);
     const clipName = ['c1', 'c2', 'c3'][this.barrageIdx % 3];
     this.barrageIdx++;
     f.anim.play(clipName, { speed: 1.8, fadeIn: 0.0 });
@@ -321,15 +380,19 @@ export class NovaKit extends BaseKit {
       case 'glitch':
         if (e.p && e.d) this.afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d));
         f.anim.play('glitch', { fadeIn: 0, fadeOut: 0.12 });
+        // the puppet is invulnerable too, so attackers here don't predict a hit the server rejects
+        f.invuln = Math.max(f.invuln, 0.25);
         break;
       case 'phantom':
         if (e.p && e.d) this.afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d));
         f.anim.play('phantom', { fadeIn: 0 });
+        f.invuln = Math.max(f.invuln, 0.2);
         this.act = 'remote';
         this.actT = 0;
         this.actDur = 0.5;
         break;
       case 'ult':
+        f.invuln = Math.max(f.invuln, 1.8);
         m.audio.play('ult', f.pos, 1);
         this.act = 'ultRemote';
         this.actT = 0;

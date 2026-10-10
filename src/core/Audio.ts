@@ -373,6 +373,76 @@ const SFX: Record<string, SfxFn> = {
     a.osc('sine', 330, 990, t, 0.4, o, 0.2, 0.05);
     a.noiseHit(t, 0.4, o, 0.2, 'bandpass', 800, 4000, 1, 0.1);
   },
+  // --- combat feedback (2D confirms are played without a position) ---
+  /** hit confirm: short, dry, readable at any distance */
+  tick: (a, o, t) => {
+    a.osc('square', 2600, 1900, t, 0.035, o, 0.08);
+    a.osc('sine', 1300, 1300, t, 0.05, o, 0.1);
+  },
+  /** critical / headshot confirm */
+  dink: (a, o, t) => {
+    a.osc('triangle', 3136, 3136, t, 0.16, o, 0.2);
+    a.osc('sine', 4700, 4700, t + 0.015, 0.12, o, 0.09);
+  },
+  killConfirm: (a, o, t) => {
+    a.osc('square', 784, 784, t, 0.07, o, 0.07);
+    a.osc('square', 1175, 1175, t + 0.06, 0.08, o, 0.07);
+    a.osc('sine', 1568, 1568, t + 0.12, 0.3, o, 0.12);
+    a.osc('sine', 90, 35, t, 0.35, o, 0.6);
+  },
+  /** momentum strike: a high blade hiss over a sub drop */
+  slice: (a, o, t) => {
+    a.noiseHit(t, 0.2, o, 0.55, 'bandpass', 7500, 1200, 2.2, 0.002);
+    a.osc('sine', 110, 38, t, 0.3, o, 0.7);
+    a.osc('triangle', 2093, 1568, t, 0.12, o, 0.08);
+  },
+  /** perfect dodge: air rush + bright shimmer */
+  dodge: (a, o, t) => {
+    a.noiseHit(t, 0.32, o, 0.45, 'bandpass', 500, 3600, 1.6, 0.01);
+    a.osc('sine', 1568, 2093, t, 0.35, o, 0.16);
+    a.osc('triangle', 3136, 3136, t + 0.05, 0.3, o, 0.08);
+  },
+  /** counter hit: accent stab over the normal impact */
+  counter: (a, o, t) => {
+    a.osc('square', 1046, 1046, t, 0.07, o, 0.1);
+    a.osc('square', 1568, 1568, t + 0.05, 0.12, o, 0.08);
+    a.osc('sawtooth', 220, 50, t, 0.3, o, 0.25);
+    a.noiseHit(t, 0.14, o, 0.35, 'highpass', 4000, 7000);
+  },
+  /** ready cue (counter / riposte window, perfect charge) */
+  perfectTick: (a, o, t) => {
+    a.osc('triangle', 2637, 2637, t, 0.08, o, 0.14);
+    a.osc('sine', 5274, 5274, t, 0.05, o, 0.05);
+  },
+  /** an enemy hooked you */
+  alarm: (a, o, t) => {
+    a.osc('square', 880, 660, t, 0.09, o, 0.08);
+    a.osc('square', 880, 660, t + 0.12, 0.09, o, 0.08);
+  },
+  whoosh: (a, o, t) => a.noiseHit(t, 0.45, o, 0.4, 'bandpass', 400, 2400, 1.4, 0.05),
+  medal1: (a, o, t) => {
+    a.osc('square', 1046, 1046, t, 0.08, o, 0.06);
+    a.osc('square', 1318, 1318, t + 0.07, 0.14, o, 0.06);
+  },
+  medal2: (a, o, t) => {
+    a.osc('square', 1046, 1046, t, 0.07, o, 0.06);
+    a.osc('square', 1318, 1318, t + 0.06, 0.07, o, 0.06);
+    a.osc('square', 1568, 1568, t + 0.12, 0.2, o, 0.07);
+  },
+  medal3: (a, o, t) => {
+    for (const [f, d] of [[1046, 0], [1318, 0.06], [1568, 0.12], [2093, 0.18]] as const) a.osc('sawtooth', f, f, t + d, 0.2, o, 0.05);
+    a.osc('sine', 65, 40, t, 0.5, o, 0.5);
+  },
+  ultTick: (a, o, t) => a.osc('sine', 880, 1320, t, 0.06, o, 0.1),
+  /** Nova's glitch mark / reset */
+  glitch: (a, o, t) => {
+    a.osc('square', 1200, 300, t, 0.06, o, 0.06);
+    a.osc('square', 1200, 300, t + 0.08, 0.06, o, 0.05);
+  },
+  /** Sera's chord: a C major triad */
+  chord: (a, o, t) => {
+    for (const f of [523, 659, 784]) a.osc('triangle', f, f, t, 0.45, o, 0.08);
+  },
 };
 
 // =============================================================================================

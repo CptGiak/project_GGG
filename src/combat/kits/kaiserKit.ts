@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BaseKit } from '../BaseKit';
+import { BaseKit, type MeleeHit } from '../BaseKit';
 import type { Fighter } from '../../game/Fighter';
 import { forwardOf } from '../../game/Fighter';
 import { Shape } from '../../vfx/Particles';
@@ -12,17 +12,23 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c1 = new THREE.Vector3();
 const _c2 = new THREE.Vector3();
+const _w = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
 /** Power Chord wave: length, half width, and where the sweet spot starts */
 const CHORD_LEN = 8.2;
 const CHORD_HALF_W = 1.15;
 const CHORD_TIP = 5.4;
+/** after a close perfect parry, the attack button within this window (s) is the Riposte */
+const RIPOSTE_WINDOW = 1.0;
+/** a landed Riposte takes this much (s) off Drop Dive's cooldown */
+const RIPOSTE_DIVE_REFUND = 3;
 
 /**
  * KAISER — greatsword bruiser.
  * Skill: Power Chord (overhead slam, forward shock wave with a sweet spot at the tip) ·
- * Attack: 3-hit Verse Combo (air: spin Cleave) · Secondary: Mute Guard (parry window) ·
+ * Attack: 3-hit Verse Combo (air: spin Cleave) · Secondary: Mute Guard (parry window; a close
+ * perfect parry opens the Riposte: the attack button lunges into an unblockable counter crit) ·
  * F: Drop Dive (piercing lunge along the aim, can dive from the air) · R: Encore Break.
  */
 export class KaiserKit extends BaseKit {
@@ -36,22 +42,45 @@ export class KaiserKit extends BaseKit {
   private airHang = false;
   /** Power Chord: direction of the wave, picked when the slam starts */
   private chordDir = new THREE.Vector3();
+  /** Riposte window left after a close perfect parry, and who to lunge at */
+  riposteT = 0;
+  private riposteTarget: Fighter | null = null;
 
   constructor() {
     super('kaiser');
   }
 
+  onParry(f: Fighter, attacker: Fighter, m: MatchContext, close: boolean): void {
+    if (!close) return;
+    this.riposteT = RIPOSTE_WINDOW;
+    this.riposteTarget = attacker;
+    m.audio.play('perfectTick', f.pos, 0.9);
+  }
+
+  /** a stun or a death also closes the Riposte window */
+  cancel(f: Fighter): void {
+    this.riposteT = 0;
+    this.riposteTarget = null;
+    super.cancel(f);
+  }
+
   protected handleInput(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
     this.comboTimer -= dt;
     this.guardCd = Math.max(0, this.guardCd - dt);
+    this.riposteT = Math.max(0, this.riposteT - dt);
     if (this.comboTimer <= 0 && !this.act) this.combo = 0;
+
+    // ---- riposte (attack right after a close perfect parry, straight out of the guard) -----
+    if (this.riposteT > 0 && it.attackPressed && !this.act) {
+      if (f.guard) this.dropGuard(f, m);
+      this.startRiposte(f, m);
+      return;
+    }
 
     // ---- guard (hold the secondary key) -----------------------------------------------------
     if (f.guard) {
       if (!it.secondary || this.act) {
-        f.guard = false;
-        f.anim.action.stop(0.12);
-        this.guardCd = 0.5;
+        this.dropGuard(f, m);
       } else {
         f.ctrl.speedMul = 0.42;
         f.ctrl.noDash = false;
@@ -94,6 +123,35 @@ export class KaiserKit extends BaseKit {
       else if (!this.act) this.attack(f, m);
     }
     if (!this.act && this.queued) this.attack(f, m);
+  }
+
+  private dropGuard(f: Fighter, m: MatchContext): void {
+    f.guard = false;
+    f.anim.action.stop(0.12);
+    this.guardCd = 0.5;
+    m.broadcastAction(f, { a: 'guard', n: 0 });
+  }
+
+  /** Riposte: a short homing lunge at whoever was parried; the parry's counter window makes it crit */
+  private startRiposte(f: Fighter, m: MatchContext): void {
+    this.riposteT = 0;
+    const t = this.riposteTarget?.alive ? this.riposteTarget : this.findTarget(f, m, 12, 40);
+    this.riposteTarget = t;
+    this.startAction(f, 'riposte', 0.5);
+    f.anim.play('dive', { fadeIn: 0.02, speed: 1.25 });
+    if (t) this.diveDir.subVectors(t.chest(_v), f.chest(_d)).normalize();
+    else this.diveDir.copy(f.intent.aimDir).normalize();
+    this.faceYaw = Math.atan2(this.diveDir.x, this.diveDir.z);
+    this.setTrail(f, true);
+    m.audio.play('slice', f.pos, 1);
+    m.audio.play('dash', f.pos, 0.8);
+    m.vfx.gasBurst(f.nozzleWorld(_v), f.champ.colors[1]);
+    m.vfx.dashLines(f, this.diveDir);
+    m.broadcastAction(f, { a: 'riposte', d: [this.diveDir.x, this.diveDir.y, this.diveDir.z] });
+  }
+
+  protected onSweepHit(_f: Fighter, _o: Fighter, h: MeleeHit): void {
+    if (h.part === 'riposte') this.cd.abi = Math.max(0, this.cd.abi - RIPOSTE_DIVE_REFUND);
   }
 
   private attack(f: Fighter, m: MatchContext): void {
@@ -239,6 +297,28 @@ export class KaiserKit extends BaseKit {
       case 'chord': {
         f.ctrl.noHooks = this.actT < 0.3;
         if (!f.grounded) f.ctrl.gravityScale = this.actT < 0.25 ? 0.25 : 1;
+        break;
+      }
+      case 'riposte': {
+        f.ctrl.noHooks = true;
+        if (this.actT < 0.32) {
+          f.ctrl.gravityScale = 0;
+          // home in on the parried attacker (they are stunned), stop just in front of them
+          const t = this.riposteTarget;
+          let d = 99;
+          if (t && t.alive) {
+            _d.subVectors(t.chest(_v), f.chest(_w));
+            d = _d.length();
+            if (d > 0.05) this.diveDir.copy(_d).divideScalar(d);
+          }
+          f.vel.copy(this.diveDir).multiplyScalar(d > 1.8 ? 24 : 3);
+          this.faceYaw = Math.atan2(this.diveDir.x, this.diveDir.z);
+          if (this.actT >= 0.04) this.hitActive = { slot: 'sec', part: 'riposte', range: 2.6, arc: 110, height: 2.4, kb: 10, kbUp: 5, stun: 0.3, blockable: false };
+        } else {
+          this.hitActive = null;
+          f.vel.multiplyScalar(Math.exp(-9 * dt));
+          f.ctrl.lockMove = 0.05;
+        }
         break;
       }
       case 'atkAir': {
@@ -387,6 +467,15 @@ export class KaiserKit extends BaseKit {
         this.actDur = 0.6;
         this.setTrail(f, true);
         m.audio.play('swingHeavy', f.pos, 1);
+        break;
+      case 'riposte':
+        f.anim.play('dive', { speed: 1.25 });
+        this.act = 'diveRemote';
+        this.actT = 0;
+        this.actDur = 0.5;
+        this.setTrail(f, true);
+        m.audio.play('slice', f.pos, 1);
+        if (e.d) m.vfx.dashLines(f, new THREE.Vector3(...e.d));
         break;
       case 'ult':
         f.anim.play('ultRise', { hold: true });

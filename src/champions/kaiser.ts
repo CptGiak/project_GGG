@@ -177,50 +177,7 @@ export function buildKaiser(): ChampionVisual {
   b.add(B.head, xf(torus(0.012, 0.0035, 5, 12), [0.108, 0.085, -0.005], [0, 90, 0]), 'gold', 0.3);
 
   // --- weapon: BASSLINE ---------------------------------------------------------------------------
-  const weapon = weaponPivot(B.handR);
-  const blade = new THREE.Shape();
-  blade.moveTo(0, -0.1);
-  blade.lineTo(0.06, -0.118);
-  blade.lineTo(1.12, -0.118);
-  blade.lineTo(1.38, 0.0);
-  blade.lineTo(1.32, 0.09);
-  blade.lineTo(1.2, 0.128);
-  blade.lineTo(0.42, 0.128);
-  blade.lineTo(0.38, 0.098);
-  blade.lineTo(0.26, 0.098);
-  blade.lineTo(0.22, 0.128);
-  blade.lineTo(0.0, 0.12);
-  blade.closePath();
-  const slot = new THREE.Path();
-  slot.moveTo(0.3, -0.036);
-  slot.lineTo(1.0, -0.036);
-  slot.lineTo(1.07, 0.0);
-  slot.lineTo(1.0, 0.04);
-  slot.lineTo(0.3, 0.04);
-  slot.lineTo(0.27, 0.0);
-  slot.closePath();
-  blade.holes.push(slot);
-  b.add(weapon, xf(extrude(blade, 0.026, 0.006, 4), [0, 0, 0.14], [0, -90, 0]), 'blade', 1.0);
-  const edge = poly([0.06, -0.126, 1.124, -0.126, 1.393, 0.0, 1.332, 0.1, 1.31, 0.082, 1.364, 0.0, 1.114, -0.106, 0.06, -0.106]);
-  b.add(weapon, xf(extrude(edge, 0.044, 0, 2), [0, 0, 0.14], [0, -90, 0]), 'neonGold', 0);
-  const eqPlane = new THREE.PlaneGeometry(0.72, 0.07);
-  b.add(weapon, xf(eqPlane, [0, 0.002, 0.14 + 0.65], [0, -90, 0]), 'eq', 0, false);
-  for (const sx of [1, -1]) {
-    b.add(weapon, xf(rbox(0.006, 0.012, 0.74, 0.003), [sx * 0.02, 0.11, 0.14 + 0.8]), 'gold', 0);
-    b.add(weapon, xf(rbox(0.006, 0.05, 0.05, 0.003), [sx * 0.021, -0.07, 0.14 + 0.2]), 'neonPink', 0);
-  }
-  // guard: speaker cone
-  b.add(weapon, xf(lathe([[0.02, 0.0], [0.128, 0.045], [0.136, 0.06], [0.122, 0.068], [0.02, 0.03]], 20), [0, 0, 0.085], [90, 0, 0], [0.5, 1, 1]), 'blade', 0.8);
-  b.add(weapon, xf(torus(0.131, 0.01, 6, 26), [0, 0, 0.145], [0, 0, 0], [0.5, 1, 1]), 'gold', 0.5);
-  b.add(weapon, xf(ellipsoid(0.03, 0.03, 0.02), [0, 0, 0.13], [0, 0, 0], [0.6, 1, 1]), 'neonPink', 0);
-  // handle
-  b.add(weapon, xf(cyl(0.021, 0.023, 0.27, 12), [0, 0, -0.045], [90, 0, 0]), 'glove', 0.8);
-  for (const z of [-0.13, -0.05, 0.03]) b.add(weapon, xf(torus(0.024, 0.0055, 5, 14), [0, 0, z]), 'gold', 0.3);
-  b.add(weapon, xf(new THREE.OctahedronGeometry(0.036), [0, 0, -0.205], [0, 0, 45], [1, 1, 1.3]), 'gold', 0.6);
-  b.add(weapon, xf(new THREE.OctahedronGeometry(0.016), [0, 0, -0.245], [0, 0, 45], [1, 1, 1.4]), 'neonPink', 0);
-  const bladeBase = marker(weapon, 0, 0, 0.36, 'bladeBase');
-  const bladeTip = marker(weapon, 0, 0, 1.46, 'bladeTip');
-  const offhandGrip = marker(weapon, 0, 0.05, -0.115, 'offhand');
+  const { weapon, bladeBase, bladeTip, offhandGrip } = addBassline(b, B.handR);
 
   // --- cloth: coat skirt ------------------------------------------------------------------------
   const spheres = makeBodySpheres(rig);
@@ -292,11 +249,75 @@ export function buildKaiser(): ChampionVisual {
   });
 }
 
+/** Materials used by BASSLINE (shared by the procedural model and the GLB model). */
+export function kaiserWeaponMaterials(): Record<string, THREE.Material> {
+  return {
+    glove: toon({ color: 0x131219, spec: 0.3 }),
+    gold: toon({ color: 0xf3c24f, spec: 0.85, specSize: 0.88, shade: 0xffd2a0, rim: 0.4 }),
+    blade: toon({ color: 0x17141f, spec: 0.45, specSize: 0.975, rim: 0.6 }),
+    neonGold: neon(0xffc24a, 2.6),
+    neonPink: neon(0xff2e88, 2.6),
+    eq: equalizerMaterial(0xff2e88, 0xffd34a, 18, 3.2),
+  };
+}
+
+/**
+ * BASSLINE: black holo-greatsword with a neon gold edge and a live equalizer core, built on a
+ * weapon pivot in the given hand. The builder needs the kaiserWeaponMaterials() keys.
+ */
+export function addBassline(b: ModelBuilder, hand: THREE.Object3D): { weapon: THREE.Group; bladeBase: THREE.Object3D; bladeTip: THREE.Object3D; offhandGrip: THREE.Object3D } {
+  const weapon = weaponPivot(hand);
+  const blade = new THREE.Shape();
+  blade.moveTo(0, -0.1);
+  blade.lineTo(0.06, -0.118);
+  blade.lineTo(1.12, -0.118);
+  blade.lineTo(1.38, 0.0);
+  blade.lineTo(1.32, 0.09);
+  blade.lineTo(1.2, 0.128);
+  blade.lineTo(0.42, 0.128);
+  blade.lineTo(0.38, 0.098);
+  blade.lineTo(0.26, 0.098);
+  blade.lineTo(0.22, 0.128);
+  blade.lineTo(0.0, 0.12);
+  blade.closePath();
+  const slot = new THREE.Path();
+  slot.moveTo(0.3, -0.036);
+  slot.lineTo(1.0, -0.036);
+  slot.lineTo(1.07, 0.0);
+  slot.lineTo(1.0, 0.04);
+  slot.lineTo(0.3, 0.04);
+  slot.lineTo(0.27, 0.0);
+  slot.closePath();
+  blade.holes.push(slot);
+  b.add(weapon, xf(extrude(blade, 0.026, 0.006, 4), [0, 0, 0.14], [0, -90, 0]), 'blade', 1.0);
+  const edge = poly([0.06, -0.126, 1.124, -0.126, 1.393, 0.0, 1.332, 0.1, 1.31, 0.082, 1.364, 0.0, 1.114, -0.106, 0.06, -0.106]);
+  b.add(weapon, xf(extrude(edge, 0.044, 0, 2), [0, 0, 0.14], [0, -90, 0]), 'neonGold', 0);
+  const eqPlane = new THREE.PlaneGeometry(0.72, 0.07);
+  b.add(weapon, xf(eqPlane, [0, 0.002, 0.14 + 0.65], [0, -90, 0]), 'eq', 0, false);
+  for (const sx of [1, -1]) {
+    b.add(weapon, xf(rbox(0.006, 0.012, 0.74, 0.003), [sx * 0.02, 0.11, 0.14 + 0.8]), 'gold', 0);
+    b.add(weapon, xf(rbox(0.006, 0.05, 0.05, 0.003), [sx * 0.021, -0.07, 0.14 + 0.2]), 'neonPink', 0);
+  }
+  // guard: speaker cone
+  b.add(weapon, xf(lathe([[0.02, 0.0], [0.128, 0.045], [0.136, 0.06], [0.122, 0.068], [0.02, 0.03]], 20), [0, 0, 0.085], [90, 0, 0], [0.5, 1, 1]), 'blade', 0.8);
+  b.add(weapon, xf(torus(0.131, 0.01, 6, 26), [0, 0, 0.145], [0, 0, 0], [0.5, 1, 1]), 'gold', 0.5);
+  b.add(weapon, xf(ellipsoid(0.03, 0.03, 0.02), [0, 0, 0.13], [0, 0, 0], [0.6, 1, 1]), 'neonPink', 0);
+  // handle
+  b.add(weapon, xf(cyl(0.021, 0.023, 0.27, 12), [0, 0, -0.045], [90, 0, 0]), 'glove', 0.8);
+  for (const z of [-0.13, -0.05, 0.03]) b.add(weapon, xf(torus(0.024, 0.0055, 5, 14), [0, 0, z]), 'gold', 0.3);
+  b.add(weapon, xf(new THREE.OctahedronGeometry(0.036), [0, 0, -0.205], [0, 0, 45], [1, 1, 1.3]), 'gold', 0.6);
+  b.add(weapon, xf(new THREE.OctahedronGeometry(0.016), [0, 0, -0.245], [0, 0, 45], [1, 1, 1.4]), 'neonPink', 0);
+  const bladeBase = marker(weapon, 0, 0, 0.36, 'bladeBase');
+  const bladeTip = marker(weapon, 0, 0, 1.46, 'bladeTip');
+  const offhandGrip = marker(weapon, 0, 0.05, -0.115, 'offhand');
+  return { weapon, bladeBase, bladeTip, offhandGrip };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Animations
 // ---------------------------------------------------------------------------------------------
 
-function kaiserAnims(): ChampionAnimSet {
+export function kaiserAnims(): ChampionAnimSet {
   const legsIdle: PoseSpec = {
     hips: [0, -0.03, 0],
     thighL: [-8, -10, 9], shinL: [14, 0, 0], footL: [-6, 10, -8],

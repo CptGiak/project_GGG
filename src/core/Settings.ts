@@ -1,5 +1,6 @@
 import type { ChampionId } from '../../shared/champions';
 import type { Action } from './Input';
+import type { ModeId } from '../../shared/modes';
 
 export interface Settings {
   name: string;
@@ -17,6 +18,8 @@ export interface Settings {
   room: string;
   /** player key overrides (missing actions use the defaults) */
   bindings: Partial<Record<Action, string[]>>;
+  /** practice game mode */
+  mode: ModeId;
 }
 
 const KEY = 'ggg.settings.v1';
@@ -36,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   arena: 'neon_city',
   room: '',
   bindings: {},
+  mode: 'dm',
 };
 
 export function loadSettings(): Settings {
