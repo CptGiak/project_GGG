@@ -80,19 +80,20 @@
 .cs-cards.many .cs-card .tt { font-size: 1.25vh; }
 .cs-cards.many .cs-card .role { left: 1.1vh; font-size: 1.15vh; letter-spacing: 0.15vh; }
 
-.cs-info { position: absolute; right: 4vh; top: 6vh; width: 58vh; transform: skewX(-4deg); }
+.cs-info { position: absolute; right: 4vh; top: 4.5vh; width: 58vh; transform: skewX(-4deg); }
 .cs-info > * { transform: skewX(4deg); }
 .cs-name { font-family: var(--font-display); font-size: 11vh; line-height: 0.9; color: #fff; -webkit-text-stroke: 0.4vh var(--black); paint-order: stroke fill; text-shadow: 0.8vh 0.8vh 0 var(--c1); }
 .cs-title { display: inline-block; font-family: var(--font-display); font-size: 2.6vh; background: var(--black); color: var(--c1); padding: 0.2vh 1.4vh; transform: skewX(-14deg) rotate(-2deg); margin: 0.6vh 0 1.4vh; }
 .cs-meta { display: flex; gap: 1vh; margin-bottom: 1.4vh; flex-wrap: wrap; }
 .cs-meta span { font-family: var(--font-display); font-size: 1.8vh; padding: 0.3vh 1.2vh; background: #fff; color: var(--black); transform: skewX(-14deg); }
 .cs-meta span.role { background: var(--c1); }
-.cs-bio { font-size: 1.8vh; line-height: 1.45; color: rgba(255,255,255,0.88); margin-bottom: 1.6vh; background: rgba(11,7,9,0.7); padding: 1vh 1.4vh; border-left: 0.5vh solid var(--c1); }
-.cs-abs { display: flex; flex-direction: column; gap: 0.9vh; }
-.cs-ab { display: grid; grid-template-columns: 5.6vh 1fr; gap: 1.2vh; align-items: center; background: rgba(11,7,9,0.85); padding: 0.8vh 1.2vh; border: 0.2vh solid rgba(255,255,255,0.18); }
+.cs-bio { font-size: 1.8vh; line-height: 1.45; color: rgba(255,255,255,0.88); margin-bottom: 1vh; background: rgba(11,7,9,0.7); padding: 1vh 1.4vh; border-left: 0.5vh solid var(--c1); }
+/* six rows (passive + five abilities) must clear the confirm button */
+.cs-abs { display: flex; flex-direction: column; gap: 0.6vh; }
+.cs-ab { display: grid; grid-template-columns: 5.6vh 1fr; gap: 1.2vh; align-items: center; background: rgba(11,7,9,0.85); padding: 0.5vh 1.2vh; border: 0.2vh solid rgba(255,255,255,0.18); }
 .cs-ab .k { font-family: var(--font-display); font-size: 1.7vh; text-align: center; background: #fff; color: var(--black); padding: 0.2vh 0; transform: skewX(-14deg); }
-.cs-ab .n { font-family: var(--font-display); font-size: 2.1vh; color: var(--c1); letter-spacing: 0.05vh; }
-.cs-ab .d { font-size: 1.5vh; color: rgba(255,255,255,0.8); line-height: 1.3; }
+.cs-ab .n { font-family: var(--font-display); font-size: 1.95vh; color: var(--c1); letter-spacing: 0.05vh; }
+.cs-ab .d { font-size: 1.4vh; color: rgba(255,255,255,0.8); line-height: 1.22; }
 .cs-ab.ult { border-color: var(--c1); }
 .cs-ab.passive { border-style: dashed; opacity: 0.92; }
 .cs-ab.passive .k { background: var(--c2, #fff); }

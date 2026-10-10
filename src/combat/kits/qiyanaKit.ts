@@ -15,7 +15,7 @@ export type Element = 'rock' | 'water' | 'grass';
 const ELEMENTS: Element[] = ['rock', 'water', 'grass'];
 export const ELEMENT_COLOR: Record<Element, number> = { rock: 0xffa630, water: 0x3fc8ff, grass: 0x4dff7a };
 const ELEMENT_LABEL: Record<Element, string> = { rock: 'TERRA', water: 'ACQUA', grass: 'ERBA' };
-const COMBO = ['c1', 'c2', 'wrath'] as const;
+const COMBO = ['c1', 'c2'] as const;
 const DUR: Record<string, number> = { c1: 0.32, c2: 0.32, wrath: 0.5, air: 0.42 };
 const WRATH = { length: 8.5, width: 0.9 };
 const TERRA = { dist: 8, speed: 38 };
@@ -25,19 +25,20 @@ const ULT = { range: 22, half: 28, burst: 4.5 };
 /**
  * QIYANA — League of Legends port (True Damage).
  * Passive Royal Privilege: the first hit on each enemy deals bonus damage (again after 12 s).
- * LMB: two slashes, then Edge of Ixtal / Elemental Wrath (line slash; with an element: Rock deals
+ * Skill (LMB, her Q): Edge of Ixtal / Elemental Wrath (line slash; with an element: Rock deals
  * more to wounded enemies, Water roots and slows, Grass turns her invisible and fast) ·
- * RMB: Terrashape (dash; the element comes from where she lands: a wall = Rock, the ground =
- * Water, the air = Grass; the next LMB is the Wrath) · F: Audacity (pounce on the targeted
- * enemy) · R: Supreme Display of Talent (shockwave; it explodes against walls and stuns).
+ * Attack (RMB): two ring-blade slashes (air: rising slash) · Secondary (C, her W): Terrashape
+ * (dash; the element comes from where she lands: a wall = Rock, the ground = Water, the air =
+ * Grass; it refreshes Edge of Ixtal) · F (her E): Audacity (pounce on the targeted enemy) ·
+ * R: Supreme Display of Talent (shockwave; it explodes against walls and stuns).
  */
 export class QiyanaKit extends BaseKit {
   private combo = 0;
   private comboTimer = 0;
   private queued = false;
   private element: Element | null = null;
-  /** next LMB is the Wrath until this time (after Terrashape) */
-  private wrathUntil = 0;
+  /** the running air slash got the airtime's lift (rises with low gravity) */
+  private airHang = false;
   private readonly privilege = new Map<string, number>();
   private dashDir = new THREE.Vector3();
   private dashLen = 0;
@@ -86,14 +87,19 @@ export class QiyanaKit extends BaseKit {
         return;
       }
     }
-    // ---- RMB: Terrashape ----------------------------------------------------------------------------------
+    // ---- C: Terrashape ------------------------------------------------------------------------------------
     if (it.secondaryPressed && this.cd.sec <= 0 && (!this.act || this.act === 'c1' || this.act === 'c2')) {
       this.cd.sec = this.data.abilities.sec.cooldown;
       if (this.act) this.endAction(f);
       this.startTerrashape(f, it, m);
       return;
     }
-    // ---- LMB: combo / Wrath ---------------------------------------------------------------------------------
+    // ---- LMB: Edge of Ixtal / Elemental Wrath (cancels the recovery of a slash) ---------------------------
+    if ((!this.act || this.act === 'c1' || this.act === 'c2' || this.act === 'air') && this.skillReady()) {
+      this.startWrath(f, m);
+      return;
+    }
+    // ---- RMB: slashes -------------------------------------------------------------------------------------
     if (it.attackPressed) {
       if (this.act && this.actT > this.actDur * 0.45) this.queued = true;
       else if (!this.act) this.attack(f, m);
@@ -104,31 +110,41 @@ export class QiyanaKit extends BaseKit {
   private attack(f: Fighter, m: MatchContext): void {
     this.queued = false;
     if (f.stealth > 0) f.reveal = 0.6;
-    if (!f.grounded && this.wrathUntil <= m.time) {
+    if (!f.grounded) {
       if (this.cd.atk > 0) return;
       this.startAction(f, 'air', DUR.air);
       f.anim.play('air', { fadeIn: 0.03 });
-      this.magnet(f, this.findTarget(f, m, 8, 45), 12, 1.5, true);
-      f.vel.y = Math.max(f.vel.y, 8.5);
+      // only the first air slash of a jump rises; mashing it can't keep her afloat
+      this.airHang = this.takeAirLift();
+      this.magnet(f, this.findTarget(f, m, 8, 45), 12, 1.5, this.airHang);
+      if (this.airHang) f.vel.y = Math.max(f.vel.y, 8.5);
       this.cd.atk = 0.45;
       m.broadcastAction(f, { a: 'air' });
       return;
     }
-    let name: string = COMBO[this.combo % 3];
-    if (this.wrathUntil > m.time) name = 'wrath';
-    this.combo = name === 'wrath' ? 0 : this.combo + 1;
+    const name = COMBO[this.combo % COMBO.length];
+    this.combo++;
     this.comboTimer = 0.85;
-    this.wrathUntil = 0;
     this.startAction(f, name, DUR[name]);
     f.anim.play(name, { fadeIn: 0.03 });
-    const t = this.findTarget(f, m, name === 'wrath' ? 9 : 7, 40);
-    this.magnet(f, t, name === 'wrath' ? 9 : 10, name === 'wrath' ? 3 : 1.5);
+    this.magnet(f, this.findTarget(f, m, 7, 40), 10, 1.5);
     f.ctrl.lockMove = DUR[name] * 0.6;
-    if (name === 'wrath') {
-      this.wrathElement = this.element;
-      this.setElement(f, null);
-    }
-    m.broadcastAction(f, { a: name, n: name === 'wrath' ? this.elementIndex(this.wrathElement) : undefined });
+    m.broadcastAction(f, { a: name });
+  }
+
+  /** Edge of Ixtal (LMB): a line slash, Elemental Wrath while the ring carries an element */
+  private startWrath(f: Fighter, m: MatchContext): void {
+    this.cd.sig = this.data.abilities.sig.cooldown;
+    this.queued = false;
+    if (f.stealth > 0) f.reveal = 0.6;
+    if (this.act) this.endAction(f);
+    this.startAction(f, 'wrath', DUR.wrath);
+    f.anim.play('wrath', { fadeIn: 0.03 });
+    this.magnet(f, this.findTarget(f, m, 9, 40), 9, 3);
+    f.ctrl.lockMove = DUR.wrath * 0.6;
+    this.wrathElement = this.element;
+    this.setElement(f, null);
+    m.broadcastAction(f, { a: 'wrath', n: this.elementIndex(this.wrathElement) });
   }
 
   private elementIndex(e: Element | null): number {
@@ -151,7 +167,7 @@ export class QiyanaKit extends BaseKit {
     this.wrathFx(f, m, from, to, el);
     if (!m.isAuthority(f)) return;
     for (const o of enemiesAlong(f, m, from, to, WRATH.width)) {
-      const info: HitInfo = { slot: 'atk', part: 'q', at: o.chest(new THREE.Vector3()), kb: dir.clone().multiplyScalar(5), blockable: true };
+      const info: HitInfo = { slot: 'sig', part: 'q', at: o.chest(new THREE.Vector3()), kb: dir.clone().multiplyScalar(5), blockable: true };
       if (el === 'rock') {
         info.part = 'qRock';
         info.scale = o.hp / o.maxHp < 0.5 ? 1 : 85 / 125;
@@ -218,7 +234,8 @@ export class QiyanaKit extends BaseKit {
   private endTerrashape(f: Fighter, m: MatchContext): void {
     const el = this.sense(f, m);
     this.setElement(f, el);
-    this.wrathUntil = m.time + 3;
+    // League-style: Terrashape refreshes Edge of Ixtal
+    this.cd.sig = 0;
     this.elementBurst(f, m, el);
     m.broadcastAction(f, { a: 'terra', n: this.elementIndex(el) });
   }
@@ -311,7 +328,7 @@ export class QiyanaKit extends BaseKit {
   // ---- per frame -------------------------------------------------------------------------------------------
 
   protected tickAction(f: Fighter, _it: Intent, dt: number, m: MatchContext): void {
-    if (this.act === 'air') f.ctrl.gravityScale = 0.6;
+    if (this.act === 'air' && this.airHang) f.ctrl.gravityScale = 0.6;
     if (this.act === 'wrath' && !this.fired && this.actT >= 0.09) {
       this.fired = true;
       this.wrath(f, m, this.wrathElement);
@@ -378,13 +395,9 @@ export class QiyanaKit extends BaseKit {
   }
 
   hints() {
-    return this.element ? { atk: ELEMENT_LABEL[this.element] } : {};
+    return this.element ? { sig: ELEMENT_LABEL[this.element] } : {};
   }
 
-  cancel(f: Fighter): void {
-    super.cancel(f);
-    this.wrathUntil = 0;
-  }
 
   // ---- remote puppets ------------------------------------------------------------------------------------
 

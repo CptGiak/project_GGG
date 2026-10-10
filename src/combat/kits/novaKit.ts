@@ -18,11 +18,8 @@ const DUR: Record<string, number> = { c1: 0.3, c2: 0.3, c3: 0.4, c4: 0.58, air: 
 /** Glitch Step marks whoever it cuts for this long (s) */
 const MARK_SEC = 4;
 
-/** Five Beat Strike: kunai count, fan half-angle, speed and flight time (range ≈ 12.6 m) */
-const FAN_N = 5;
-const FAN_HALF = THREE.MathUtils.degToRad(24);
-const FAN_SPEED = 74;
-const FAN_LIFE = 0.17;
+/** Cross Fade: the X wave's reach, speed, how many steps draw / test it, and its half size */
+const CROSS = { range: 13, speed: 46, steps: 8, half: 1.0 };
 
 /**
  * NOVA — dual-blade assassin.
@@ -90,8 +87,8 @@ export class NovaKit extends BaseKit {
     if ((!this.act || /^c[1-4]$/.test(this.act) || this.act === 'air') && this.skillReady()) {
       this.cd.sig = this.data.abilities.sig.cooldown;
       this.queued = false;
-      this.startAction(f, 'fan', 0.42, f.aimYaw);
-      f.anim.play('fan', { fadeIn: 0.03 });
+      this.startAction(f, 'cross', 0.42, f.aimYaw);
+      f.anim.play('cross', { fadeIn: 0.03 });
       f.ctrl.lockMove = 0.18;
       return;
     }
@@ -133,25 +130,47 @@ export class NovaKit extends BaseKit {
     m.broadcastAction(f, { a: name });
   }
 
-  /** the kunai fan, centred on the point under the crosshair */
-  private throwFan(f: Fighter, m: MatchContext, from: THREE.Vector3, dir: THREE.Vector3, visualOnly: boolean): void {
+  /**
+   * Cross Fade: an X of two crossed blade strokes flies out along the aim, piercing; every enemy
+   * it passes is cut once and marked for Phantom Cut. Visuals run for local and remote copies.
+   */
+  private crossFade(f: Fighter, m: MatchContext, from: THREE.Vector3, dir: THREE.Vector3, authority: boolean): void {
     const [c0, c1] = f.champ.colors;
-    const right = _w.crossVectors(dir, _b.set(0, 1, 0));
-    if (right.lengthSq() < 1e-4) right.set(1, 0, 0);
-    right.normalize();
-    const hits = new Set<string>();
-    for (let i = 0; i < FAN_N; i++) {
-      const a = THREE.MathUtils.lerp(-FAN_HALF, FAN_HALF, i / (FAN_N - 1));
-      const d = dir.clone().multiplyScalar(Math.cos(a)).addScaledVector(right, Math.sin(a)).normalize();
-      // a brief tracer line per kunai (to its range or the first wall) draws the fan
-      const reach = FAN_SPEED * FAN_LIFE;
-      const wall = m.world.raycast(from, d, reach);
-      m.vfx.beam(from.clone().addScaledVector(d, 0.5), from.clone().addScaledVector(d, wall ? wall.distance : reach), i % 2 ? c1 : c0, 0.05, 0.16);
-      m.projectiles.spawn({ owner: f, kind: 'bolt', pos: from.clone().addScaledVector(d, 0.3), vel: d.multiplyScalar(FAN_SPEED), radius: 0.24, life: FAN_LIFE, slot: 'sig', part: 'fan', color: i % 2 ? c1 : c0, color2: i % 2 ? c0 : c1, scale: 0.55, slow: 0.8, kb: 3, sharedHits: hits, visualOnly });
+    const wall = m.world.raycast(from, dir, CROSS.range);
+    const reach = wall ? Math.max(1, wall.distance - 0.3) : CROSS.range;
+    const side = new THREE.Vector3().crossVectors(dir, _b.set(0, 1, 0));
+    if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+    side.normalize();
+    const up = new THREE.Vector3().crossVectors(side, dir).normalize();
+    // the X's two diagonals
+    const d1 = side.clone().add(up).normalize();
+    const d2 = side.clone().sub(up).normalize();
+    const cut = new Set<Fighter>();
+    const stepLen = reach / CROSS.steps;
+    for (let i = 1; i <= CROSS.steps; i++) {
+      const a = from.clone().addScaledVector(dir, (i - 1) * stepLen);
+      const b = from.clone().addScaledVector(dir, i * stepLen);
+      const size = CROSS.half * (1 + i * 0.05);
+      this.later(m, (i * stepLen) / CROSS.speed, () => {
+        m.vfx.beam(b.clone().addScaledVector(d1, -size), b.clone().addScaledVector(d1, size), c0, 0.12, 0.14);
+        m.vfx.beam(b.clone().addScaledVector(d2, -size), b.clone().addScaledVector(d2, size), c1, 0.12, 0.14);
+        if (i % 2 === 0) m.vfx.add.emit({ pos: b.clone(), life: 0.22, size: 0.3, size1: 0.05, color: i % 4 ? c0 : c1, shape: Shape.square, alpha: 0.9, rot: 0 });
+        if (!authority || !f.alive) return;
+        for (const o of m.fighters) {
+          if (o === f || !o.alive || cut.has(o)) continue;
+          if (o.team !== 0 && o.team === f.team) continue;
+          capsule(o, _c1, _c2);
+          if (segSegDist2(a, b, _c1, _c2, _a, _w) > (CAPSULE_R + size * 0.8) ** 2) continue;
+          cut.add(o);
+          m.reportHit(f, o, { slot: 'sig', part: 'cross', at: _w.clone(), kb: dir.clone().multiplyScalar(4), slow: 0.5, blockable: true });
+          if (o.invuln <= 0) this.marks.set(o, m.time + MARK_SEC);
+          m.vfx.hitSpark(_w.clone(), dir.clone().negate(), c1, false);
+        }
+      });
     }
-    m.vfx.ring(from.clone().addScaledVector(dir, 0.7), dir, c0, 0.1, 0.7, 0.18);
-    for (let i = 0; i < 10; i++) m.vfx.add.emit({ pos: from.clone(), vel: dir.clone().multiplyScalar(10 + Math.random() * 10).add(new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 6)), life: 0.25, size: 0.1, size1: 0.02, color: i % 2 ? c0 : c1, shape: Shape.square, drag: 4 });
-    m.audio.play('kunai', from, 0.9);
+    m.vfx.ring(from.clone().addScaledVector(dir, 0.7), dir, c0, 0.1, 0.8, 0.18);
+    m.audio.play('kunai', from, 0.8);
+    m.audio.play('swing', from, 0.7);
   }
 
   /** instant blink along the move (or aim) direction, damaging enemies crossed */
@@ -325,12 +344,12 @@ export class NovaKit extends BaseKit {
 
   onAnimEvent(f: Fighter, ev: string, m: MatchContext): void {
     if (!this.act) return;
-    if (ev === 'release' && this.act === 'fan') {
+    if (ev === 'release' && this.act === 'cross') {
       const from = f.chest(new THREE.Vector3());
-      const { point } = this.aimPoint(f, m, 14);
+      const { point } = this.aimPoint(f, m, CROSS.range);
       const dir = point.sub(from).normalize();
-      this.throwFan(f, m, from, dir, false);
-      m.broadcastAction(f, { a: 'fan', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
+      this.crossFade(f, m, from, dir, true);
+      m.broadcastAction(f, { a: 'cross', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
       return;
     }
     if (ev === 'swing') {
@@ -373,9 +392,9 @@ export class NovaKit extends BaseKit {
         this.actT = 0;
         this.actDur = DUR[e.a] ?? 0.4;
         break;
-      case 'fan':
-        f.anim.play('fan', { fadeIn: 0.02, offset: 0.12 });
-        if (e.p && e.d) this.throwFan(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), true);
+      case 'cross':
+        f.anim.play('cross', { fadeIn: 0.02, offset: 0.12 });
+        if (e.p && e.d) this.crossFade(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), false);
         break;
       case 'glitch':
         if (e.p && e.d) this.afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d));
@@ -404,7 +423,8 @@ export class NovaKit extends BaseKit {
     }
   }
 
-  tickRemote(f: Fighter, dt: number): void {
+  tickRemote(f: Fighter, dt: number, m: MatchContext): void {
+    this.tickFx(m);
     if (!this.act) return;
     this.actT += dt;
     if (this.act === 'cRemote4') this.spin = Math.min(1, this.actT / 0.38) * 360;

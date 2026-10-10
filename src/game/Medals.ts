@@ -140,7 +140,7 @@ export class Medals {
       if (hit.mo >= 34) medals.push({ name: 'MACH', tier: 3, sub: `${Math.round(hit.mo)} M/S` });
       else if (hit.mo >= 18) medals.push({ name: 'MOMENTUM', tier: 1, sub: `${Math.round(hit.mo)} M/S` });
       if (hit.crit && !hit.counter && melee && (hit.slot === 'atk' || hit.slot === 'abi')) medals.push({ name: 'NAPE CUT', tier: 2 });
-      if (hit.crit && !hit.counter && !melee && (hit.slot === 'atk' || hit.slot === 'sec')) medals.push({ name: 'HEADSHOT', tier: 1 });
+      if (hit.crit && !hit.counter && !melee && (hit.slot === 'atk' || hit.slot === 'sig' || hit.slot === 'sec')) medals.push({ name: 'HEADSHOT', tier: 1 });
       if (hit.aerial) medals.push({ name: 'AERIAL', tier: 1 });
     }
     if (killer.alive && killer.hp / killer.maxHp < 0.15) medals.push({ name: 'CLUTCH', tier: 2 });

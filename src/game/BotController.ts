@@ -259,13 +259,16 @@ export class BotController {
         if (Math.random() < dt * THREE.MathUtils.lerp(3, 7, diff)) it.attackPressed = true;
       }
       // signature skill: Kaiser's wave reaches ~8 m, Nova's kunai ~12 m
-      const sigRange = f.champId === 'kaiser' ? 7.5 : 11;
-      if (cds.sig <= 0 && dist < sigRange && onTarget && Math.random() < dt * (0.8 + diff * 1.5)) it.skillPressed = true;
+      // signature skills: Kaiser's wave ~8 m, Nova's X ~13 m, Akali's fan ~12 m, Qiyana's line ~8.5 m
+      const sigRange: Record<string, number> = { kaiser: 7.5, nova: 12, akali: 11, qiyana: 8 };
+      if (f.champId !== 'locke' && cds.sig <= 0 && dist < (sigRange[f.champId] ?? 8) && onTarget && Math.random() < dt * (0.8 + diff * 1.5)) it.skillPressed = true;
       if (cds.abi <= 0 && dist > 5 && dist < 18 && onTarget && Math.random() < dt * (0.6 + diff)) it.abilityPressed = true;
       if (f.champId === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
       // League ports: smoke when engaging or hurt, nails as a ranged poke, Terrashape to close in
       if (f.champId === 'akali' && cds.sec <= 0 && (dist < 6 || f.hp < f.maxHp * 0.5) && Math.random() < dt * 0.5) it.secondaryPressed = true;
-      if (f.champId === 'locke' && cds.sec <= 0 && dist > 4 && dist < 22 && aimDot > 0.995 && Math.random() < dt * 1.2) it.secondaryPressed = true;
+      // Locke: Ritual Nails need a precise aim (they're a line), Soul Ignition when hurt or brawling
+      if (f.champId === 'locke' && cds.sig <= 0 && dist > 4 && dist < 22 && aimDot > 0.995 && Math.random() < dt * 1.2) it.skillPressed = true;
+      if (f.champId === 'locke' && cds.sec <= 0 && (f.hp < f.maxHp * 0.4 || dist < 5) && Math.random() < dt * 0.8) it.secondaryPressed = true;
       if (f.champId === 'qiyana' && cds.sec <= 0 && dist > 4 && dist < 14 && Math.random() < dt * 0.6) it.secondaryPressed = true;
       if (f.ult >= 1 && dist < 9 && Math.random() < dt * 0.8) it.ultimatePressed = true;
       // second cast of a two-part ultimate

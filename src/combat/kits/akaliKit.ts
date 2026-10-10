@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { AbilitySlot } from '../../../shared/champions';
 import { BaseKit, type MeleeHit } from '../BaseKit';
 import type { Fighter } from '../../game/Fighter';
 import { forwardOf } from '../../game/Fighter';
@@ -9,7 +10,7 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
-const COMBO = ['c1', 'c2', 'c3', 'fan'] as const;
+const COMBO = ['c1', 'c2', 'c3'] as const;
 const DUR: Record<string, number> = { c1: 0.3, c2: 0.3, c3: 0.4, fan: 0.46, air: 0.42 };
 const FAN = { range: 12, half: 32, slowFrom: 7 };
 const SHROUD = { radius: 5.2, time: 5 };
@@ -19,10 +20,11 @@ const DASH = { speed: 42, flipMax: 0.5, exec: 11 };
  * AKALI — League of Legends port (True Damage).
  * Passive Assassin's Mark: kunai, shuriken and dashes mark enemies; the next blade hit on a
  * marked enemy deals bonus damage.
- * LMB: two slashes and a spin, then Five Point Strike (fan of 5 kunai, slows at the tip) ·
- * RMB: Twilight Shroud (smoke: invisible and faster inside) · F: Shuriken Flip (back flip +
- * shuriken; F again within 3 s dashes onto the marked enemy) · R: Perfect Execution (dash, then
- * within 5 s a second dash that executes: more damage the more health is missing).
+ * Skill (LMB, her Q): Five Point Strike (fan of 5 kunai, marks, slows at the tip) · Attack
+ * (RMB): two kama slashes and a spin (air: rising slash) · Secondary (C, her W): Twilight
+ * Shroud (smoke: invisible and faster inside) · F (her E): Shuriken Flip (back flip + shuriken;
+ * F again within 3 s dashes onto the marked enemy) · R: Perfect Execution (dash, then within 5 s
+ * a second dash that executes: more damage the more health is missing).
  */
 export class AkaliKit extends BaseKit {
   private combo = 0;
@@ -41,6 +43,8 @@ export class AkaliKit extends BaseKit {
   private boost = 0;
   /** timed release of the current action (kunai, shuriken, smoke) already done */
   private fired = false;
+  /** the running air slash got the airtime's lift (rises with low gravity) */
+  private airHang = false;
 
   constructor() {
     super('akali');
@@ -91,7 +95,7 @@ export class AkaliKit extends BaseKit {
         return;
       }
     }
-    // ---- RMB: Twilight Shroud -------------------------------------------------------------------
+    // ---- C: Twilight Shroud ----------------------------------------------------------------------
     if (it.secondaryPressed && this.cd.sec <= 0 && (!this.act || this.act === 'fan' || this.act.startsWith('c'))) {
       this.cd.sec = this.data.abilities.sec.cooldown;
       if (this.act) this.endAction(f);
@@ -99,7 +103,12 @@ export class AkaliKit extends BaseKit {
       f.anim.play('shroud', { fadeIn: 0.02 });
       return;
     }
-    // ---- LMB: combo (4th = Five Point Strike) ----------------------------------------------
+    // ---- LMB: Five Point Strike (cancels the recovery of a combo hit) -------------------------
+    if ((!this.act || this.act.startsWith('c') || this.act === 'air') && this.skillReady()) {
+      this.startFan(f, m);
+      return;
+    }
+    // ---- RMB: kama combo ---------------------------------------------------------------------
     if (it.attackPressed) {
       if (this.act && this.actT > this.actDur * 0.4) this.queued = true;
       else if (!this.act) this.attack(f, m);
@@ -115,21 +124,35 @@ export class AkaliKit extends BaseKit {
       this.startAction(f, 'air', DUR.air);
       f.anim.play('air', { fadeIn: 0.03 });
       const t = this.findTarget(f, m, 8, 45);
-      this.magnet(f, t, 12, 1.5, true);
-      f.vel.y = Math.max(f.vel.y, 8.5);
+      // only the first air slash of a jump rises; mashing it can't keep her afloat
+      this.airHang = this.takeAirLift();
+      this.magnet(f, t, 12, 1.5, this.airHang);
+      if (this.airHang) f.vel.y = Math.max(f.vel.y, 8.5);
       this.cd.atk = 0.45;
       m.broadcastAction(f, { a: 'air' });
       return;
     }
-    const name = COMBO[this.combo % 4];
+    const name = COMBO[this.combo % COMBO.length];
     this.combo++;
     this.comboTimer = 0.8;
     this.startAction(f, name, DUR[name]);
     f.anim.play(name, { fadeIn: 0.03 });
-    const t = this.findTarget(f, m, name === 'fan' ? 12 : 7, name === 'fan' ? 30 : 40);
-    this.magnet(f, t, name === 'fan' ? 4 : 10, name === 'fan' ? 6 : 1.5);
+    this.magnet(f, this.findTarget(f, m, 7, 40), 10, 1.5);
     f.ctrl.lockMove = DUR[name] * 0.6;
     m.broadcastAction(f, { a: name });
+  }
+
+  /** Five Point Strike (LMB): the kunai leave a beat into the clip (see tickAction) */
+  private startFan(f: Fighter, m: MatchContext): void {
+    this.cd.sig = this.data.abilities.sig.cooldown;
+    this.queued = false;
+    if (f.stealth > 0) f.reveal = 0.6;
+    if (this.act) this.endAction(f);
+    this.startAction(f, 'fan', DUR.fan);
+    f.anim.play('fan', { fadeIn: 0.03 });
+    this.magnet(f, this.findTarget(f, m, FAN.range, 30), 4, 6);
+    f.ctrl.lockMove = DUR.fan * 0.6;
+    m.broadcastAction(f, { a: 'fan' });
   }
 
   /** Five Point Strike: instant cone, five visual kunai */
@@ -142,7 +165,7 @@ export class AkaliKit extends BaseKit {
     if (!m.isAuthority(f)) return;
     for (const { o, d } of enemiesInCone(f, m, origin, dir, FAN.range, FAN.half)) {
       const kb = _v.subVectors(o.pos, f.pos).setY(0).normalize().multiplyScalar(2.5).clone();
-      m.reportHit(f, o, { slot: 'atk', part: 'q', at: o.chest(new THREE.Vector3()), kb, slow: d > FAN.slowFrom ? 1.2 : undefined, blockable: true });
+      m.reportHit(f, o, { slot: 'sig', part: 'q', at: o.chest(new THREE.Vector3()), kb, slow: d > FAN.slowFrom ? 1.2 : undefined, blockable: true });
       this.marks.add(o.id, m.time, 4);
     }
   }
@@ -151,7 +174,7 @@ export class AkaliKit extends BaseKit {
     const [c0, c1] = f.champ.colors;
     for (let i = -2; i <= 2; i++) {
       const d = dir.clone().applyAxisAngle(UP, THREE.MathUtils.degToRad(i * 14)).normalize();
-      m.projectiles.spawn({ owner: f, kind: 'blade', pos: origin.clone().addScaledVector(d, 0.4), vel: d.multiplyScalar(48), radius: 0.1, life: FAN.range / 48, slot: 'atk', part: 'q', color: c0, color2: c1, visualOnly: true, pierce: true });
+      m.projectiles.spawn({ owner: f, kind: 'blade', pos: origin.clone().addScaledVector(d, 0.4), vel: d.multiplyScalar(48), radius: 0.1, life: FAN.range / 48, slot: 'sig', part: 'q', color: c0, color2: c1, visualOnly: true, pierce: true });
     }
   }
 
@@ -261,7 +284,7 @@ export class AkaliKit extends BaseKit {
         this.shroud(f, m);
       }
     }
-    if (this.act === 'air') f.ctrl.gravityScale = 0.6;
+    if (this.act === 'air' && this.airHang) f.ctrl.gravityScale = 0.6;
     if (this.act === 'c3') this.spin = Math.min(1, this.actT / 0.3) * 360;
     if (this.act === 'flipDash') {
       f.ctrl.noHooks = true;
@@ -352,7 +375,7 @@ export class AkaliKit extends BaseKit {
   }
 
   hints() {
-    const out: Partial<Record<'atk' | 'sec' | 'abi' | 'ult', string>> = {};
+    const out: Partial<Record<AbilitySlot, string>> = {};
     if (this.flipTarget) out.abi = 'x2';
     if (this.execUntil > 0) out.ult = 'x2';
     return out;

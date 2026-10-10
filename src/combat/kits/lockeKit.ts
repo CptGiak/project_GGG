@@ -19,8 +19,8 @@ const DUR: Record<string, number> = { c1: 0.32, c2: 0.3, c3: 0.4, c4: 0.58, air:
 /** Ritual Nails: three casts within the window, one real nail (pierces) + two visual ones */
 const NAILS = { speed: 70, range: 26, casts: 3, window: 4, spacing: 0.45, stacks: 3, stackTime: 4 };
 const PURSUIT = { dist: 10, radius: 3.4, empower: 4, lungeRange: 12, lungeSpeed: 40 };
-/** Soul Ignition (automatic): below 35% health, speed and 25% of the damage dealt back as health */
-const IGNITE = { below: 0.35, cd: 30, time: 4, speed: 0.35, vamp: 0.25, maxHeal: 220 };
+/** Soul Ignition (C): for a few seconds, speed and 25% of the damage dealt back as health */
+const IGNITE = { time: 4, speed: 0.35, vamp: 0.25, maxHeal: 220 };
 const PURG = { max: 26, flight: 0.5, radius: 6.5, seal: 3, below: 0.25, pickup: 1.7, lifetime: 4.5, refund: 0.35 };
 
 interface Reliquary {
@@ -38,12 +38,12 @@ interface Reliquary {
 /**
  * LOCKE — League of Legends port (the 2026 exorcist).
  * Passive Silver Stake: melee hits deal bonus damage based on the target's missing health;
- * Ritual Nails stacks are cashed in by the next melee hit. Soul Ignition (League's W, here
- * automatic): below 35% health, burst of speed and part of the damage dealt healed back.
- * LMB: four-hit Exorcism combo · RMB: Ritual Nails (pierce, slow, stack; up to 3 casts in 4 s) ·
- * F: Ashen Pursuit (blink + circular cut; the next LMB lunges onto the target) ·
- * R: Purgatory (throw the reliquary: area hit, then for 3 s enemies under 25% health inside are
- * sealed; walk over the reliquary to recover part of the ultimate).
+ * Ritual Nails stacks are cashed in by the next melee hit.
+ * Skill (LMB, his Q): Ritual Nails (pierce, slow, stack; up to 3 casts in 4 s) · Attack (RMB):
+ * four-hit Exorcism combo · Secondary (C, his W): Soul Ignition (burst of speed, part of the
+ * damage dealt healed back) · F (his E): Ashen Pursuit (blink + circular cut; the next attack
+ * lunges onto the target) · R: Purgatory (throw the reliquary: area hit, then for 3 s enemies
+ * under 25% health inside are sealed; walk over the reliquary to recover part of the ultimate).
  */
 export class LockeKit extends BaseKit {
   private combo = 0;
@@ -62,11 +62,12 @@ export class LockeKit extends BaseKit {
   private dashDir = new THREE.Vector3();
   /** Soul Ignition */
   private igniteT = 0;
-  private igniteCd = 0;
   private ignitePool = 0;
   private flame = 0;
   /** Purgatory */
   private relic: Reliquary | null = null;
+  /** the running air slash got the airtime's lift (rises with low gravity) */
+  private airHang = false;
   private readonly relicMesh: THREE.Group;
   private readonly relicGlow: THREE.Mesh;
   readonly sceneObjects: THREE.Object3D[];
@@ -80,12 +81,11 @@ export class LockeKit extends BaseKit {
   }
 
   update(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
-    this.igniteCd = Math.max(0, this.igniteCd - dt);
     if (this.igniteT > 0) {
       this.igniteT = Math.max(0, this.igniteT - dt);
       f.ctrl.speedMul *= 1 + IGNITE.speed;
       if (this.igniteT <= 0) this.endIgnite(f, m);
-    } else if (this.igniteCd <= 0 && f.hp > 0 && f.hp < f.maxHp * IGNITE.below) this.ignite(f, m);
+    }
     if (this.empowered > 0) this.empowered = Math.max(0, this.empowered - dt);
     if (this.nailCasts > 0 && this.nailUntil <= m.time) this.nailCasts = 0;
     super.update(f, it, dt, m);
@@ -118,8 +118,13 @@ export class LockeKit extends BaseKit {
       this.pursuit(f, it, m);
       return;
     }
-    // ---- RMB: Ritual Nails (recast twice; a recast pressed too early waits its turn) ---------------
-    if (it.secondaryPressed && this.nailCasts > 0) this.nailQueued = true;
+    // ---- C: Soul Ignition (instant, never interrupts) -------------------------------------------
+    if (it.secondaryPressed && this.cd.sec <= 0 && this.igniteT <= 0) {
+      this.cd.sec = this.data.abilities.sec.cooldown;
+      this.ignite(f, m);
+    }
+    // ---- LMB: Ritual Nails (recast twice; a recast pressed too early waits its turn) ---------------
+    if (it.skillPressed && this.nailCasts > 0) this.nailQueued = true;
     if (this.nailCasts <= 0) this.nailQueued = false;
     const free = !this.act || this.act.startsWith('c') || (this.act === 'nails' && this.fired);
     if (this.nailQueued && free && m.time >= this.nailNext) {
@@ -127,14 +132,14 @@ export class LockeKit extends BaseKit {
       this.castNails(f, m);
       return;
     }
-    if (it.secondaryPressed && free && this.nailCasts <= 0 && this.cd.sec <= 0) {
-      this.cd.sec = this.data.abilities.sec.cooldown;
+    if (it.skillPressed && free && this.nailCasts <= 0 && this.cd.sig <= 0) {
+      this.cd.sig = this.data.abilities.sig.cooldown;
       this.nailCasts = NAILS.casts;
       this.nailUntil = m.time + NAILS.window;
       this.castNails(f, m);
       return;
     }
-    // ---- LMB: Exorcism combo / empowered lunge ---------------------------------------------------
+    // ---- RMB: Exorcism combo / empowered lunge ---------------------------------------------------
     if (it.attackPressed) {
       if (this.act && this.act !== 'pursuit' && this.actT > this.actDur * 0.4) this.queued = true;
       else if (!this.act || this.act === 'pursuit') this.attack(f, m);
@@ -157,8 +162,10 @@ export class LockeKit extends BaseKit {
       if (this.cd.atk > 0) return;
       this.startAction(f, 'air', DUR.air);
       f.anim.play('air', { fadeIn: 0.03 });
-      this.magnet(f, this.findTarget(f, m, 8, 45), 12, 1.5, true);
-      f.vel.y = Math.max(f.vel.y, 8.5);
+      // only the first air slash of a jump rises; mashing it can't keep him afloat
+      this.airHang = this.takeAirLift();
+      this.magnet(f, this.findTarget(f, m, 8, 45), 12, 1.5, this.airHang);
+      if (this.airHang) f.vel.y = Math.max(f.vel.y, 8.5);
       this.cd.atk = 0.45;
       m.broadcastAction(f, { a: 'air' });
       return;
@@ -169,7 +176,11 @@ export class LockeKit extends BaseKit {
     this.startAction(f, name, DUR[name]);
     f.anim.play(name, { fadeIn: 0.03 });
     this.magnet(f, this.findTarget(f, m, 7, 40), name === 'c4' ? 12 : 10, 1.5);
-    if (name === 'c4') f.vel.y = Math.max(f.vel.y, 4);
+    if (name === 'c4') {
+      // the finisher hops: it spends the air lift so mashing on into air slashes can't climb
+      f.vel.y = Math.max(f.vel.y, 4);
+      this.airLift = false;
+    }
     f.ctrl.lockMove = DUR[name] * 0.6;
     m.broadcastAction(f, { a: name });
   }
@@ -202,7 +213,7 @@ export class LockeKit extends BaseKit {
       const real = i === 0 && !visualOnly;
       m.projectiles.spawn({
         owner: f, kind: 'blade', pos: p, vel: dir.clone().multiplyScalar(NAILS.speed), radius: real ? 0.42 : 0.1, life,
-        slot: 'sec', part: 'q', color: i === 0 ? c0 : c1, color2: 0xffffff, kb: 2, slow: 0.6, pierce: true, visualOnly: !real,
+        slot: 'sig', part: 'q', color: i === 0 ? c0 : c1, color2: 0xffffff, kb: 2, slow: 0.6, pierce: true, visualOnly: !real,
         onHit: real ? (t) => this.nails.add(t.id, m.time, NAILS.stackTime, 1, NAILS.stacks) : undefined,
       });
     }
@@ -260,7 +271,6 @@ export class LockeKit extends BaseKit {
 
   private ignite(f: Fighter, m: MatchContext): void {
     this.igniteT = IGNITE.time;
-    this.igniteCd = IGNITE.cd;
     this.ignitePool = 0;
     this.igniteFx(f, m);
     m.broadcastAction(f, { a: 'ignite' });
@@ -438,7 +448,7 @@ export class LockeKit extends BaseKit {
   // -------------------------------------------------------------------------------------------
 
   protected tickAction(f: Fighter, _it: Intent, dt: number, m: MatchContext): void {
-    if (this.act === 'air') f.ctrl.gravityScale = 0.6;
+    if (this.act === 'air' && this.airHang) f.ctrl.gravityScale = 0.6;
     if (this.act === 'c4') this.spin = Math.min(1, this.actT / 0.38) * 360;
     if (this.act === 'pursuit') this.spin = Math.min(1, this.actT / 0.3) * 360;
     if (this.act === 'nails' && !this.fired && this.actT >= 0.07) {
@@ -530,13 +540,14 @@ export class LockeKit extends BaseKit {
 
   cooldowns() {
     const c = super.cooldowns();
-    if (this.nailCasts > 0) c.sec = 0;
+    if (this.nailCasts > 0) c.sig = 0;
     return c;
   }
 
   hints() {
-    const out: Partial<Record<'atk' | 'sec' | 'abi' | 'ult', string>> = {};
-    if (this.nailCasts > 0) out.sec = `x${this.nailCasts}`;
+    const out: Partial<Record<AbilitySlot, string>> = {};
+    if (this.nailCasts > 0) out.sig = `x${this.nailCasts}`;
+    if (this.igniteT > 0) out.sec = 'ON';
     if (this.empowered > 0) out.atk = 'SCATTO';
     if (this.relic) out.ult = 'RACCOGLI';
     return out;

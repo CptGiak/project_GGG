@@ -304,8 +304,8 @@ export function novaAnims(): ChampionAnimSet {
       [1.7, { wR: W([0.12, 1.45, 0.35], [0.5, 0.7, 0.5]), wL: W([-0.12, 1.45, 0.35], [-0.5, 0.7, 0.5]), spine: [-6, -10, 0], chest: [-4, -6, 0], head: [-6, 14, 6], hips: [0, -0.02, 0], thighL: [-16, -10, 8], shinL: [20, 0, 0], thighR: [10, 18, -10], shinR: [16, 0, 0] }],
       [2.0, { ...legs }, Ease.inOut],
     ], { events: [{ t: 0.05, id: 'swing' }, { t: 0.95, id: 'hitOff' }], fadeIn: 0.1, fadeOut: 0.2 }),
-    // signature skill: Five Beat Strike – blades crossed at the chest, then flung apart to throw the kunai fan
-    fan: clip('fan', base, [
+    // signature skill: Cross Fade – blades crossed at the chest, then flung apart: the X flies off
+    cross: clip('cross', base, [
       [0, { ...legs, wR: W([0.16, 1.34, 0.24], [0.5, 0.62, -0.6]), wL: W([-0.16, 1.36, 0.22], [-0.5, 0.62, -0.6]), spine: [-8, 0, 0], chest: [-6, 0, 0], head: [-4, 0, 0], hips: [0, -0.06, -0.04] }],
       [0.07, { wR: W([0.12, 1.3, 0.3], [0.62, 0.5, -0.6]), wL: W([-0.12, 1.32, 0.28], [-0.62, 0.5, -0.6]), spine: [-12, 0, 0], chest: [-10, 0, 0], head: [-6, 0, 0], hips: [0, -0.08, -0.06], thighL: [-30, -12, 14], shinL: [44, 0, 0], thighR: [16, 20, -16], shinR: [36, 0, 0] }, Ease.outCubic],
       [0.13, { wR: W([-0.58, 1.22, 0.36], [-0.82, 0.04, 0.57]), wL: W([0.58, 1.24, 0.36], [0.82, 0.04, 0.57]), spine: [16, 0, 0], chest: [10, 0, 0], head: [-10, 0, 0], hips: [0, -0.14, 0.14], thighL: [-46, -10, 12], shinL: [56, 0, 0], footL: [-10, 0, 0], thighR: [24, 18, -14], shinR: [32, 0, 0] }, Ease.outExpo],

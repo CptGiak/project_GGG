@@ -9,12 +9,12 @@ import { SlashTrail } from '../vfx/Trails';
 
 const PREVIEWS: Record<ChampionId, string[]> = {
   kaiser: ['taunt', 'chord', 'atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
-  nova: ['taunt', 'fan', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
+  nova: ['taunt', 'cross', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
   rex: ['taunt', 'single', 'aim', 'charge', 'throw', 'ult'],
   sera: ['taunt', 'lob', 'cast', 'wave', 'ult', 'cast'],
-  akali: ['taunt', 'c1', 'c2', 'c3', 'fan', 'flip', 'air'],
-  qiyana: ['taunt', 'c1', 'c2', 'wrath', 'audacity', 'air'],
-  locke: ['taunt', 'c1', 'c2', 'c3', 'c4', 'nails', 'pursuit'],
+  akali: ['taunt', 'fan', 'c1', 'c2', 'c3', 'flip', 'air'],
+  qiyana: ['taunt', 'wrath', 'c1', 'c2', 'audacity', 'air'],
+  locke: ['taunt', 'nails', 'c1', 'c2', 'c3', 'c4', 'pursuit'],
 };
 
 const BEAM_VERT = /* glsl */ `
