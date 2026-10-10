@@ -305,6 +305,25 @@ const SFX: Record<string, SfxFn> = {
     a.osc('square', 1600, 200, t, 0.15, o, 0.1);
     a.noiseHit(t, 0.12, o, 0.3, 'bandpass', 5000, 800, 3);
   },
+  kunai: (a, o, t) => {
+    // five quick glitchy blade whips, one per beat sixteenth
+    for (let i = 0; i < 5; i++) {
+      a.noiseHit(t + i * 0.018, 0.09, o, 0.22, 'bandpass', 2600 + i * 500, 7000, 4, 0.004);
+      a.osc('square', 1900 - i * 140, 600, t + i * 0.018, 0.05, o, 0.05);
+    }
+  },
+  slug: (a, o, t) => {
+    // heavy single shot: sub kick + bright crack + short tail
+    a.osc('sine', 150, 38, t, 0.32, o, 0.75);
+    a.osc('sawtooth', 1300, 160, t, 0.16, o, 0.2);
+    a.noiseHit(t, 0.1, o, 0.45, 'highpass', 3000, 1800);
+    a.noiseHit(t + 0.03, 0.4, o, 0.22, 'lowpass', 2400, 250, 0.7);
+  },
+  lob: (a, o, t) => {
+    // rising sung high note
+    a.osc('triangle', 784, 1568, t, 0.32, o, 0.18, 0.02);
+    a.osc('sine', 1568, 2093, t + 0.05, 0.3, o, 0.1, 0.02);
+  },
   hookDry: (a, o, t) => {
     // empty launcher: a dry mechanical click and a short hiss
     a.osc('square', 180, 90, t, 0.05, o, 0.18);

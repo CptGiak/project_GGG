@@ -1,4 +1,5 @@
 import type { ChampionId } from '../../shared/champions';
+import type { Action } from './Input';
 
 export interface Settings {
   name: string;
@@ -14,6 +15,8 @@ export interface Settings {
   botDifficulty: number;
   arena: string;
   room: string;
+  /** player key overrides (missing actions use the defaults) */
+  bindings: Partial<Record<Action, string[]>>;
 }
 
 const KEY = 'ggg.settings.v1';
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   botDifficulty: 0.5,
   arena: 'neon_city',
   room: '',
+  bindings: {},
 };
 
 export function loadSettings(): Settings {

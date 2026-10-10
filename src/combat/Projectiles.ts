@@ -31,6 +31,15 @@ export interface ProjectileSpec {
   /** remote-owned: visuals only, no hit reporting */
   visualOnly?: boolean;
   scale?: number;
+  /** hit set shared by a volley (each target is hit once by the whole fan) */
+  sharedHits?: Set<string>;
+  /** authority only: called when this projectile damages a fighter */
+  onHit?: (target: Fighter) => void;
+  /** explosions: targets within this radius take `corePart` (sweet spot) at full damage */
+  coreRadius?: number;
+  corePart?: string;
+  /** extra visuals when it explodes (local and remote copies alike) */
+  onBurst?: (pos: THREE.Vector3) => void;
 }
 
 interface Proj extends ProjectileSpec {
@@ -110,7 +119,7 @@ export class Projectiles {
     obj.position.copy(s.pos);
     obj.scale.setScalar(s.scale ?? 1);
     obj.visible = true;
-    this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), obj, age: 0, hitIds: new Set(), dead: false, bounces: 0 });
+    this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), obj, age: 0, hitIds: s.sharedHits ?? new Set(), dead: false, bounces: 0 });
   }
 
   clear(): void {
@@ -269,6 +278,7 @@ export class Projectiles {
             if (!p.visualOnly && m.isAuthority(p.owner)) {
               const kb = p.kb ? p.vel.clone().normalize().multiplyScalar(p.kb) : undefined;
               m.reportHit(p.owner, f, { slot: p.slot, part: p.part, crit, kb, stun: p.stun, slow: p.slow, at: hitPoint, blockable: true });
+              p.onHit?.(f);
             }
             m.vfx.hitSpark(hitPoint, _n.copy(p.vel).normalize().negate(), p.color, crit);
             if (!p.pierce) p.dead = true;
@@ -305,6 +315,7 @@ export class Projectiles {
     m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
     m.audio.play('explosion', p.pos, 0.9);
     m.shake(0.25, p.pos);
+    p.onBurst?.(p.pos.clone());
     if (p.visualOnly || !m.isAuthority(p.owner)) return;
     for (const f of m.fighters) {
       if (f === p.owner || !f.alive) continue;
@@ -312,10 +323,12 @@ export class Projectiles {
       f.chest(_a);
       const d = _a.distanceTo(p.pos);
       if (d > r + CAPSULE_R) continue;
-      const fall = THREE.MathUtils.clamp(1 - Math.max(0, d - 1) / (r + 0.5), 0.35, 1);
+      const core = p.corePart && d <= (p.coreRadius ?? 0) + CAPSULE_R;
+      const fall = core ? 1 : THREE.MathUtils.clamp(1 - Math.max(0, d - 1) / (r + 0.5), 0.35, 1);
       const kb = _b.subVectors(_a, p.pos).setY(0).normalize().multiplyScalar((p.kb ?? 10) * fall);
       kb.y = 6 * fall;
-      m.reportHit(p.owner, f, { slot: p.slot, part: p.part, scale: fall, kb: kb.clone(), stun: p.stun, slow: p.slow, at: _a.clone(), blockable: false });
+      m.reportHit(p.owner, f, { slot: p.slot, part: core ? p.corePart! : p.part, scale: fall, kb: kb.clone(), stun: p.stun, slow: p.slow, at: _a.clone(), blockable: false });
+      p.onHit?.(f);
     }
   }
 }

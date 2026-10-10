@@ -35,6 +35,8 @@ export class LocalController {
     it.hookLPressed = it.hookLPressed || edge('hookL');
     it.hookR = inp.held('hookR');
     it.hookRPressed = it.hookRPressed || edge('hookR');
+    it.skill = inp.held('skill');
+    it.skillPressed = it.skillPressed || edge('skill');
     it.attack = inp.held('attack');
     it.attackPressed = it.attackPressed || edge('attack');
     it.secondary = inp.held('secondary');

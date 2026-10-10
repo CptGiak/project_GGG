@@ -12,10 +12,17 @@ const _c1 = new THREE.Vector3();
 const _c2 = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** High Note: lob gravity, max range, blast radius and its full-damage core */
+const NOTE_G = 26;
+const NOTE_RANGE = 42;
+const NOTE_R = 3.8;
+const NOTE_CORE = 1.6;
+
 /**
  * SERA — holo diva caster.
- * LMB: Note Orb (homing) · RMB: Resonance (channelled beam, slows) · F: Echo Wave (knockback
- * ring) · R: Grand Finale (spotlight pillar at the aimed point + self heal).
+ * Skill: High Note (lobbed note that bursts at the aimed point, stronger at the centre) ·
+ * Attack: Note Orb (homing) · Secondary: Resonance (channelled beam, slows) · F: Echo Wave
+ * (knockback ring) · R: Grand Finale (spotlight pillar at the aimed point + self heal).
  */
 export class SeraKit extends BaseKit {
   private fireT = 0;
@@ -54,6 +61,12 @@ export class SeraKit extends BaseKit {
       f.anim.play('ult', { fadeIn: 0.06 });
       m.audio.play('ult', f.pos, 1);
       m.broadcastAction(f, { a: 'ult', p: [this.finale.x, this.finale.y, this.finale.z] });
+      return;
+    }
+    if (!this.act && this.channel <= 0 && this.skillReady()) {
+      this.cd.sig = this.data.abilities.sig.cooldown;
+      this.startAction(f, 'lob', 0.5);
+      f.anim.play('lob', { fadeIn: 0.04 });
       return;
     }
     if (it.abilityPressed && this.cd.abi <= 0 && !this.act && this.channel <= 0) {
@@ -105,6 +118,40 @@ export class SeraKit extends BaseKit {
     m.vfx.muzzle(from, dir, f.champ.colors[0]);
     m.audio.play('orb', from, 0.8);
     m.broadcastAction(f, { a: 'orb', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z], t: target?.id });
+  }
+
+  /** lob the note on a ballistic arc that lands on the point under the crosshair */
+  private lobNote(f: Fighter, m: MatchContext): void {
+    const from = this.muzzle(f, new THREE.Vector3());
+    const { point } = this.aimPoint(f, m, NOTE_RANGE);
+    const delta = point.clone().sub(from);
+    const t = THREE.MathUtils.clamp(delta.length() / 34, 0.32, 1.05);
+    const vel = delta.multiplyScalar(1 / t);
+    vel.y += 0.5 * NOTE_G * t;
+    this.spawnNote(f, m, from, vel, false);
+    this.aimHold = 0.3;
+    m.broadcastAction(f, { a: 'lob', p: [from.x, from.y, from.z], d: [vel.x, vel.y, vel.z] });
+  }
+
+  private spawnNote(f: Fighter, m: MatchContext, from: THREE.Vector3, vel: THREE.Vector3, visualOnly: boolean): void {
+    const [c0, c1] = f.champ.colors;
+    m.projectiles.spawn({
+      owner: f, kind: 'note', pos: from, vel, radius: 0.4, life: 1.6, gravity: NOTE_G, explode: NOTE_R, coreRadius: NOTE_CORE, corePart: 'core',
+      slot: 'sig', part: 'note', kb: 9, slow: 0.6, color: c0, color2: c1, scale: 2.2, visualOnly,
+      onBurst: (p) => {
+        // the note bursts into a ring of stars, the core flashes white
+        m.vfx.ring(p.clone().setY(p.y + 0.1), UP, 0xffffff, 0.3, NOTE_CORE * 1.4, 0.3);
+        m.vfx.ring(p.clone().setY(p.y + 0.2), UP, c1, 0.5, NOTE_R * 1.3, 0.45);
+        for (let i = 0; i < 18; i++) {
+          const a = (i / 18) * Math.PI * 2;
+          m.vfx.add.emit({ pos: p.clone().setY(p.y + 0.4), vel: new THREE.Vector3(Math.cos(a) * 9, 3 + Math.random() * 4, Math.sin(a) * 9), life: 0.55, size: 0.2, size1: 0.03, color: i % 2 ? c0 : c1, shape: Shape.star, drag: 2.5 });
+        }
+        m.audio.play('note', p, 0.8);
+      },
+    });
+    m.vfx.muzzle(from, vel.clone().normalize(), c0);
+    m.vfx.ring(from, UP, c1, 0.2, 1.2, 0.3);
+    m.audio.play('lob', from, 0.9);
   }
 
   /** draws the beam this frame; deals a tick if `tick` */
@@ -185,6 +232,7 @@ export class SeraKit extends BaseKit {
 
   onAnimEvent(f: Fighter, ev: string, m: MatchContext): void {
     if (ev === 'wave' && this.act === 'wave') this.wave(f, m, true);
+    else if (ev === 'release' && this.act === 'lob') this.lobNote(f, m);
   }
 
   private wave(f: Fighter, m: MatchContext, authority: boolean): void {
@@ -231,6 +279,11 @@ export class SeraKit extends BaseKit {
       case 'wave':
         f.anim.play('wave');
         this.wave(f, m, false);
+        break;
+      case 'lob':
+        f.anim.play('lob', { offset: 0.15 });
+        this.aimHold = 0.4;
+        if (e.p && e.d) this.spawnNote(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), true);
         break;
       case 'ult':
         f.anim.play('ult');

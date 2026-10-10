@@ -11,10 +11,15 @@ const _b = new THREE.Vector3();
 const _c1 = new THREE.Vector3();
 const _c2 = new THREE.Vector3();
 
+/** Lead Single: slug speed and the cooldown refund when it connects */
+const SLUG_SPEED = 135;
+const SLUG_REFUND = 1.5;
+
 /**
  * REX — sharpshooter.
- * LMB: Beat Shot (auto, headshots crit) · RMB: Bass Charge (hold, zoom, piercing beam) ·
- * F: Sub Bomb (bouncing sonic grenade) · R: Drop The Beat (12 homing note missiles).
+ * Skill: Lead Single (one heavy slug; a hit refunds cooldowns) · Attack: Beat Shot (auto,
+ * headshots crit) · Secondary: Bass Charge (hold, zoom, piercing beam) · F: Sub Bomb (bouncing
+ * sonic grenade) · R: Drop The Beat (12 homing note missiles).
  */
 export class RexKit extends BaseKit {
   private fireT = 0;
@@ -49,6 +54,16 @@ export class RexKit extends BaseKit {
       this.ultTargets = m.fighters.filter((o) => o !== f && o.alive && o.pos.distanceTo(f.pos) < this.data.abilities.ult.range);
       m.audio.play('ult', f.pos, 1);
       m.broadcastAction(f, { a: 'ult' });
+      return;
+    }
+    // signature: Lead Single
+    if (!this.charging && !this.act && this.skillReady()) {
+      this.cd.sig = this.data.abilities.sig.cooldown;
+      this.startAction(f, 'single', 0.42);
+      f.anim.play('single', { fadeIn: 0.04 });
+      this.aimHold = 0.6;
+      f.ctrl.aim = 1;
+      m.audio.play('charge', f.pos, 0.35);
       return;
     }
     // grenade
@@ -114,6 +129,41 @@ export class RexKit extends BaseKit {
     m.broadcastAction(f, { a: 'shot', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
   }
 
+  /** the heavy slug: big bolt, headshots crit, a hit cuts every other cooldown */
+  private fireSlug(f: Fighter, m: MatchContext): void {
+    const from = this.muzzle(f, new THREE.Vector3());
+    const { point } = this.aimPoint(f, m, 220);
+    const dir = point.clone().sub(from).normalize();
+    m.projectiles.spawn({
+      owner: f, kind: 'bolt', pos: from, vel: dir.clone().multiplyScalar(SLUG_SPEED), radius: 0.24, life: 1.25, slot: 'sig', part: 'slug',
+      color: f.champ.colors[1], color2: f.champ.colors[0], headshots: true, kb: 7, scale: 2.1,
+      onHit: (t) => {
+        for (const s of ['sig', 'sec', 'abi'] as const) this.cd[s] = Math.max(0, this.cd[s] - SLUG_REFUND);
+        // refund tell: a ring on the target in Rex's colours
+        m.vfx.ring(t.chest(new THREE.Vector3()), dir, f.champ.colors[1], 0.3, 1.8, 0.3);
+      },
+    });
+    this.slugFx(f, m, from, dir, point);
+    f.vel.addScaledVector(dir, -3.5);
+    m.broadcastAction(f, { a: 'slug', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
+  }
+
+  private slugFx(f: Fighter, m: MatchContext, from: THREE.Vector3, dir: THREE.Vector3, to?: THREE.Vector3): void {
+    const [c0, c1] = f.champ.colors;
+    m.vfx.muzzle(from, dir, c1);
+    m.vfx.ring(from.clone().addScaledVector(dir, 0.5), dir, c1, 0.15, 0.8, 0.2);
+    m.vfx.ring(from.clone().addScaledVector(dir, 1.2), dir, c0, 0.1, 0.55, 0.24);
+    // tracer: the slug's line flashes for a moment (to the wall it will hit, if any)
+    const len = Math.min(to ? from.distanceTo(to) : 80, 80);
+    const wall = m.world.raycast(from, dir, len);
+    const end = from.clone().addScaledVector(dir, wall ? wall.distance : len);
+    m.vfx.beam(from, end, c1, 0.09, 0.14);
+    m.vfx.beam(from, end, 0xffffff, 0.03, 0.1);
+    m.audio.play('slug', from, 1);
+    f.anim.recoil = 1;
+    m.shake(0.2, from);
+  }
+
   private releaseCharge(f: Fighter, m: MatchContext): void {
     const k = this.charge;
     this.charging = false;
@@ -175,6 +225,10 @@ export class RexKit extends BaseKit {
   }
 
   protected tickAction(f: Fighter, _it: Intent, dt: number, m: MatchContext): void {
+    if (this.act === 'single') {
+      f.ctrl.aim = 1;
+      f.ctrl.speedMul = 0.6;
+    }
     if (this.act === 'ult') {
       f.ctrl.aim = 0;
       f.ctrl.speedMul = 0.3;
@@ -196,6 +250,7 @@ export class RexKit extends BaseKit {
 
   onAnimEvent(f: Fighter, ev: string, m: MatchContext): void {
     if (ev === 'release' && this.act === 'throw') this.throwBomb(f, m);
+    else if (ev === 'fire' && this.act === 'single') this.fireSlug(f, m);
   }
 
   protected endAction(f: Fighter): void {
@@ -225,6 +280,14 @@ export class RexKit extends BaseKit {
       case 'charge':
         if (e.n) f.anim.play('charge', { hold: true });
         break;
+      case 'slug': {
+        const d = new THREE.Vector3(...(e.d ?? [0, 0, 1]));
+        m.projectiles.spawn({ owner: f, kind: 'bolt', pos: p, vel: d.clone().multiplyScalar(SLUG_SPEED), radius: 0.24, life: 1.25, slot: 'sig', part: 'slug', color: f.champ.colors[1], color2: f.champ.colors[0], scale: 2.1, visualOnly: true });
+        f.anim.play('single', { offset: 0.1 });
+        this.aimHold = 0.5;
+        this.slugFx(f, m, p, d);
+        break;
+      }
       case 'beam':
         if (e.d) this.beamFx(f, m, p, new THREE.Vector3(...e.d), e.n ?? 1);
         f.anim.play('aim', { hold: true });

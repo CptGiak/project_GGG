@@ -3,7 +3,8 @@ import { MOVE } from '../../shared/constants';
 import type { Fighter } from '../game/Fighter';
 import type { Match } from '../game/Match';
 import { abilityIcon } from './icons';
-import type { AbilitySlot } from '../../shared/champions';
+import { SLOT_ORDER, type AbilitySlot } from '../../shared/champions';
+import { SLOT_ACTION, actionLabel, type Action } from '../core/Input';
 
 const _v = new THREE.Vector3();
 
@@ -22,7 +23,7 @@ interface FloatNum {
   vx: number;
 }
 
-const SLOTS: AbilitySlot[] = ['atk', 'sec', 'abi', 'ult'];
+const SLOTS = SLOT_ORDER;
 
 /** Persona-style in-match HUD. Pure DOM; updated every frame with minimal writes. */
 export class HUD {
@@ -41,7 +42,7 @@ export class HUD {
   private hitm: HTMLDivElement;
   private chargeRing: HTMLDivElement;
   private chargeFg: SVGCircleElement;
-  private abs: Record<AbilitySlot, { root: HTMLDivElement; cd: HTMLDivElement; cdt: HTMLDivElement; last: number; extra?: HTMLDivElement; fill?: HTMLDivElement }>;
+  private abs: Record<AbilitySlot, { root: HTMLDivElement; cd: HTMLDivElement; cdt: HTMLDivElement; key: HTMLDivElement; last: number; extra?: HTMLDivElement; fill?: HTMLDivElement }>;
   private floatLayer: HTMLDivElement;
   private plateLayer: HTMLDivElement;
   private plates = new Map<string, { e: HTMLDivElement; bar: HTMLElement; lastHp: number }>();
@@ -66,7 +67,7 @@ export class HUD {
   private w = 1;
   private h = 1;
 
-  constructor(readonly container: HTMLElement, readonly local: Fighter) {
+  constructor(readonly container: HTMLElement, readonly local: Fighter, bindings: Record<Action, string[]>) {
     this.root = el('div', 'hud');
     const c = local.champ;
     this.root.style.setProperty('--accent', c.colors[0]);
@@ -114,7 +115,7 @@ export class HUD {
     this.abs = {} as HUD['abs'];
     for (const slot of SLOTS) {
       const a = c.abilities[slot];
-      const card = el('div', `ab ${slot === 'ult' ? 'ult' : ''}`);
+      const card = el('div', `ab ${slot === 'ult' ? 'ult' : slot === 'atk' ? 'basic' : slot === 'sig' ? 'sig' : ''}`);
       const inner = el('div', 'inner');
       inner.innerHTML = `<div class="icon" style="color:${slot === 'ult' ? c.colors[0] : '#fff'}">${abilityIcon(c.id, slot)}</div><div class="name">${a.name.toUpperCase()}</div>`;
       const fill = slot === 'ult' ? el('div', 'fillult') : undefined;
@@ -124,9 +125,10 @@ export class HUD {
       cd.style.transform = 'scaleY(0)';
       const cdt = el('div', 'cdt');
       if (fill) card.append(fill);
-      card.append(inner, cd, cdt, el('div', 'key', a.key));
+      const key = el('div', 'key');
+      card.append(inner, cd, cdt, key);
       abWrap.append(card);
-      this.abs[slot] = { root: card, cd, cdt, last: 0, extra, fill };
+      this.abs[slot] = { root: card, cd, cdt, key, last: 0, extra, fill };
     }
 
     this.floatLayer = el('div', 'hud-float');
@@ -138,8 +140,9 @@ export class HUD {
     this.death = el('div', 'hud-death', '<div class="ko">KNOCKED OUT</div><div class="by"></div><div class="rs"></div>');
     this.deathRs = this.death.querySelector('.rs') as HTMLDivElement;
     this.board = el('div', 'hud-board');
-    this.hint = el('div', 'hud-hint', '<b>Q / E</b> rampini &nbsp;·&nbsp; <b>SPAZIO</b> gas &nbsp;·&nbsp; <b>SHIFT</b> scatto &nbsp;·&nbsp; <b>LMB/RMB/F/R</b> abilità');
+    this.hint = el('div', 'hud-hint');
     this.pauseHint = el('div', 'pause-hint', 'CLICCA PER COMBATTERE');
+    this.refreshKeys(bindings);
     this.root.append(this.plateLayer, this.floatLayer, top, this.feed, player, crossWrap, abWrap, this.bannerBox, this.ultTag, this.cutin, this.count, this.death, this.board, this.hint, this.pauseHint);
     container.append(this.root);
     window.setTimeout(() => this.hint.classList.add('off'), 9000);
@@ -364,6 +367,14 @@ export class HUD {
     this.hitm.classList.toggle('crit', crit);
     void this.hitm.offsetWidth;
     this.hitm.classList.add('show');
+  }
+
+  /** key labels on the ability cards and in the start hint (after a rebind) */
+  refreshKeys(b: Record<Action, string[]>): void {
+    for (const slot of SLOTS) this.abs[slot].key.textContent = actionLabel(b, SLOT_ACTION[slot]);
+    const k = (a: Action) => actionLabel(b, a);
+    const c = this.local.champ.abilities;
+    this.hint.innerHTML = `<b>${k('hookL')} / ${k('hookR')}</b> rampini &nbsp;·&nbsp; <b>${k('jump')}</b> gas &nbsp;·&nbsp; <b>${k('dash')}</b> scatto &nbsp;·&nbsp; <b>${k('skill')}</b> ${esc(c.sig.name)} &nbsp;·&nbsp; <b>${k('attack')}</b> attacco base &nbsp;·&nbsp; <b>${k('secondary')} / ${k('ability')} / ${k('ultimate')}</b> abilità`;
   }
 
   /** short callouts kept off the centre: 'ult' sits on the R card, 'join' goes to the feed */

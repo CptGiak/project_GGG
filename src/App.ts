@@ -1,5 +1,5 @@
 import { Engine, QUALITY_PRESETS } from './core/Engine';
-import { Input } from './core/Input';
+import { Input, resolveBindings } from './core/Input';
 import { AudioEngine } from './core/Audio';
 import { loadSettings, saveSettings, type Settings } from './core/Settings';
 import { Match, type MatchOptions } from './game/Match';
@@ -121,7 +121,7 @@ export class App {
         else this.showSelect('online');
       },
       settings: () => this.showSettings(),
-      controls: () => this.setOverlay(controlsPanel(() => this.setOverlay(null))),
+      controls: () => this.showControls(),
       setName: (n) => {
         this.settings.name = n;
         saveSettings(this.settings);
@@ -167,6 +167,18 @@ export class App {
     }, () => {
       this.setOverlay(null);
       after?.();
+    }, () => this.showControls(() => this.showSettings(after))));
+  }
+
+  /** key rebinding panel */
+  showControls(after?: () => void): void {
+    this.setOverlay(controlsPanel(this.settings.bindings, (b) => {
+      this.settings = { ...this.settings, bindings: b };
+      saveSettings(this.settings);
+      this.applySettings();
+    }, () => {
+      this.setOverlay(null);
+      after?.();
     }));
   }
 
@@ -174,6 +186,8 @@ export class App {
     const s = this.settings;
     this.input.sensitivity = s.sensitivity;
     this.input.invertY = s.invertY;
+    this.input.bindings = resolveBindings(s.bindings);
+    this.match?.hud?.refreshKeys(this.input.bindings);
     if (this.engine.quality !== QUALITY_PRESETS[s.quality]) this.engine.setQuality(QUALITY_PRESETS[s.quality]);
     this.audio.setVolumes({ master: s.master, music: s.music, sfx: s.sfx });
     if (this.match) this.match.cam.baseFov = s.fov;
@@ -187,7 +201,7 @@ export class App {
     this.match?.dispose();
     this.match?.hud?.dispose();
     const m = new Match(this.engine, this.input, this.audio, opts);
-    m.hud = new HUD(this.ui, m.local);
+    m.hud = new HUD(this.ui, m.local, this.input.bindings);
     m.cam.baseFov = this.settings.fov;
     this.match = m;
     return m;

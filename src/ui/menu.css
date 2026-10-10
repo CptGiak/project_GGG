@@ -136,11 +136,17 @@
 .settings .panel { min-width: 64vh; display: flex; flex-direction: column; gap: 1.6vh; transform: skewX(-4deg); }
 .settings h2 { margin: 0 0 0.6vh; font-family: var(--font-display); font-size: 5vh; color: #fff; letter-spacing: 0.3vh; }
 
-.controls .panel { min-width: 70vh; transform: skewX(-4deg); }
+.controls .panel { min-width: 70vh; max-width: 124vh; transform: skewX(-4deg); }
 .controls h2 { margin: 0 0 1.4vh; font-family: var(--font-display); font-size: 5vh; }
-.controls .grid { display: grid; grid-template-columns: 16vh 1fr; gap: 0.8vh 2vh; align-items: center; }
+.controls .grid { display: grid; grid-template-columns: 16vh 1fr 16vh 1fr; gap: 0.8vh 2vh; align-items: center; }
 .controls .k { font-family: var(--font-display); font-size: 2vh; background: #fff; color: var(--black); text-align: center; padding: 0.3vh 0; transform: skewX(-14deg); }
 .controls .v { font-size: 1.9vh; color: rgba(255,255,255,0.88); }
+.controls .sub { font-size: 1.6vh; color: rgba(255,255,255,0.7); margin: -0.6vh 0 1.4vh; }
+.controls .k.rebind { cursor: pointer; transition: background 0.1s, color 0.1s; }
+.controls .k.rebind:hover { background: var(--gold); }
+.controls .k.wait { background: var(--red); color: #fff; animation: keyWait 0.6s infinite alternate; }
+.controls .k.fixed { background: rgba(255,255,255,0.55); }
+@keyframes keyWait { from { opacity: 1; } to { opacity: 0.55; } }
 .controls .tips { margin-top: 1.8vh; font-size: 1.7vh; line-height: 1.5; color: rgba(255,255,255,0.75); border-left: 0.5vh solid var(--red); padding-left: 1.2vh; }
 .controls .tips b { color: var(--gold); }
 

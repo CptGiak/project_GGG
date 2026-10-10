@@ -197,7 +197,7 @@ export class Match implements MatchContext {
     if (this.hud) {
       const c = this.hud.container;
       this.hud.dispose();
-      this.hud = new HUDClass(c, f);
+      this.hud = new HUDClass(c, f, this.input.bindings);
     }
   }
 

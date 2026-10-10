@@ -308,6 +308,13 @@ function seraAnims(): ChampionAnimSet {
       [0.3, castSpec],
     ], { events: [{ t: 0.07, id: 'fire' }], fadeIn: 0.05, fadeOut: 0.2 }),
     aim: clip('aim', base, [[0, castSpec], [0.5, castSpec]], { fadeIn: 0.07, fadeOut: 0.2 }),
+    // signature skill: High Note – the scepter swings back over the shoulder and lobs the note forward
+    lob: clip('lob', base, [
+      [0, { ...legs, wR: W([-0.3, 1.62, -0.12], [-0.1, 0.7, -0.7], [0, 0.7, 0.7]), upperArmL: [-60, 0, 40], foreArmL: [-40, 0, 0], spine: [-12, -16, 0], chest: [-10, -12, 0], head: [-6, 10, 0], hips: [0, 0.02, -0.04], thighL: [-14, -6, 4], shinL: [16, 0, 0], thighR: [14, 18, -6], shinR: [20, 0, 0] }],
+      [0.12, { wR: W([-0.22, 1.82, 0.22], [0, 0.98, 0.2], [0, 0.2, -0.98]), upperArmL: [-30, 0, 50], foreArmL: [-30, 0, 0], spine: [-4, 6, 0], chest: [-4, 6, 0], head: [-10, 0, 0], hips: [0, 0.04, 0.04], thighL: [-30, -6, 4], shinL: [36, 0, 0], thighR: [10, 18, -6], shinR: [18, 0, 0] }, Ease.outCubic],
+      [0.2, { wR: W([-0.18, 1.3, 0.56], [0, 0.2, 0.98], [0, 1, -0.2]), upperArmL: [10, 0, 50], foreArmL: [-20, 0, 0], spine: [14, 12, 0], chest: [8, 10, 0], head: [-14, -4, 0], hips: [0, -0.06, 0.1], thighL: [-40, -6, 4], shinL: [50, 0, 0], thighR: [16, 18, -6], shinR: [24, 0, 0] }, Ease.outQuart],
+      [0.5, { ...castSpec }, Ease.inOut],
+    ], { events: [{ t: 0.05, id: 'swing' }, { t: 0.15, id: 'release' }], fadeIn: 0.05, fadeOut: 0.2 }),
     wave: clip('wave', base, [
       [0, { ...legs, wR: W([-0.15, 1.75, 0.2], [0, 0.95, 0.3]), upperArmL: [-150, 0, 30], foreArmL: [-20, 0, 0], spine: [-10, 0, 0], chest: [-8, 0, 0], hips: [0, 0.04, 0] }],
       [0.14, { wR: W([-0.12, 0.62, 0.42], [0.02, -0.98, 0.2], [0, 0, 1]), upperArmL: [-20, 0, 70], foreArmL: [-10, 0, 0], spine: [24, 0, 0], chest: [10, 0, 0], hips: [0, -0.22, 0.05], thighL: [-60, 0, 14], shinL: [90, 0, 0], thighR: [10, 0, -14], shinR: [70, 0, 0] }, Ease.inCubic],

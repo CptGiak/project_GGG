@@ -8,10 +8,10 @@ import { setKeyLight, ToonEnv } from '../render/toon';
 import { SlashTrail } from '../vfx/Trails';
 
 const PREVIEWS: Record<ChampionId, string[]> = {
-  kaiser: ['taunt', 'atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
-  nova: ['taunt', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
-  rex: ['taunt', 'aim', 'charge', 'throw', 'ult'],
-  sera: ['taunt', 'cast', 'wave', 'ult', 'cast'],
+  kaiser: ['taunt', 'chord', 'atk1', 'atk2', 'atk3', 'dive', 'ultSlam'],
+  nova: ['taunt', 'fan', 'c1', 'c2', 'c3', 'c4', 'air', 'phantom'],
+  rex: ['taunt', 'single', 'aim', 'charge', 'throw', 'ult'],
+  sera: ['taunt', 'lob', 'cast', 'wave', 'ult', 'cast'],
 };
 
 const BEAM_VERT = /* glsl */ `
@@ -165,7 +165,7 @@ export class MenuStage {
         c.anim.play(name, { fadeIn: 0.08 });
         const clipLen = c.visual.anims.clips[name]?.duration ?? 1;
         c.nextPreview = focused ? Math.max(2.4, clipLen + 0.4) : 3.5 + Math.random() * 2.5;
-        if ((c.id === 'rex' || c.id === 'sera') && name !== 'taunt') c.anim.st.aim = 1;
+        if ((c.id === 'rex' || c.id === 'sera') && name !== 'taunt' && name !== 'lob') c.anim.st.aim = 1;
       }
       if (!c.anim.action.active) c.anim.st.aim *= Math.exp(-dt * 3);
       c.anim.update(dt, false);

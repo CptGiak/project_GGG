@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { AbilitySlot } from '../../shared/champions';
 import type { CollisionWorld } from '../world/Collision';
 import type { Fighter } from './Fighter';
 
@@ -18,6 +19,9 @@ export interface Intent {
   hookLPressed: boolean;
   hookR: boolean;
   hookRPressed: boolean;
+  /** signature skill (LMB by default) */
+  skill: boolean;
+  skillPressed: boolean;
   attack: boolean;
   attackPressed: boolean;
   secondary: boolean;
@@ -42,6 +46,8 @@ export function newIntent(): Intent {
     hookLPressed: false,
     hookR: false,
     hookRPressed: false,
+    skill: false,
+    skillPressed: false,
     attack: false,
     attackPressed: false,
     secondary: false,
@@ -58,6 +64,7 @@ export function clearEdges(i: Intent): void {
   i.dashPressed = false;
   i.hookLPressed = false;
   i.hookRPressed = false;
+  i.skillPressed = false;
   i.attackPressed = false;
   i.secondaryPressed = false;
   i.secondaryReleased = false;
@@ -104,7 +111,7 @@ export interface MatchContext {
 }
 
 export interface HitInfo {
-  slot: 'atk' | 'sec' | 'abi' | 'ult';
+  slot: AbilitySlot;
   part: string;
   /** 0..1 damage multiplier (charge level, falloff) */
   scale?: number;
@@ -132,7 +139,7 @@ export interface Kit {
   /** true while an action wants the body to face the aim direction */
   facesAim(f: Fighter): boolean;
   /** cooldown readout for the HUD: remaining seconds per slot */
-  cooldowns(): Record<'atk' | 'sec' | 'abi' | 'ult', number>;
+  cooldowns(): Record<AbilitySlot, number>;
   /** extra yaw for spin attacks (degrees) */
   spin: number;
   /** yaw the body should face during an action (null = aim yaw) */

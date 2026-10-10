@@ -17,14 +17,19 @@ export const ICONS: Record<string, string> = {
   orb: P('<circle cx="24" cy="24" r="10" fill="currentColor" fill-opacity="0.35"/><circle cx="24" cy="24" r="17" stroke-dasharray="6 5"/>'),
   beam: P('<path d="M4 24 H44"/><path d="M4 18 H30 M4 30 H30" stroke-opacity="0.5"/><circle cx="8" cy="24" r="4" fill="currentColor"/>'),
   wave: P('<path d="M24 24 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0"/><path d="M24 24 m-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0" stroke-opacity="0.65"/><path d="M24 24 m-20 0 a20 20 0 1 0 40 0 a20 20 0 1 0 -40 0" stroke-opacity="0.35"/>'),
+  // signature skills
+  chord: P('<path d="M24 4 V28"/><path d="M17 9 H31"/><path d="M20 28 L24 35 L28 28 Z" fill="currentColor" fill-opacity="0.4"/><path d="M4 42 Q10 36 16 42 M32 42 Q38 36 44 42"/><path d="M14 46 H34" stroke-opacity="0.6"/>'),
+  fan: P('<path d="M24 43 L8 15 M24 43 L15 9 M24 43 L24 6 M24 43 L33 9 M24 43 L40 15" stroke-opacity="0.55"/><path d="M8 15 L6 8 L12 12 Z M15 9 L15 2 L19 7 Z M24 6 L22 0 L26 0 Z M33 9 L29 7 L33 2 Z M40 15 L36 12 L42 8 Z" fill="currentColor"/>'),
+  slug: P('<path d="M10 17 H30 Q41 17 43 24 Q41 31 30 31 H10 Z" fill="currentColor" fill-opacity="0.3"/><path d="M16 17 V31"/><path d="M2 13 H9 M2 35 H9 M1 24 H6"/>'),
+  highnote: P('<path d="M5 42 Q12 10 30 14" stroke-dasharray="3 4"/><path d="M34 32 V12 L44 9 V27"/><ellipse cx="30" cy="32" rx="5" ry="4" fill="currentColor"/><ellipse cx="40" cy="27" rx="5" ry="4" fill="currentColor"/>'),
   spotlight: P('<path d="M18 4 H30 L40 44 H8 Z" fill="currentColor" fill-opacity="0.25"/><path d="M14 44 H34"/><path d="M24 4 V12"/>'),
 };
 
 const MAP: Record<string, Record<string, string>> = {
-  kaiser: { atk: 'sword', sec: 'shield', abi: 'dive', ult: 'burst' },
-  nova: { atk: 'blades', sec: 'glitch', abi: 'phantom', ult: 'remix' },
-  rex: { atk: 'gun', sec: 'charge', abi: 'bomb', ult: 'notes' },
-  sera: { atk: 'orb', sec: 'beam', abi: 'wave', ult: 'spotlight' },
+  kaiser: { sig: 'chord', atk: 'sword', sec: 'shield', abi: 'dive', ult: 'burst' },
+  nova: { sig: 'fan', atk: 'blades', sec: 'glitch', abi: 'phantom', ult: 'remix' },
+  rex: { sig: 'slug', atk: 'gun', sec: 'charge', abi: 'bomb', ult: 'notes' },
+  sera: { sig: 'highnote', atk: 'orb', sec: 'beam', abi: 'wave', ult: 'spotlight' },
 };
 
 export function abilityIcon(champ: string, slot: string): string {

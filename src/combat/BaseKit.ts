@@ -31,7 +31,7 @@ export interface MeleeHit {
 export abstract class BaseKit implements Kit {
   spin = 0;
   charge = 0;
-  protected cd: Record<AbilitySlot, number> = { atk: 0, sec: 0, abi: 0, ult: 0 };
+  protected cd: Record<AbilitySlot, number> = { atk: 0, sig: 0, sec: 0, abi: 0, ult: 0 };
   /** name of the running action, time in it */
   protected act: string | null = null;
   protected actT = 0;
@@ -47,6 +47,10 @@ export abstract class BaseKit implements Kit {
    * bites, so mashing the attack button in the air can't keep a fighter afloat.
    */
   protected airLift = true;
+  /** signature-skill press buffer (a press during another action fires when it can) */
+  protected skillBuf = 0;
+  /** visual-only events scheduled a little later (wave fronts...), for local and remote */
+  private fx: Array<{ due: number; run: () => void }> = [];
 
   constructor(readonly champId: keyof typeof CHAMPIONS) {}
 
@@ -57,6 +61,8 @@ export abstract class BaseKit implements Kit {
   update(f: Fighter, it: Intent, dt: number, m: MatchContext): void {
     for (const k of Object.keys(this.cd) as AbilitySlot[]) this.cd[k] = Math.max(0, this.cd[k] - dt);
     if (f.grounded || f.hooked || f.wallRun > 0) this.airLift = true;
+    this.skillBuf = it.skillPressed ? 0.3 : Math.max(0, this.skillBuf - dt);
+    this.tickFx(m);
     if (this.act) {
       this.actT += dt;
       this.tickAction(f, it, dt, m);
@@ -105,6 +111,28 @@ export abstract class BaseKit implements Kit {
     this.charge = 0;
     f.guard = false;
     f.ctrl.aim = 0;
+  }
+
+  /** run `fn` after `delay` seconds of match time */
+  protected later(m: MatchContext, delay: number, run: () => void): void {
+    this.fx.push({ due: m.time + delay, run });
+  }
+
+  /** fires due events; drops stale ones (e.g. queued just before dying) */
+  protected tickFx(m: MatchContext): void {
+    for (let i = this.fx.length - 1; i >= 0; i--) {
+      const e = this.fx[i];
+      if (m.time < e.due) continue;
+      this.fx.splice(i, 1);
+      if (m.time - e.due < 0.3) e.run();
+    }
+  }
+
+  /** consumes a buffered signature-skill press if the skill is ready */
+  protected skillReady(): boolean {
+    if (this.skillBuf <= 0 || this.cd.sig > 0) return false;
+    this.skillBuf = 0;
+    return true;
   }
 
   /** spends the air lift if still available: true = this air attack may rise / hang */

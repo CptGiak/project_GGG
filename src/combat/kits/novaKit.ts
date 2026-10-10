@@ -16,10 +16,17 @@ const _c2 = new THREE.Vector3();
 const COMBO = ['c1', 'c2', 'c3', 'c4'] as const;
 const DUR: Record<string, number> = { c1: 0.3, c2: 0.3, c3: 0.4, c4: 0.58, air: 0.42 };
 
+/** Five Beat Strike: kunai count, fan half-angle, speed and flight time (range ≈ 12.6 m) */
+const FAN_N = 5;
+const FAN_HALF = THREE.MathUtils.degToRad(24);
+const FAN_SPEED = 74;
+const FAN_LIFE = 0.17;
+
 /**
  * NOVA — dual-blade assassin.
- * LMB: 4-hit Sample Flurry (air: Rising Remix) · RMB: Glitch Step (invulnerable blink through
- * enemies) · F: Phantom Cut (teleport behind the target, guaranteed crit) · R: Remix Barrage.
+ * Skill: Five Beat Strike (fan of glitch kunai, slows) · Attack: 4-hit Sample Flurry (air:
+ * Rising Remix) · Secondary: Glitch Step (invulnerable blink through enemies) · F: Phantom Cut
+ * (teleport behind the target, guaranteed crit) · R: Remix Barrage.
  */
 export class NovaKit extends BaseKit {
   private combo = 0;
@@ -49,6 +56,15 @@ export class NovaKit extends BaseKit {
     }
     if (it.secondaryPressed && this.cd.sec <= 0) {
       this.glitchStep(f, it, m);
+      return;
+    }
+    // signature: cancels the recovery of a combo hit
+    if ((!this.act || /^c[1-4]$/.test(this.act) || this.act === 'air') && this.skillReady()) {
+      this.cd.sig = this.data.abilities.sig.cooldown;
+      this.queued = false;
+      this.startAction(f, 'fan', 0.42, f.aimYaw);
+      f.anim.play('fan', { fadeIn: 0.03 });
+      f.ctrl.lockMove = 0.18;
       return;
     }
     if (it.attackPressed) {
@@ -87,6 +103,27 @@ export class NovaKit extends BaseKit {
     }
     f.ctrl.lockMove = DUR[name] * 0.6;
     m.broadcastAction(f, { a: name });
+  }
+
+  /** the kunai fan, centred on the point under the crosshair */
+  private throwFan(f: Fighter, m: MatchContext, from: THREE.Vector3, dir: THREE.Vector3, visualOnly: boolean): void {
+    const [c0, c1] = f.champ.colors;
+    const right = _w.crossVectors(dir, _b.set(0, 1, 0));
+    if (right.lengthSq() < 1e-4) right.set(1, 0, 0);
+    right.normalize();
+    const hits = new Set<string>();
+    for (let i = 0; i < FAN_N; i++) {
+      const a = THREE.MathUtils.lerp(-FAN_HALF, FAN_HALF, i / (FAN_N - 1));
+      const d = dir.clone().multiplyScalar(Math.cos(a)).addScaledVector(right, Math.sin(a)).normalize();
+      // a brief tracer line per kunai (to its range or the first wall) draws the fan
+      const reach = FAN_SPEED * FAN_LIFE;
+      const wall = m.world.raycast(from, d, reach);
+      m.vfx.beam(from.clone().addScaledVector(d, 0.5), from.clone().addScaledVector(d, wall ? wall.distance : reach), i % 2 ? c1 : c0, 0.05, 0.16);
+      m.projectiles.spawn({ owner: f, kind: 'bolt', pos: from.clone().addScaledVector(d, 0.3), vel: d.multiplyScalar(FAN_SPEED), radius: 0.24, life: FAN_LIFE, slot: 'sig', part: 'fan', color: i % 2 ? c1 : c0, color2: i % 2 ? c0 : c1, scale: 0.55, slow: 0.8, kb: 3, sharedHits: hits, visualOnly });
+    }
+    m.vfx.ring(from.clone().addScaledVector(dir, 0.7), dir, c0, 0.1, 0.7, 0.18);
+    for (let i = 0; i < 10; i++) m.vfx.add.emit({ pos: from.clone(), vel: dir.clone().multiplyScalar(10 + Math.random() * 10).add(new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 6)), life: 0.25, size: 0.1, size1: 0.02, color: i % 2 ? c0 : c1, shape: Shape.square, drag: 4 });
+    m.audio.play('kunai', from, 0.9);
   }
 
   /** instant blink along the move (or aim) direction, damaging enemies crossed */
@@ -229,6 +266,14 @@ export class NovaKit extends BaseKit {
 
   onAnimEvent(f: Fighter, ev: string, m: MatchContext): void {
     if (!this.act) return;
+    if (ev === 'release' && this.act === 'fan') {
+      const from = f.chest(new THREE.Vector3());
+      const { point } = this.aimPoint(f, m, 14);
+      const dir = point.sub(from).normalize();
+      this.throwFan(f, m, from, dir, false);
+      m.broadcastAction(f, { a: 'fan', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
+      return;
+    }
     if (ev === 'swing') {
       this.setTrail(f, true);
       m.audio.play('swing', f.pos, 0.8);
@@ -268,6 +313,10 @@ export class NovaKit extends BaseKit {
         this.act = e.a === 'c4' ? 'cRemote4' : 'remote';
         this.actT = 0;
         this.actDur = DUR[e.a] ?? 0.4;
+        break;
+      case 'fan':
+        f.anim.play('fan', { fadeIn: 0.02, offset: 0.12 });
+        if (e.p && e.d) this.throwFan(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), true);
         break;
       case 'glitch':
         if (e.p && e.d) this.afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d));

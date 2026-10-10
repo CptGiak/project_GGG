@@ -246,7 +246,7 @@ export class Fighter {
       return;
     }
     if (this.tauntT > 0) {
-      const moving = it.move.lengthSq() > 0.01 || it.attackPressed || it.secondaryPressed || it.abilityPressed || it.ultimatePressed || it.jumpPressed || it.dashPressed || it.hookLPressed || it.hookRPressed;
+      const moving = it.move.lengthSq() > 0.01 || it.skillPressed || it.attackPressed || it.secondaryPressed || it.abilityPressed || it.ultimatePressed || it.jumpPressed || it.dashPressed || it.hookLPressed || it.hookRPressed;
       if (moving || !this.grounded || busy) this.stopTaunt();
     }
   }

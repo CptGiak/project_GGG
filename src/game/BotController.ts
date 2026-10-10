@@ -167,10 +167,14 @@ export class BotController {
       if (dist < 3.6 && onTarget) {
         if (Math.random() < dt * THREE.MathUtils.lerp(3, 7, diff)) it.attackPressed = true;
       }
+      // signature skill: Kaiser's wave reaches ~8 m, Nova's kunai ~12 m
+      const sigRange = f.champId === 'kaiser' ? 7.5 : 11;
+      if (cds.sig <= 0 && dist < sigRange && onTarget && Math.random() < dt * (0.8 + diff * 1.5)) it.skillPressed = true;
       if (cds.abi <= 0 && dist > 5 && dist < 18 && onTarget && Math.random() < dt * (0.6 + diff)) it.abilityPressed = true;
       if (f.champId === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
       if (f.ult >= 1 && dist < 9 && Math.random() < dt * 0.8) it.ultimatePressed = true;
     } else {
+      if (onTarget && cds.sig <= 0 && dist < (f.champId === 'sera' ? 38 : 75) && this.chargeT <= 0 && Math.random() < dt * (0.6 + diff)) it.skillPressed = true;
       if (onTarget && dist < 90) {
         if (f.champId === 'rex' && cds.sec <= 0 && dist > 25 && this.chargeT <= 0 && Math.random() < dt * 0.4) this.chargeT = 0.9 + Math.random() * 0.4;
         if (this.chargeT > 0) {

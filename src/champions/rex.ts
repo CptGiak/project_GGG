@@ -246,6 +246,13 @@ function rexAnims(): ChampionAnimSet {
       [0, aimSpec],
       [0.6, { ...aimSpec, hips: [0, -0.08, 0], thighL: [-22, -12, 12], shinL: [30, 0, 0], thighR: [14, 14, -12], shinR: [28, 0, 0] }],
     ], { fadeIn: 0.08, fadeOut: 0.18 }),
+    // signature skill: Lead Single – brace low, fire one heavy slug, the kick throws the barrel up
+    single: clip('single', base, [
+      [0, aimSpec],
+      [0.1, { ...aimSpec, hips: [0, -0.1, -0.02], thighL: [-26, -12, 14], shinL: [36, 0, 0], thighR: [16, 14, -14], shinR: [32, 0, 0], spine: [6, 4, 0], chest: [4, 4, 0], wR: W([-0.17, 1.38, 0.26], [0, 0, 1]) }, Ease.outCubic],
+      [0.15, { ...aimSpec, hips: [0, -0.08, -0.08], thighL: [-20, -12, 14], shinL: [30, 0, 0], thighR: [18, 14, -14], shinR: [26, 0, 0], spine: [-10, 4, 0], chest: [-8, 4, 0], head: [-4, -6, 0], wR: W([-0.17, 1.48, 0.16], [0, 0.42, 0.91]) }, Ease.outExpo],
+      [0.45, aimSpec, Ease.inOut],
+    ], { events: [{ t: 0.1, id: 'fire' }], fadeIn: 0.05, fadeOut: 0.18 }),
     throw: clip('throw', base, [
       [0, { ...legs, wR: W([-0.24, 1.05, 0.22], [0.2, -0.45, 0.87]), off: 0, upperArmL: [-150, 0, 25], foreArmL: [-60, 0, 0], spine: [-6, -10, 0], chest: [-4, -10, 0] }],
       [0.12, { wR: W([-0.24, 1.05, 0.22], [0.2, -0.45, 0.87]), off: 0, upperArmL: [-70, 0, 10], foreArmL: [-10, 0, 0], spine: [16, 18, 0], chest: [8, 14, 0], hips: [0, -0.06, 0.08], thighL: [-30, -10, 10], shinL: [34, 0, 0] }, Ease.outQuart],

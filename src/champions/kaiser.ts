@@ -350,6 +350,14 @@ function kaiserAnims(): ChampionAnimSet {
       [0.42, { wR: two([0, 0.58, 0.76], [0, -0.42, 0.9], [0, 0.9, 0.42]), off: 1, spine: [32, 0, 0], chest: [14, 0, 0], head: [-20, 0, 0], hips: [0, -0.24, 0.14], thighL: [-68, 0, 10], shinL: [96, 0, 0], footL: [-20, 0, 0], thighR: [12, 0, -10], shinR: [66, 0, 0], footR: [-10, 0, 0] }],
       [0.75, { ...legsIdle, wR: two([-0.2, 1.1, 0.4], [-0.1, 0.5, 0.86], [-0.9, 0.2, 0]), off: 1 }, Ease.inOut],
     ], { events: [{ t: 0.08, id: 'swing' }, { t: 0.15, id: 'hitOn' }, { t: 0.22, id: 'slam' }, { t: 0.26, id: 'hitOff' }], fadeIn: 0.05, fadeOut: 0.2 }),
+    // signature skill: Power Chord – the blade swings back over the head, then a planted slam sends the wave
+    chord: clip('chord', base, [
+      [0, { ...legsIdle, wR: two([-0.2, 1.5, 0.22], [-0.1, 0.6, 0.79], [0, 0.8, -0.6]), off: 1 }],
+      [0.16, { wR: two([-0.04, 2.02, -0.2], [0, 0.6, -0.8], [0, -0.8, -0.6]), off: 1, spine: [-20, 0, 0], chest: [-14, 0, 0], head: [-8, 0, 0], hips: [0, 0.02, -0.04], thighL: [-26, -6, 10], shinL: [30, 0, 0], thighR: [14, 6, -10], shinR: [24, 0, 0] }, Ease.outCubic],
+      [0.25, { wR: two([0, 0.52, 0.86], [0, -0.42, 0.91], [0, 0.91, 0.42]), off: 1, spine: [42, 0, 0], chest: [18, 0, 0], head: [-28, 0, 0], hips: [0, -0.3, 0.2], thighL: [-78, 0, 10], shinL: [106, 0, 0], footL: [-22, 0, 0], thighR: [20, 0, -10], shinR: [76, 0, 0], footR: [-10, 0, 0] }, Ease.inCubic],
+      [0.55, { wR: two([0, 0.54, 0.85], [0, -0.4, 0.92], [0, 0.92, 0.4]), off: 1, spine: [38, 0, 0], chest: [16, 0, 0], head: [-24, 0, 0], hips: [0, -0.28, 0.18], thighL: [-74, 0, 10], shinL: [100, 0, 0], footL: [-22, 0, 0], thighR: [18, 0, -10], shinR: [72, 0, 0], footR: [-10, 0, 0] }],
+      [0.85, { ...legsIdle, wR: two([-0.24, 1.36, 0.26], [0.08, 0.38, -0.92], [-1, 0, 0]) }, Ease.inOut],
+    ], { events: [{ t: 0.17, id: 'swing' }, { t: 0.25, id: 'chord' }], fadeIn: 0.05, fadeOut: 0.2 }),
     // aerial spin cleave (root spin handled by the fighter)
     air: clip('air', base, [
       [0, { wR: two([-0.5, 1.2, -0.12], [-0.92, 0.1, -0.38], [0, 1, 0]), off: 1, spine: [0, -30, 0], chest: [0, -20, 0], thighL: [-50, 0, 8], shinL: [80, 0, 0], thighR: [-20, 0, -8], shinR: [70, 0, 0] }],

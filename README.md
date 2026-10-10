@@ -42,12 +42,17 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 | **Q / E** | rampino sinistro / destro — tieni premuto per restare agganciato (ogni lancio costa gas) |
 | **SPAZIO** | salto · agganciato: **boost a gas** · in aria: doppio salto a gas |
 | **SHIFT** | scatto con frame di invulnerabilità |
-| **LMB** | attacco base / fuoco |
-| **RMB** | abilità secondaria |
+| **LMB** | **abilità firma** del campione (stile "Q" di LoL, con ricarica) |
+| **RMB** | attacco base / fuoco (come il click destro di LoL) |
+| **C** | abilità secondaria |
 | **F** | abilità speciale |
 | **R** | ultimate (si carica infliggendo danni) |
 | **T** | provocazione (emote, a terra e da fermo) |
 | **TAB** | classifica · **ESC** pausa |
+
+Tutti i tasti d'azione si possono **riassegnare** da *COMANDI* (menu principale) o da
+*IMPOSTAZIONI → TASTI* (anche in pausa): clicca il tasto e premi quello nuovo, anche un pulsante
+del mouse. Se il tasto è già usato da un'altra azione, le due si scambiano.
 
 ### Il sistema di movimento
 - Il rampino punta dove miri (con *aim assist* a cono se manchi il bersaglio); con due rampini formi una V e puoi orbitare.
@@ -66,12 +71,12 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 
 ## Campioni
 
-| | Ruolo | Arma | LMB | RMB | F | R (Ultimate) |
-|---|---|---|---|---|---|---|
-| **KAISER** — *The Bass Drop* | Mischia | BASSLINE, spadone olografico con equalizzatore live | Combo 3 fendenti (in aria: cleave rotante) | Guardia + **parata perfetta** (stordisce) | Drop Dive: affondo perforante (anche in picchiata) | Encore Break: balzo e schianto ad area |
-| **NOVA** — *Glitch Ronin* | Mischia | SYNTH & SAMPLE, doppie holo-katane | Combo 4 colpi (in aria: Rising Remix) | Glitch Step: scatto invulnerabile che taglia | Phantom Cut: teletrasporto alle spalle, critico garantito | Remix Barrage: 8 tagli a teletrasporto |
-| **REX** — *The Headliner* | Distanza | HEADLINER, fucile bass-cannon | Raffica (colpi alla testa = critici) | Bass Charge: carica con zoom, raggio perforante | Sub Bomb: granata sonica rimbalzante | Drop The Beat: 12 missili-nota a ricerca |
-| **SERA** — *Holo Diva* | Distanza | ENCORE, scettro-microfono | Sfere sonore a ricerca | Resonance: raggio canalizzato che rallenta | Echo Wave: onda di respinta | Grand Finale: colonna di luce + cura |
+| | Ruolo | Arma | LMB (abilità firma) | RMB (attacco base) | C | F | R (Ultimate) |
+|---|---|---|---|---|---|---|---|
+| **KAISER** — *The Bass Drop* | Mischia | BASSLINE, spadone olografico con equalizzatore live | **Power Chord**: fendente dall'alto che manda avanti un'onda d'urto; la punta (*sweet spot*) fa più danni e lancia in aria | Combo 3 fendenti (in aria: cleave rotante) | Guardia + **parata perfetta** (stordisce) | Drop Dive: affondo perforante (anche in picchiata) | Encore Break: balzo e schianto ad area |
+| **NOVA** — *Glitch Ronin* | Mischia | SYNTH & SAMPLE, doppie holo-katane | **Five Beat Strike**: ventaglio di 5 kunai glitch, rallenta | Combo 4 colpi (in aria: Rising Remix) | Glitch Step: scatto invulnerabile che taglia | Phantom Cut: teletrasporto alle spalle, critico garantito | Remix Barrage: 8 tagli a teletrasporto |
+| **REX** — *The Headliner* | Distanza | HEADLINER, fucile bass-cannon | **Lead Single**: proiettile pesante a lunga gittata; se colpisce riduce le ricariche | Raffica (colpi alla testa = critici) | Bass Charge: carica con zoom, raggio perforante | Sub Bomb: granata sonica rimbalzante | Drop The Beat: 12 missili-nota a ricerca |
+| **SERA** — *Holo Diva* | Distanza | ENCORE, scettro-microfono | **High Note**: nota lanciata a parabola che esplode nel punto mirato, più forte al centro | Sfere sonore a ricerca | Resonance: raggio canalizzato che rallenta | Echo Wave: onda di respinta | Grand Finale: colonna di luce + cura |
 
 Ogni modello è costruito da primitive scolpite (lathe, sweep, estrusioni avvolte, ciocche curve) su uno
 scheletro di 19 ossa, con **cloth simulation** (cappotti, gonne, sciarpe, code di cavallo, nastri),

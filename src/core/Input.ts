@@ -1,11 +1,12 @@
 /**
  * Keyboard + mouse input with pointer lock, edge detection and rebindable actions.
  */
+import type { AbilitySlot } from '../../shared/champions';
 
 export type Action =
   | 'forward' | 'back' | 'left' | 'right'
   | 'jump' | 'dash' | 'hookL' | 'hookR'
-  | 'attack' | 'secondary' | 'ability' | 'ultimate'
+  | 'skill' | 'attack' | 'secondary' | 'ability' | 'ultimate'
   | 'scoreboard' | 'pause' | 'taunt';
 
 /** binding codes: KeyboardEvent.code, or 'Mouse0'..'Mouse4' */
@@ -18,14 +19,62 @@ export const DEFAULT_BINDINGS: Record<Action, string[]> = {
   dash: ['ShiftLeft', 'ShiftRight'],
   hookL: ['KeyQ', 'Mouse3'],
   hookR: ['KeyE', 'Mouse4'],
-  attack: ['Mouse0'],
-  secondary: ['Mouse2'],
+  // LoL-style: left click is the champion's signature skill, right click the basic attack
+  skill: ['Mouse0'],
+  attack: ['Mouse2'],
+  secondary: ['KeyC'],
   ability: ['KeyF'],
   ultimate: ['KeyR'],
   scoreboard: ['Tab'],
   pause: ['Escape'],
   taunt: ['KeyT'],
 };
+
+/** which input action fires each ability slot */
+export const SLOT_ACTION: Record<AbilitySlot, Action> = { sig: 'skill', atk: 'attack', sec: 'secondary', abi: 'ability', ult: 'ultimate' };
+
+/** actions the player may rebind (in menu order) */
+export const REBINDABLE: Array<[Action, string]> = [
+  ['skill', 'Abilità firma'],
+  ['attack', 'Attacco base'],
+  ['secondary', 'Abilità secondaria'],
+  ['ability', 'Abilità speciale'],
+  ['ultimate', 'Ultimate'],
+  ['hookL', 'Rampino sinistro'],
+  ['hookR', 'Rampino destro'],
+  ['jump', 'Salto / boost a gas'],
+  ['dash', 'Scatto'],
+  ['taunt', 'Provocazione'],
+];
+
+/** defaults overridden by the player's saved bindings */
+export function resolveBindings(custom?: Partial<Record<Action, string[]>>): Record<Action, string[]> {
+  const b = structuredClone(DEFAULT_BINDINGS);
+  if (custom) for (const [a, codes] of Object.entries(custom) as Array<[Action, string[]]>) if (b[a] && Array.isArray(codes)) b[a] = codes.slice();
+  return b;
+}
+
+const NAMED: Record<string, string> = {
+  Mouse0: 'LMB', Mouse1: 'MMB', Mouse2: 'RMB', Mouse3: 'M4', Mouse4: 'M5',
+  Space: 'SPAZIO', ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT D', ControlLeft: 'CTRL', ControlRight: 'CTRL D',
+  AltLeft: 'ALT', AltRight: 'ALT GR', Tab: 'TAB', Escape: 'ESC', CapsLock: 'CAPS', Enter: 'INVIO', Backspace: '⌫',
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+};
+
+/** short label for a binding code: 'Mouse0' → 'LMB', 'KeyC' → 'C', 'Digit1' → '1' */
+export function keyLabel(code: string | undefined): string {
+  if (!code) return '—';
+  if (NAMED[code]) return NAMED[code];
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return 'NUM ' + code.slice(6);
+  return code.toUpperCase();
+}
+
+/** label of the first key bound to an action */
+export function actionLabel(b: Record<Action, string[]>, a: Action): string {
+  return keyLabel(b[a]?.[0]);
+}
 
 export class Input {
   private down = new Set<string>();
@@ -70,6 +119,8 @@ export class Input {
       this.down.clear();
     });
     target.addEventListener('mousedown', (e) => {
+      // the click that grabs the pointer is not an attack (it would burn the LMB skill)
+      if (!this.locked) return;
       const c = `Mouse${e.button}`;
       if (!this.down.has(c)) this.pressedSet.add(c);
       this.down.add(c);

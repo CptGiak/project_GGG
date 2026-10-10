@@ -1,7 +1,8 @@
-import { CHAMPION_IDS, CHAMPIONS, type AbilitySlot, type ChampionId } from '../../shared/champions';
+import { CHAMPION_IDS, CHAMPIONS, SLOT_ORDER, type ChampionId } from '../../shared/champions';
 import { ARENA_META } from '../../shared/arenas';
 import type { PlayerInfo } from '../../shared/protocol';
 import type { Settings } from '../core/Settings';
+import { DEFAULT_BINDINGS, REBINDABLE, SLOT_ACTION, actionLabel, keyLabel, resolveBindings, type Action } from '../core/Input';
 
 type Attrs = Record<string, string | number | boolean | ((e: Event) => void) | undefined>;
 
@@ -86,13 +87,12 @@ export interface SelectCallbacks {
   sfx(name: string): void;
 }
 
-const SLOT_ORDER: AbilitySlot[] = ['atk', 'sec', 'abi', 'ult'];
-
 export function champSelect(mode: 'practice' | 'online', s: Settings, cb: SelectCallbacks): HTMLElement {
   let champ: ChampionId = s.champ;
   let arena = s.arena;
   let bots = s.bots;
   let diff = s.botDifficulty;
+  const keys = resolveBindings(s.bindings);
   const root = h('div', { class: 'screen fade-in' });
   const cards = h('div', { class: 'cs-cards' });
   const info = h('div', { class: 'cs-info' });
@@ -108,7 +108,7 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       h('div', { class: 'cs-bio' }, c.bio),
       h('div', { class: 'cs-abs' }, ...SLOT_ORDER.map((slot) => {
         const a = c.abilities[slot];
-        return h('div', { class: `cs-ab ${slot === 'ult' ? 'ult' : ''}` }, h('div', { class: 'k' }, a.key), h('div', {}, h('div', { class: 'n' }, a.name.toUpperCase() + (a.cooldown >= 1 ? `  ·  ${a.cooldown}s` : slot === 'ult' ? '  ·  ULTIMATE' : '')), h('div', { class: 'd' }, a.desc)));
+        return h('div', { class: `cs-ab ${slot === 'ult' ? 'ult' : ''}` }, h('div', { class: 'k' }, actionLabel(keys, SLOT_ACTION[slot])), h('div', {}, h('div', { class: 'n' }, a.name.toUpperCase() + (a.cooldown >= 1 ? `  ·  ${a.cooldown}s` : slot === 'ult' ? '  ·  ULTIMATE' : '')), h('div', { class: 'd' }, a.desc)));
       })),
     );
     cards.querySelectorAll('.cs-card').forEach((e) => e.classList.toggle('sel', (e as HTMLElement).dataset.id === champ));
@@ -186,7 +186,9 @@ export function loadingScreen(text: string): HTMLElement {
     'Correndo contro un muro ad alta velocità ci corri sopra!',
     'SHIFT è uno scatto con frame di invulnerabilità.',
     'Puoi agganciare anche i nemici: puntali e premi Q/E.',
-    'KAISER: tieni RMB e para al momento giusto per stordire.',
+    'KAISER: alza la Mute Guard al momento giusto per una parata perfetta che stordisce.',
+    'Il click sinistro è l\'abilità firma del campione, il destro l\'attacco base.',
+    'Ogni lancio di rampino costa gas: col serbatoio vuoto non ti agganci.',
     'REX: i colpi alla testa sono CRITICI.',
   ];
   return h('div', { class: 'overlay loading' }, ransom(text, false, 3), h('div', { class: 'bar' }, h('i')), h('div', { class: 'tip' }, tips[Math.floor(Math.random() * tips.length)]));
@@ -210,7 +212,7 @@ export function pauseMenu(opts: { online: boolean; room?: string; onResume(): vo
   ));
 }
 
-export function settingsPanel(s: Settings, onChange: (s: Settings) => void, onClose: () => void): HTMLElement {
+export function settingsPanel(s: Settings, onChange: (s: Settings) => void, onClose: () => void, onKeys?: () => void): HTMLElement {
   const row = (label: string, el: HTMLElement) => h('div', { class: 'field' }, h('label', {}, label), el);
   const slider = (key: 'sensitivity' | 'fov' | 'master' | 'music' | 'sfx', min: number, max: number, step: number, fmt: (v: number) => string) => {
     const val = h('span', { class: 'val' }, fmt(s[key]));
@@ -244,30 +246,105 @@ export function settingsPanel(s: Settings, onChange: (s: Settings) => void, onCl
     row('VOLUME', slider('master', 0, 1, 0.01, pct)),
     row('MUSICA', slider('music', 0, 1, 0.01, pct)),
     row('EFFETTI', slider('sfx', 0, 1, 0.01, pct)),
+    onKeys ? row('TASTI', h('div', { class: 'seg' }, h('button', { onclick: onKeys }, 'PERSONALIZZA'))) : null,
     h('div', { style: 'margin-top:1vh' }, h('div', { class: 'btn red', onclick: onClose }, h('span', {}, 'FATTO'))),
   ));
 }
 
-export function controlsPanel(onClose: () => void): HTMLElement {
-  const rows: Array<[string, string]> = [
+/** keys the rebinding UI never hands out (movement, menus) */
+const RESERVED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Escape']);
+
+/**
+ * Controls: every action key can be rebound (click a key, then press the new key or mouse
+ * button; ESC cancels). A key taken by another action is swapped with it.
+ */
+export function controlsPanel(custom: Partial<Record<Action, string[]>>, onChange: (b: Partial<Record<Action, string[]>>) => void, onClose: () => void): HTMLElement {
+  let b = resolveBindings(custom);
+  const grid = h('div', { class: 'grid' });
+  let stopCapture: (() => void) | null = null;
+  const save = () => {
+    const out: Partial<Record<Action, string[]>> = {};
+    for (const [a] of REBINDABLE) if (b[a].join() !== DEFAULT_BINDINGS[a].join()) out[a] = b[a].slice();
+    onChange(out);
+  };
+  const assign = (a: Action, code: string) => {
+    const old = b[a][0];
+    for (const [o] of REBINDABLE) {
+      if (o === a) continue;
+      const i = b[o].indexOf(code);
+      if (i < 0) continue;
+      // swap: the other action takes this one's old key
+      if (i === 0 && old && !b[o].includes(old)) b[o][0] = old;
+      else b[o].splice(i, 1);
+    }
+    b[a] = [code, ...b[a].filter((c) => c !== code && c !== old)];
+    save();
+  };
+  const capture = (a: Action, chip: HTMLElement) => {
+    stopCapture?.();
+    chip.classList.add('wait');
+    chip.textContent = 'PREMI UN TASTO…';
+    const done = (code: string | null) => {
+      stopCapture?.();
+      if (code) assign(a, code);
+      render();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.code === 'Escape') return done(null);
+      if (RESERVED.has(e.code)) return;
+      done(e.code);
+    };
+    const onMouse = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      done(`Mouse${e.button}`);
+    };
+    const noMenu = (e: Event) => e.preventDefault();
+    // start listening after the click that opened the capture
+    const t = window.setTimeout(() => {
+      window.addEventListener('keydown', onKey, true);
+      window.addEventListener('mousedown', onMouse, true);
+      window.addEventListener('contextmenu', noMenu, true);
+    }, 0);
+    stopCapture = () => {
+      window.clearTimeout(t);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', onMouse, true);
+      // the context menu of a right click arrives after mousedown
+      window.setTimeout(() => window.removeEventListener('contextmenu', noMenu, true), 300);
+      stopCapture = null;
+    };
+  };
+  const fixed: Array<[string, string]> = [
     ['W A S D', 'Movimento / sterzata in volo'],
     ['MOUSE', 'Mira (clicca per bloccare il cursore)'],
-    ['Q / E', 'Rampino sinistro / destro (tieni premuto)'],
-    ['SPAZIO', 'Salto · col rampino: boost a gas · in aria: doppio salto a gas'],
-    ['SHIFT', 'Scatto (frame di invulnerabilità)'],
-    ['LMB', 'Attacco base / fuoco'],
-    ['RMB', 'Abilità secondaria'],
-    ['F', 'Abilità speciale'],
-    ['R', 'Ultimate (si carica infliggendo danni)'],
-    ['T', 'Provocazione (emote)'],
     ['TAB', 'Classifica'],
     ['ESC', 'Pausa'],
   ];
+  const render = () => {
+    grid.innerHTML = '';
+    for (const [a, label] of REBINDABLE) {
+      const chip = h('div', { class: 'k rebind', title: 'Clicca per cambiare tasto' }, b[a].map(keyLabel).join(' / '));
+      chip.addEventListener('click', () => capture(a, chip));
+      grid.append(chip, h('div', { class: 'v' }, label));
+    }
+    for (const [k, v] of fixed) grid.append(h('div', { class: 'k fixed' }, k), h('div', { class: 'v' }, v));
+  };
+  render();
+  const close = () => {
+    stopCapture?.();
+    onClose();
+  };
   return h('div', { class: 'overlay controls' }, h('div', { class: 'panel' },
     h('h2', {}, 'COMANDI'),
-    h('div', { class: 'grid' }, ...rows.flatMap(([k, v]) => [h('div', { class: 'k' }, k), h('div', { class: 'v' }, v)])),
-    h('div', { class: 'tips', html: '<b>Movimento 3D:</b> aggancia un edificio con Q/E, tieni SPAZIO per tirarti, lascia andare per essere lanciato. Usa due rampini per orbitare. Sbattendo contro un muro mentre premi W ci corri sopra.<br><b>Combattimento:</b> gli attacchi corpo a corpo hanno un leggero aggancio sul bersaglio. I colpi alle spalle sono CRITICI. Il gas si ricarica a terra più velocemente.' }),
-    h('div', { style: 'margin-top:2vh' }, h('div', { class: 'btn red', onclick: onClose }, h('span', {}, 'OK'))),
+    h('div', { class: 'sub' }, 'Clicca un tasto per cambiarlo, poi premi il nuovo tasto o pulsante del mouse (ESC annulla).'),
+    grid,
+    h('div', { class: 'tips', html: '<b>Movimento 3D:</b> aggancia un edificio coi rampini, tieni il salto per tirarti col gas, lascia andare per essere lanciato. Usa due rampini per orbitare. Sbattendo contro un muro mentre avanzi ci corri sopra. Ogni lancio di rampino costa gas.<br><b>Combattimento:</b> il click sinistro è l\'abilità firma del campione (con ricarica), il destro l\'attacco base. Gli attacchi corpo a corpo hanno un leggero aggancio sul bersaglio; i colpi alle spalle sono CRITICI.' }),
+    h('div', { style: 'margin-top:2vh;display:flex;gap:1.5vh' },
+      h('div', { class: 'btn dark', onclick: () => { stopCapture?.(); b = resolveBindings(); save(); render(); } }, h('span', {}, 'PREDEFINITI')),
+      h('div', { class: 'btn red', onclick: close }, h('span', {}, 'OK'))),
   ));
 }
 
