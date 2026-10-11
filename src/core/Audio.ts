@@ -443,6 +443,48 @@ const SFX: Record<string, SfxFn> = {
   chord: (a, o, t) => {
     for (const f of [523, 659, 784]) a.osc('triangle', f, f, t, 0.45, o, 0.08);
   },
+  /** Pooh's belly bump: a rubbery boing over a soft thud */
+  boing: (a, o, t) => {
+    a.osc('sine', 150, 420, t, 0.09, o, 0.55);
+    a.osc('sine', 420, 180, t + 0.08, 0.26, o, 0.4);
+    a.osc('triangle', 300, 600, t + 0.02, 0.1, o, 0.12);
+    a.osc('sine', 90, 45, t, 0.16, o, 0.6);
+    a.noiseHit(t, 0.08, o, 0.3, 'lowpass', 900, 250);
+  },
+  /** a honey pot breaking: clay crack and a wet splat */
+  splat: (a, o, t) => {
+    a.noiseHit(t, 0.05, o, 0.45, 'highpass', 2600, 1800, 0.8);
+    a.noiseHit(t + 0.02, 0.3, o, 0.6, 'lowpass', 1400, 220, 1.2, 0.01);
+    a.osc('sine', 260, 90, t + 0.02, 0.14, o, 0.4);
+  },
+  /** the bee swarm */
+  buzz: (a, o, t) => {
+    a.osc('sawtooth', 205, 225, t, 0.32, o, 0.06, 0.04);
+    a.osc('sawtooth', 236, 214, t + 0.03, 0.3, o, 0.05, 0.04);
+    a.noiseHit(t, 0.3, o, 0.05, 'bandpass', 900, 1100, 3, 0.04);
+  },
+  /** Idea!: lightbulb ding and a little rising arpeggio */
+  idea: (a, o, t) => {
+    a.osc('triangle', 784, 784, t, 0.12, o, 0.12);
+    a.osc('triangle', 1047, 1047, t + 0.08, 0.12, o, 0.12);
+    a.osc('sine', 1568, 1568, t + 0.16, 0.7, o, 0.2);
+    a.osc('sine', 3136, 3136, t + 0.16, 0.4, o, 0.05);
+  },
+  /** a paw tapping his head */
+  tap: (a, o, t) => {
+    a.osc('sine', 300, 170, t, 0.07, o, 0.3);
+    a.noiseHit(t, 0.04, o, 0.15, 'lowpass', 1500, 600);
+  },
+  /** licking up a puddle of honey */
+  slurp: (a, o, t) => {
+    a.noiseHit(t, 0.32, o, 0.25, 'bandpass', 500, 1900, 3, 0.04);
+    a.osc('sine', 220, 520, t, 0.25, o, 0.15, 0.03);
+  },
+  /** the balloon string let go */
+  pop: (a, o, t) => {
+    a.noiseHit(t, 0.06, o, 0.4, 'highpass', 3000, 3000);
+    a.osc('sine', 900, 220, t, 0.06, o, 0.2);
+  },
 };
 
 // =============================================================================================

@@ -15,6 +15,7 @@ const PREVIEWS: Record<ChampionId, string[]> = {
   akali: ['taunt', 'fan', 'c1', 'c2', 'c3', 'flip', 'air'],
   qiyana: ['taunt', 'wrath', 'c1', 'c2', 'audacity', 'air'],
   locke: ['taunt', 'nails', 'c1', 'c2', 'c3', 'c4', 'pursuit'],
+  pooh: ['think', 'throw', 'bump', 'taunt', 'throw', 'ult'],
 };
 
 const BEAM_VERT = /* glsl */ `
@@ -182,6 +183,7 @@ export class MenuStage {
       if (!c.anim.action.active) c.anim.st.aim *= Math.exp(-dt * 3);
       c.anim.update(dt, false);
       for (const ev of c.anim.action.events) {
+        c.visual.onAnimEvent?.(ev);
         if (ev === 'swing' || ev === 'hitOn') c.trails.forEach((tr) => (tr.emitting = true));
         if (ev === 'hitOff') c.trails.forEach((tr) => (tr.emitting = false));
       }

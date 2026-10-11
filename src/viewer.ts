@@ -74,6 +74,9 @@ export function startViewer(params: URLSearchParams): void {
         if (spec.startsWith('run')) a.st.runPhase += dt * 9;
         if (!a.action.active && !['idle', 'run', 'air', 'fly', 'dash'].includes(spec.split('@')[0])) applySpec(a, spec, false);
         a.update(dt, false);
+        for (const ev of a.action.events) a.v.onAnimEvent?.(ev);
+        a.action.events.length = 0;
+        a.v.tick(dt, t, 0.6);
       }
     }
     engine.render(t);
@@ -110,5 +113,7 @@ function applySpec(a: FighterAnimator, spec: string, freeze: boolean): void {
       return;
     default:
       a.play(name, freeze ? { speed: 0, hold: true, fadeIn: 0, offset: v ?? 0 } : { offset: 0 });
+      // a frozen frame still shows what the clip's earlier events switched on (Pooh's shut eyes)
+      if (freeze) for (const e of a.v.anims.clips[name]?.opts.events ?? []) if (e.t <= (v ?? 0)) a.v.onAnimEvent?.(e.id);
   }
 }

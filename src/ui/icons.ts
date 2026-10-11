@@ -39,6 +39,12 @@ export const ICONS: Record<string, string> = {
   nails: P('<path d="M8 12 H34 L42 14 L34 16 H8 Z M8 24 H34 L42 26 L34 28 H8 Z M8 36 H34 L42 38 L34 40 H8 Z" fill="currentColor" fill-opacity="0.35"/><path d="M6 9 V19 M6 21 V31 M6 33 V43"/>'),
   ashes: P('<circle cx="10" cy="32" r="5" stroke-opacity="0.6"/><circle cx="17" cy="24" r="3" stroke-opacity="0.4"/><path d="M14 38 L36 14" stroke-dasharray="5 4"/><path d="M28 12 H38 V22"/>'),
   reliquary: P('<path d="M12 18 H36 V42 H12 Z" fill="currentColor" fill-opacity="0.25"/><path d="M24 22 V38 M18 28 H30"/><path d="M24 3 L28 9 L24 15 L20 9 Z" fill="currentColor"/>'),
+  // Pooh
+  belly: P('<circle cx="29" cy="25" r="14" fill="currentColor" fill-opacity="0.3"/><path d="M3 17 H12 M1 25 H10 M3 33 H12"/><circle cx="31" cy="27" r="1.8" fill="currentColor"/>'),
+  hunny: P('<path d="M14 15 H34 L31 19 Q41 23 40 33 Q38 44 24 44 Q10 44 8 33 Q7 23 17 19 Z" fill="currentColor" fill-opacity="0.3"/><path d="M11 29 H37"/><path d="M15 15 Q15 8 24 8 Q33 8 33 15"/><path d="M33 15 V22" stroke-width="2.4"/>'),
+  balloon: P('<ellipse cx="26" cy="17" rx="12" ry="14" fill="currentColor" fill-opacity="0.3"/><path d="M24 31 L28 31 L26 34 Z" fill="currentColor"/><path d="M26 34 Q19 39 24 46"/><path d="M20 10 Q22 7 25 7" stroke-opacity="0.6"/>'),
+  idea: P('<path d="M24 7 Q35 7 35 18 Q35 25 30 29 V35 H18 V29 Q13 25 13 18 Q13 7 24 7 Z" fill="currentColor" fill-opacity="0.3"/><path d="M19 39 H29 M20 44 H28"/><path d="M3 18 H8 M40 18 H45 M7 5 L11 9 M41 5 L37 9"/>'),
+  bees: P('<ellipse cx="17" cy="29" rx="12" ry="14" fill="currentColor" fill-opacity="0.3"/><path d="M7 23 H27 M6 31 H28 M9 39 H25"/><circle cx="36" cy="11" r="3" fill="currentColor"/><path d="M36 8 Q33 3 30 6 M36 8 Q39 3 42 6"/><circle cx="41" cy="27" r="2.5" fill="currentColor"/><path d="M41 25 Q39 21 37 23 M41 25 Q43 21 45 23"/>'),
 };
 
 const MAP: Record<string, Record<string, string>> = {
@@ -49,6 +55,7 @@ const MAP: Record<string, Record<string, string>> = {
   akali: { sig: 'kunai', atk: 'kama', sec: 'smoke', abi: 'shuriken', ult: 'execute' },
   qiyana: { sig: 'ring', atk: 'slashes', sec: 'elements', abi: 'pounce', ult: 'quake' },
   locke: { sig: 'nails', atk: 'stake', sec: 'flame', abi: 'ashes', ult: 'reliquary' },
+  pooh: { sig: 'belly', atk: 'hunny', sec: 'balloon', abi: 'idea', ult: 'bees' },
 };
 
 export function abilityIcon(champ: string, slot: string): string {

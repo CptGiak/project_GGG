@@ -126,7 +126,7 @@ export class BotController {
       // lead moving targets for ranged champions
       if (!melee) {
         const dist = _aim.distanceTo(f.pos);
-        const projSpeed = f.champId === 'rex' ? 120 : 60;
+        const projSpeed = f.champId === 'rex' ? 120 : f.champId === 'pooh' ? 30 : 60;
         _aim.addScaledVector(t.vel, (dist / projSpeed) * THREE.MathUtils.lerp(0.4, 1, diff));
       }
     } else {
@@ -274,8 +274,12 @@ export class BotController {
       // second cast of a two-part ultimate
       if (kit.hints?.().ult === 'x2' && dist < 12 && Math.random() < dt * 1.5) it.ultimatePressed = true;
     } else {
-      if (onTarget && cds.sig <= 0 && dist < (f.champId === 'sera' ? 38 : 75) && this.chargeT <= 0 && Math.random() < dt * (0.6 + diff)) it.skillPressed = true;
-      if (onTarget && dist < 90) {
+      // Pooh's Panzata is a belly bump: only up close
+      const sigReach = f.champId === 'sera' ? 38 : f.champId === 'pooh' ? 8 : 75;
+      if (onTarget && cds.sig <= 0 && dist < sigReach && this.chargeT <= 0 && Math.random() < dt * (0.6 + diff)) it.skillPressed = true;
+      // Pooh: the balloon to get away from a brawl
+      if (f.champId === 'pooh' && cds.sec <= 0 && dist < 6 && f.hp < f.maxHp * 0.7 && Math.random() < dt * 0.5) it.secondaryPressed = true;
+      if (onTarget && dist < (f.champId === 'pooh' ? 46 : 90)) {
         // Bass Charge: release right as it fills (perfect window 0.95-1.13 s); weak bots overshoot
         if (f.champId === 'rex' && cds.sec <= 0 && dist > 25 && this.chargeT <= 0 && Math.random() < dt * 0.4) this.chargeT = 0.98 + Math.random() * THREE.MathUtils.lerp(0.5, 0.12, diff);
         if (this.chargeT > 0) {
@@ -296,7 +300,10 @@ export class BotController {
           it.secondary = true;
         }
       }
-      if (cds.abi <= 0 && dist < (f.champId === 'sera' ? 8 : 30) && Math.random() < dt * (0.5 + diff)) it.abilityPressed = true;
+      if (f.champId === 'pooh') {
+        // Think, Think, Think: only with room to stand still (or when it's worth the risk)
+        if (cds.abi <= 0 && dist > 12 && (f.hp < f.maxHp * 0.8 || cds.sig > 0) && Math.random() < dt * (0.4 + diff)) it.abilityPressed = true;
+      } else if (cds.abi <= 0 && dist < (f.champId === 'sera' ? 8 : 30) && Math.random() < dt * (0.5 + diff)) it.abilityPressed = true;
       if (f.ult >= 1 && dist < 45 && onTarget && Math.random() < dt * 0.6) it.ultimatePressed = true;
     }
   }

@@ -51,6 +51,10 @@ export interface ChampionVisual {
   anims: ChampionAnimSet;
   /** tints the weapon glow (element enchantments...), null = back to normal */
   weaponGlow?(color: THREE.ColorRepresentation | null): void;
+  /** shows or hides a named prop of the model (Pooh's throwing pot...) */
+  prop?(name: string, on: boolean): void;
+  /** sees every animation event of its clips first (facial swaps such as Pooh shutting his eyes) */
+  onAnimEvent?(ev: string): void;
   /**
    * Scales the positional parts of the animations (weapon targets, hip offsets) when a body
    * uses the clips of a champion with different proportions (imported models). Default 1.

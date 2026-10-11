@@ -4,8 +4,9 @@ import type { HitInfo, MatchContext } from '../game/types';
 import { neon, toon, addOutline } from '../render/toon';
 import { noteGeometry } from '../fighter/shapes';
 import { Shape } from '../vfx/Particles';
+import { makeBeehive, makeHoneyPot } from '../champions/pooh';
 
-export type ProjKind = 'bolt' | 'orb' | 'note' | 'grenade' | 'blade' | 'star';
+export type ProjKind = 'bolt' | 'orb' | 'note' | 'grenade' | 'blade' | 'star' | 'pot' | 'hive';
 
 export interface ProjectileSpec {
   owner: Fighter;
@@ -27,6 +28,10 @@ export interface ProjectileSpec {
   slow?: number;
   /** explode with this radius on impact / expiry (area damage) */
   explode?: number;
+  /** explosions: upward knockback at the centre (default 6) */
+  kbUp?: number;
+  /** explosions: the generic fireball, boom and camera shake (default true; false = onBurst draws it) */
+  blast?: boolean;
   headshots?: boolean;
   /** damage falloff with distance travelled: full up to `from` m, down to `min` at `to` m */
   falloff?: { from: number; to: number; min: number };
@@ -210,6 +215,13 @@ export class Projectiles {
       glow.userData = { tint: 1, k: 1.3 };
       g.add(star, glow);
       g.userData.twirl = 1;
+    } else if (kind === 'pot') {
+      // Pooh's HUNNY pot, tumbling end over end
+      g.add(makeHoneyPot());
+      g.userData.spin = 1;
+    } else if (kind === 'hive') {
+      g.add(makeBeehive());
+      g.userData.spin = 1;
     } else {
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), toon({ color: 0x1b1622, spec: 0.6 }));
       addOutline(body, 1.6);
@@ -348,9 +360,11 @@ export class Projectiles {
 
   private detonate(p: Proj, m: MatchContext): void {
     const r = p.explode ?? 3;
-    m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
-    m.audio.play('explosion', p.pos, 0.9);
-    m.shake(0.25, p.pos);
+    if (p.blast !== false) {
+      m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
+      m.audio.play('explosion', p.pos, 0.9);
+      m.shake(0.25, p.pos);
+    }
     p.onBurst?.(p.pos.clone());
     if (p.visualOnly || !m.isAuthority(p.owner)) return;
     for (const f of m.fighters) {
@@ -362,7 +376,7 @@ export class Projectiles {
       const core = p.corePart && d <= (p.coreRadius ?? 0) + CAPSULE_R;
       const fall = core ? 1 : THREE.MathUtils.clamp(1 - Math.max(0, d - 1) / (r + 0.5), 0.35, 1);
       const kb = _b.subVectors(_a, p.pos).setY(0).normalize().multiplyScalar((p.kb ?? 10) * fall);
-      kb.y = 6 * fall;
+      kb.y = (p.kbUp ?? 6) * fall;
       m.reportHit(p.owner, f, { slot: p.slot, part: core ? p.corePart! : p.part, scale: fall, kb: kb.clone(), stun: p.stun, slow: p.slow, at: _a.clone(), blockable: false });
       p.onHit?.(f);
     }

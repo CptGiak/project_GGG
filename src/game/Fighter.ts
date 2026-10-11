@@ -1058,6 +1058,7 @@ export class Fighter {
     // anim events -> kit
     if (this.anim.action.events.length) {
       for (const ev of this.anim.action.events) {
+        this.visual.onAnimEvent?.(ev);
         if (this.tauntT > 0 || this.anim.action.name === 'taunt') this.tauntEvent(ev, m);
         else this.kit?.onAnimEvent(this, ev, m);
       }
