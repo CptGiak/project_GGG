@@ -24,6 +24,9 @@ const _q = new THREE.Quaternion();
 const WHITE = new THREE.Color(1, 1, 1);
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** height of a tiny (shapeshifted) fighter's body above its feet */
+export const TINY_Y = 1.0;
+
 export function forwardOf(yaw: number, out: THREE.Vector3): THREE.Vector3 {
   return out.set(Math.sin(yaw), 0, Math.cos(yaw));
 }
@@ -147,6 +150,8 @@ export class Fighter {
   stealthRadius = 0;
   /** briefly visible while stealthed (attacking reveals) */
   reveal = 0;
+  /** shapeshifted into something small (Elisabbat's bat): hit tests use a small sphere at chest height */
+  tiny = false;
   /** see-through look for the stealthed player's own view */
   private ghost = false;
   private ghostSaved = new Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }>();
@@ -205,7 +210,7 @@ export class Fighter {
 
   /** chest position (aim target) */
   chest(out: THREE.Vector3): THREE.Vector3 {
-    return out.copy(this.pos).setY(this.pos.y + 1.25);
+    return out.copy(this.pos).setY(this.pos.y + (this.tiny ? TINY_Y : 1.25));
   }
 
   head(out: THREE.Vector3): THREE.Vector3 {
@@ -226,6 +231,7 @@ export class Fighter {
     this.invuln = this.dashIv = this.dodgeT = this.dodgeCd = this.counterT = this.speedPeak = 0;
     this.offbeatT = this.punishT = this.dodges = 0;
     this.stealth = this.reveal = this.stealthRadius = 0;
+    this.tiny = false;
     this.setGhost(false);
     this.spawnProtect = MATCH_RULES.spawnProtectSec;
     this.hooks.forEach((h) => h.reset());
@@ -1042,6 +1048,9 @@ export class Fighter {
     st.lookYaw = THREE.MathUtils.radToDeg(wrapAngle(this.aimYaw - this.facing));
     st.lookPitch = THREE.MathUtils.radToDeg(-this.aimPitch);
     st.aim = damp(st.aim, this.ctrl.aim, 12, dt);
+    // free to vibe: standing still, nothing to do
+    const free = this.alive && this.grounded && hspeed < 0.6 && this.stun <= 0 && !this.anim.action.active && st.aim < 0.1 && this.ctrl.aim === 0;
+    st.groove = damp(st.groove, free ? 1 : 0, free ? 1.5 : 10, dt);
     // strafing: local movement relative to facing
     if (faceAim && this.grounded && hspeed > 0.5) {
       rightOf(this.facing, _r);
@@ -1058,6 +1067,7 @@ export class Fighter {
     // anim events -> kit
     if (this.anim.action.events.length) {
       for (const ev of this.anim.action.events) {
+        this.visual.onAnimEvent?.(ev);
         if (this.tauntT > 0 || this.anim.action.name === 'taunt') this.tauntEvent(ev, m);
         else this.kit?.onAnimEvent(this, ev, m);
       }

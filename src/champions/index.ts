@@ -6,6 +6,8 @@ import { buildKaiserGlb } from './kaiserGlb';
 import { buildNova } from './nova';
 import { buildRex } from './rex';
 import { buildSera } from './sera';
+import { buildPooh } from './pooh';
+import { buildElisabbat } from './elisabbat';
 import { championModel } from './glbModels';
 import { buildLolGlb } from './lolGlb';
 
@@ -14,6 +16,8 @@ export const VISUAL_BUILDERS: Record<string, () => ChampionVisual> = {
   nova: buildNova,
   rex: buildRex,
   sera: buildSera,
+  pooh: buildPooh,
+  elisabbat: buildElisabbat,
 };
 
 /** Champions with a Blender-made model (public/models/<id>.glb, see tools/blender). */

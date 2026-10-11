@@ -43,6 +43,7 @@ export class RexKit extends BaseKit {
   private ultShots = 0;
   private ultT = 0;
   private ultTargets: Fighter[] = [];
+  private kickSide = 1;
 
   constructor() {
     super('rex');
@@ -146,8 +147,14 @@ export class RexKit extends BaseKit {
     m.projectiles.spawn({ owner: f, kind: 'bolt', pos: from, vel: dir.clone().multiplyScalar(150), radius: 0.12, life: 1.4, slot: 'atk', part: 'shot', color: f.champ.colors[0], color2: f.champ.colors[1], headshots: true, falloff: BEAT_FALLOFF });
     m.vfx.muzzle(from, dir, f.champ.colors[0]);
     m.audio.play('shot', from, 0.85);
-    f.anim.recoil = Math.min(1, f.anim.recoil + 0.55);
+    this.shotKick(f);
     m.broadcastAction(f, { a: 'shot', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
+  }
+
+  /** one Beat Shot: a short climb with a random lean, alternating roll so a burst wobbles */
+  private shotKick(f: Fighter): void {
+    this.kickSide = -this.kickSide;
+    f.anim.kick({ pitch: 3.2 + Math.random() * 1.2, back: 0.035, roll: this.kickSide * (0.6 + Math.random() * 0.6), yaw: (Math.random() - 0.5) * 1.2, body: 0.35 });
   }
 
   /** the heavy slug: big bolt, headshots crit, a hit cuts every other cooldown */
@@ -181,7 +188,7 @@ export class RexKit extends BaseKit {
     m.vfx.beam(from, end, c1, 0.09, 0.14);
     m.vfx.beam(from, end, 0xffffff, 0.03, 0.1);
     m.audio.play('slug', from, 1);
-    f.anim.recoil = 1;
+    f.anim.kick({ pitch: 16, back: 0.1, roll: 3, body: 1 });
     m.shake(0.2, from);
   }
 
@@ -244,7 +251,7 @@ export class RexKit extends BaseKit {
         }
       }
     }
-    f.anim.recoil = 1;
+    f.anim.kick({ pitch: 9 + 8 * Math.min(k, 1.4), back: 0.07 + 0.05 * Math.min(k, 1.4), roll: 2, body: 1 });
     f.vel.addScaledVector(_v, -6 * k);
     m.shake(0.35 * fxK, from);
     m.broadcastAction(f, { a: 'beam', p: [from.x, from.y, from.z], d: [to.x, to.y, to.z], n: fxK });
@@ -326,7 +333,7 @@ export class RexKit extends BaseKit {
         m.projectiles.spawn({ owner: f, kind: 'bolt', pos: p, vel: d.clone().multiplyScalar(150), radius: 0.12, life: 1.4, slot: 'atk', part: 'shot', color: f.champ.colors[0], color2: f.champ.colors[1], visualOnly: true });
         m.vfx.muzzle(p, d, f.champ.colors[0]);
         m.audio.play('shot', p, 0.85);
-        f.anim.recoil = Math.min(1, f.anim.recoil + 0.55);
+        this.shotKick(f);
         if (f.anim.action.name !== 'aim') f.anim.play('aim', { hold: true });
         this.aimHold = 0.55;
         break;

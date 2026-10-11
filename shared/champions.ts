@@ -62,8 +62,8 @@ export interface ChampionData {
   passive?: { name: string; desc: string };
 }
 
-export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera' | 'akali' | 'qiyana' | 'locke';
-export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera', 'akali', 'qiyana', 'locke'];
+export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera' | 'akali' | 'qiyana' | 'locke' | 'pooh' | 'elisabbat';
+export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera', 'akali', 'qiyana', 'locke', 'pooh', 'elisabbat'];
 
 /** champions modelled on League of Legends ones (models from tools/blender/build_lol.py) */
 export const LOL_CHAMPIONS: ChampionId[] = ['akali', 'qiyana', 'locke'];
@@ -216,6 +216,52 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
       sec: { slot: 'sec', key: 'C', name: 'Soul Ignition', desc: 'L\'anima si accende per 4 s: più velocità e il 25% dei danni inflitti torna in vita (max 220).', cooldown: 18, damage: {}, range: 0, maxRate: 0 },
       abi: { slot: 'abi', key: 'F', name: 'Ashen Pursuit', desc: 'Teletrasporto fino a 10 m e fendente circolare all\'arrivo. Il colpo seguente entro 4 s ti fa scattare sul bersaglio.', cooldown: 9, damage: { e: 90 }, range: 16, maxRate: 4 },
       ult: { slot: 'ult', key: 'R', name: 'Purgatory', desc: 'Lancia il reliquiario nel punto mirato: chiodi ad area che feriscono e rallentano. Per 3 s chi scende sotto il 25% di vita nel cerchio viene sigillato. Raccoglilo per recuperare ultimate.', cooldown: 0, damage: { purg: 140, seal: 300 }, range: 36, maxRate: 8 },
+    },
+  },
+  // ---- guest stars ----------------------------------------------------------------------------
+  pooh: {
+    id: 'pooh',
+    name: 'POOH',
+    title: 'Orso di Poco Cervello',
+    role: 'ranged',
+    difficulty: 1,
+    hp: 1100,
+    speed: 0.96,
+    ultCharge: 1400,
+    colors: ['#ffb627', '#e5383b'],
+    weapon: 'Barattoli di miele',
+    bio: 'Orsetto del Bosco dei Cento Acri, goloso di miele fino all\'ultima goccia. È lento a pensare, ma quando gli viene un\'idea sono guai per tutti.',
+    passive: { name: 'Ghiotto di Miele', desc: 'I barattoli lasciano pozze di miele che rallentano i nemici. Pooh le lecca passandoci sopra: si cura (una pozza ogni 3 s).' },
+    abilities: {
+      sig: { slot: 'sig', key: 'LMB', name: 'Panzata', desc: 'Gonfia la pancia e carica in avanti: chi viene colpito rimbalza via stordito (e Pooh rimbalza indietro). Più arrivi veloce, più fa male.', cooldown: 5, damage: { bump: 95 }, range: 14, maxRate: 3, momentum: ['bump'] },
+      atk: { slot: 'atk', key: 'RMB', name: 'Barattolo di Miele', desc: 'Tieni premuto per lanciare barattoli a parabola: si rompono in uno schizzo che sporca di miele, rallenta e lascia una pozza appiccicosa.', cooldown: 0, damage: { pot: 58, big: 92, goo: 6 }, range: 45, maxRate: 12 },
+      sec: { slot: 'sec', key: 'C', name: 'Nuvoletta Nera', desc: 'Si aggrappa a un palloncino blu e sale fluttuando per 4 s (tira i barattoli anche da lassù). Premi di nuovo C per lasciarlo.', cooldown: 12, damage: {}, range: 0, maxRate: 0 },
+      abi: { slot: 'abi', key: 'F', name: 'Pensa, Pensa, Pensa', desc: 'Si ferma e si picchietta la testa per pensare. Se nessuno lo stordisce gli viene un\'Idea: si cura, la Panzata torna pronta e i 3 barattoli seguenti diventano Super Barattoli.', cooldown: 16, damage: {}, range: 0, maxRate: 0 },
+      ult: { slot: 'ult', key: 'R', name: 'Sciame d\'Api', desc: 'Lancia un alveare nel punto mirato: per 4,5 s le api inseguono i nemici vicini pungendoli e rallentandoli. Chi è sporco di miele viene punto più forte.', cooldown: 0, damage: { hive: 120, sting: 20, sting2: 30 }, range: 50, maxRate: 16, stream: ['sting', 'sting2'] },
+    },
+  },
+  // ---- Elisabbat: vampire princess (modelled on the user's Meshy model) -----------------------
+  elisabbat: {
+    id: 'elisabbat',
+    name: 'ELISABBAT',
+    title: 'La Principessa Vampira',
+    role: 'melee',
+    difficulty: 2,
+    hp: 960,
+    speed: 1.08,
+    ultCharge: 1400,
+    colors: ['#a24cff', '#ff2e6a'],
+    weapon: 'Artigli e pipistrelli',
+    bio: 'Erede al trono dei vampiri di Transilvania, fuggita dalla corte per diventare una star. Elegante, letale e sempre assetata: con un morso la vita del nemico diventa la sua.',
+    // the bat transformation opens a short invulnerable window (the cooldown is 11 s)
+    invulnActs: { bat: { sec: 0.45, every: 9 } },
+    passive: { name: 'Marchio di Sangue', desc: 'Artigli e pipistrelli marchiano i nemici (max 3, per 5 s). Spellvamp consuma i marchi: più danni e più cura.' },
+    abilities: {
+      sig: { slot: 'sig', key: 'LMB', name: 'Spellvamp', desc: 'Scatta sul nemico mirato e lo morde: lo blocca, gli ruba vita e ti cura di metà dei danni (+35 per Marchio). Anche in picchiata dal pipistrello.', cooldown: 6, damage: { bite: 100, feast: 105 }, range: 14, maxRate: 3 },
+      atk: { slot: 'atk', key: 'RMB', name: 'Artigli di Velluto', desc: 'Combo di 3 colpi di artigli, l\'ultimo a X: ogni colpo lascia un Marchio di Sangue. In aria: picchiata con gli artigli.', cooldown: 0, damage: { c1: 44, c2: 44, c3: 74, air: 58 }, range: 7, maxRate: 8, momentum: ['c1', 'c2', 'c3', 'air'], backstab: ['c1', 'c2', 'c3', 'air'] },
+      sec: { slot: 'sec', key: 'C', name: 'Forma di Pipistrello', desc: 'Per 3 s vola come pipistrello dove miri (SPAZIO sale): piccola, difficile da colpire, invulnerabile all\'inizio. C o un attacco per tornare umana.', cooldown: 11, damage: {}, range: 0, maxRate: 0 },
+      abi: { slot: 'abi', key: 'F', name: 'Sciame di Pipistrelli', desc: 'Scaglia 6 pipistrelli che inseguono i nemici vicino al mirino: ogni morso marchia e rallenta.', cooldown: 8, damage: { bat: 26 }, range: 40, maxRate: 10 },
+      ult: { slot: 'ult', key: 'R', name: 'Notte Eterna', desc: 'Ali spettrali e un vortice di pipistrelli per 3 s: ferisce e rallenta chi è vicino, poi i pipistrelli si avventano. Ti cura del 30% dei danni.', cooldown: 0, damage: { storm: 20, finale: 150 }, range: 16, maxRate: 16, stream: ['storm'] },
     },
   },
 };

@@ -2,7 +2,26 @@ import * as THREE from 'three';
 import { applyPose, Pose, setWorldQuat, solveTwoBone, type WeaponKey } from './Animator';
 import { ActionLayer, Locomotion, newLocoState, type PlayOpts } from './locomotion';
 import { updateBodySpheres } from './Cloth';
+import { Kick } from './Springs';
+import { Beat } from '../core/Beat';
 import type { ChampionVisual } from '../champions/types';
+
+/**
+ * One weapon kick, in degrees / metres at the peak. The springs throw the weapon and let it
+ * settle with a small overshoot; the torso absorbs part of it so the arms never just jerk.
+ */
+export interface KickSpec {
+  /** muzzle climb (deg) */
+  pitch?: number;
+  /** push back along the barrel (m) */
+  back?: number;
+  /** roll (deg, sign = direction) */
+  roll?: number;
+  /** sideways yaw (deg, sign = direction) */
+  yaw?: number;
+  /** how much the torso / hips take (0 arms only ... 1 heavy weapon, whole body rocks) */
+  body?: number;
+}
 
 const _p = new THREE.Vector3();
 const _pole = new THREE.Vector3();
@@ -13,6 +32,8 @@ const _inv = new THREE.Quaternion();
 const _off = new THREE.Vector3();
 const _e = new THREE.Euler();
 const _aq = new THREE.Quaternion();
+const _kq = new THREE.Quaternion();
+const _kp = new THREE.Vector3();
 /** stand-in "weapon" for an empty hand: the key then targets the wrist + hand frame directly */
 const BARE_HAND = new THREE.Object3D();
 /** elbow pole offsets (x mirrored per side): armed hands keep the elbows low, bare hands flare out */
@@ -31,8 +52,14 @@ export class FighterAnimator {
   readonly pose = new Pose();
   /** wind applied to cloth (world space, m/s^2) */
   readonly wind = new THREE.Vector3();
-  /** weapon recoil impulse (0..1, decays) */
-  recoil = 0;
+  /** recoil springs (deg, m) */
+  private readonly kp = new Kick(6.5, 0.42);
+  private readonly kb = new Kick(8.5, 0.5);
+  private readonly kr = new Kick(5.5, 0.35);
+  private readonly ky = new Kick(6, 0.4);
+  private kickBody = 0.5;
+  /** music groove weight (0..1, eased), driven by st.groove */
+  private grooveW = 0;
   /** procedural hit reaction: push direction in model space (x = left, z = forward) */
   private reactX = 0;
   private reactZ = 0;
@@ -42,12 +69,15 @@ export class FighterAnimator {
   tumble = 0;
   /** shoulder pivot used to rotate the aimed weapon (model space) */
   private readonly aimPivot: THREE.Vector3;
+  /** base of the spine (model space): the torso rocks around it when it absorbs a kick */
+  private readonly spinePivot: THREE.Vector3;
 
   constructor(readonly v: ChampionVisual) {
     this.loco = new Locomotion(v.anims);
     const r = v.rig.restPos;
     // hips + spine + chest + shoulder drop
     this.aimPivot = new THREE.Vector3(-0.08, r[0].y + r[1].y + r[2].y + v.rig.spec.shoulderDrop, 0);
+    this.spinePivot = new THREE.Vector3(0, r[0].y + r[1].y, 0);
   }
 
   play(name: string, opts: PlayOpts = {}): boolean {
@@ -104,18 +134,15 @@ export class FighterAnimator {
       pose.preEuler('chest', lp * 0.3 * st.aim, ly * 0.25 * st.aim, 0);
     }
 
-    // aimed weapons follow the camera pitch/yaw around the shoulder pivot (+ recoil)
-    this.recoil = Math.max(0, this.recoil - dt * 9);
+    // aimed weapons follow the camera pitch/yaw around the shoulder pivot
     if (st.aim > 0.001 && pose.wR.w > 0.001) {
-      _e.set(lp * THREE.MathUtils.DEG2RAD * st.aim - this.recoil * 0.12, ly * THREE.MathUtils.DEG2RAD * st.aim, 0, 'YXZ');
+      _e.set(lp * THREE.MathUtils.DEG2RAD * st.aim, ly * THREE.MathUtils.DEG2RAD * st.aim, 0, 'YXZ');
       _aq.setFromEuler(_e);
       pose.wR.p.sub(this.aimPivot).applyQuaternion(_aq).add(this.aimPivot);
       pose.wR.q.premultiply(_aq);
-      if (this.recoil > 0) {
-        _off.set(0, 0, -1).applyQuaternion(pose.wR.q);
-        pose.wR.p.addScaledVector(_off, this.recoil * 0.08);
-      }
     }
+    this.applyKick(dt, pose);
+    this.applyGroove(dt, pose);
 
     applyPose(pose, this.v.rig);
     this.v.root.updateMatrixWorld(true);
@@ -126,6 +153,82 @@ export class FighterAnimator {
       updateBodySpheres(this.v.bodySpheres);
       for (const c of this.v.cloth) c.update(dt, this.wind);
     }
+  }
+
+  /**
+   * Fire a weapon kick (adds to any kick still ringing). Light rifle shot ~{ pitch: 3, back: 0.035 },
+   * heavy slug ~{ pitch: 16, back: 0.1, body: 1 }.
+   */
+  kick(k: KickSpec): void {
+    if (k.pitch) this.kp.hit(k.pitch);
+    if (k.back) this.kb.hit(k.back);
+    if (k.roll) this.kr.hit(k.roll);
+    if (k.yaw) this.ky.hit(k.yaw);
+    this.kickBody = k.body ?? 0.5;
+  }
+
+  /** weapon recoil: rotate about the stock (shoulder contact), push back, torso absorbs */
+  private applyKick(dt: number, pose: Pose): void {
+    const p = this.kp.update(dt);
+    const b = this.kb.update(dt);
+    const r = this.kr.update(dt);
+    const y = this.ky.update(dt);
+    if (pose.wR.w < 0.001 || (p === 0 && b === 0 && r === 0 && y === 0)) return;
+    const D = THREE.MathUtils.DEG2RAD;
+    const pivotZ = this.v.stockZ ?? -0.3;
+    // the stock on the shoulder is the hinge: grip = stock + R * (grip - stock)
+    _off.set(0, 0, pivotZ).applyQuaternion(pose.wR.q);
+    _kp.copy(pose.wR.p).add(_off);
+    _e.set(-p * D, y * D, r * D, 'YXZ');
+    _kq.setFromEuler(_e);
+    pose.wR.q.multiply(_kq);
+    _off.set(0, 0, -pivotZ).applyQuaternion(pose.wR.q);
+    pose.wR.p.copy(_kp).add(_off);
+    // shove back along the barrel
+    _off.set(0, 0, -b).applyQuaternion(pose.wR.q);
+    pose.wR.p.add(_off);
+    // the body takes part of it: chest and spine rock back, the head stays on target
+    const a = this.kickBody;
+    const lean = (p * 0.32 + b * 70) * a;
+    pose.preEuler('spine', -lean * 0.4, -y * 0.3 * a, -r * 0.2 * a);
+    pose.preEuler('chest', -lean * 0.6, -y * 0.4 * a, -r * 0.3 * a);
+    pose.preEuler('head', lean * 0.55, 0, r * 0.15 * a);
+    pose.preEuler('shoulderR', -p * 0.25 * a, 0, -p * 0.15 * a);
+    // move the weapon with the chest so the arms do not stretch
+    _e.set(-lean * D, 0, 0, 'YXZ');
+    _kq.setFromEuler(_e);
+    pose.wR.p.sub(this.spinePivot).applyQuaternion(_kq).add(this.spinePivot);
+    pose.wR.q.premultiply(_kq);
+    // heavy kicks rock the hips back and bend the knees a touch
+    if (a > 0.6) {
+      const h = (a - 0.6) / 0.4;
+      pose.hips.z -= b * 0.55 * h;
+      pose.hips.y -= Math.abs(b) * 0.25 * h;
+      pose.addEuler('thighL', -b * 60 * h, 0, 0).addEuler('thighR', -b * 60 * h, 0, 0);
+      pose.addEuler('shinL', b * 90 * h, 0, 0).addEuler('shinR', b * 90 * h, 0, 0);
+    }
+  }
+
+  /**
+   * Music groove: a head nod on the beat and a small bounce, for champions whose anim set asks
+   * for it (st.groove is the gameplay's "free to vibe" weight: idle, grounded, not acting).
+   */
+  private applyGroove(dt: number, pose: Pose): void {
+    const amt = this.v.anims.groove ?? 0;
+    const target = amt * this.st.groove;
+    this.grooveW += (target - this.grooveW) * (1 - Math.exp(-dt * (target > this.grooveW ? 2.5 : 8)));
+    const w = this.grooveW;
+    if (w < 0.01) return;
+    // the beat phase drives the nod (down on the beat), the kick envelope adds a snap
+    const ph = (Beat.beats % 1) * Math.PI * 2;
+    const nod = Math.pow(Math.max(0, Math.cos(ph)), 3) * 0.7 + Beat.kick * 0.3;
+    const sway = Math.sin(ph * 0.5);
+    pose.preEuler('head', 9 * nod * w, 4 * sway * w, 0);
+    pose.preEuler('neck', 4 * nod * w, 0, 0);
+    pose.preEuler('chest', 2.5 * nod * w, 3 * sway * w, -1.5 * sway * w);
+    pose.preEuler('shoulderL', 0, 0, 3 * Beat.snare * w);
+    pose.preEuler('shoulderR', 0, 0, -3 * Beat.snare * w);
+    pose.hips.y -= 0.018 * nod * w;
   }
 
   private applyReact(dt: number, pose: Pose): void {

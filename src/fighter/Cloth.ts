@@ -52,6 +52,8 @@ const _dir = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _ref = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _fwd = new THREE.Vector3();
 
 export class ClothChain {
   readonly p: THREE.Vector3[] = [];
@@ -379,6 +381,11 @@ export interface SheetOptions {
   smoothV?: number;
   /** horizontal stretch allowed before the constraint kicks in (flare) */
   slackH?: number;
+  /**
+   * the rest shape turns only with the anchor's heading, not its pitch / roll: long hair keeps
+   * hanging down when the head bows or tilts
+   */
+  restYawOnly?: boolean;
 }
 
 export class ClothSheet {
@@ -437,9 +444,24 @@ export class ClothSheet {
         idxInner.push(layer + a, layer + b, layer + c, layer + b, layer + d, layer + c);
       }
     }
+    // u across the columns, v (and aT, for gradientToon) from the anchors down to the hem
+    const uv = new Float32Array(layer * 2 * 2);
+    const tAttr = new Float32Array(layer * 2);
+    for (let l = 0; l < 2; l++) {
+      for (let v = 0; v < V; v++) {
+        for (let u = 0; u < U; u++) {
+          const i = l * layer + v * U + u;
+          uv[i * 2] = u / (o.closed ? U : U - 1);
+          uv[i * 2 + 1] = v / (V - 1);
+          tAttr[i] = v / (V - 1);
+        }
+      }
+    }
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    this.geo.setAttribute('aT', new THREE.BufferAttribute(tAttr, 1));
     this.geo.setAttribute('aOutline', new THREE.BufferAttribute(new Float32Array(layer * 2).fill(1), 1));
     this.geo.setIndex([...idxOuter, ...idxInner]);
     this.geo.addGroup(0, idxOuter.length, 0);
@@ -476,6 +498,10 @@ export class ClothSheet {
   private computeAnchors(): void {
     const o = this.o;
     o.anchor.getWorldQuaternion(_q);
+    if (o.restYawOnly) {
+      _fwd.set(0, 0, 1).applyQuaternion(_q);
+      _q.setFromAxisAngle(_up, Math.atan2(_fwd.x, _fwd.z));
+    }
     for (let c = 0; c < this.cols; c++) {
       const col = o.columns[c];
       o.anchor.localToWorld(this.p[this.idx(c, 0)].copy(col.offset));

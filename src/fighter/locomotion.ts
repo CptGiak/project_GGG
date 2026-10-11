@@ -17,6 +17,8 @@ export interface ChampionAnimSet {
   flyArms: Pose;
   /** run arm swing multipliers [left, right] */
   armSwing: [number, number];
+  /** head-nod-to-the-beat amount while free (0 none ... 1 full groove) */
+  groove?: number;
   /** off-hand IK weight in locomotion (two-handed weapons) */
   offhandLoco: number;
   /** extra forward lean while running, degrees */
@@ -43,10 +45,12 @@ export interface LocoState {
   lookPitch: number;
   lookYaw: number;
   aim: number;
+  /** 0..1: free to vibe to the music (idle, grounded, no action) */
+  groove: number;
 }
 
 export function newLocoState(): LocoState {
-  return { time: 0, runPhase: 0, runIntensity: 0, vy: 0, wRun: 0, wAir: 0, wFly: 0, swing: 0, wDash: 0, wLand: 0, strafe: 0, back: 0, lookPitch: 0, lookYaw: 0, aim: 0 };
+  return { time: 0, runPhase: 0, runIntensity: 0, vy: 0, wRun: 0, wAir: 0, wFly: 0, swing: 0, wDash: 0, wLand: 0, strafe: 0, back: 0, lookPitch: 0, lookYaw: 0, aim: 0, groove: 0 };
 }
 
 const tmpA = new Pose();
