@@ -141,7 +141,9 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
   const keys = resolveBindings(s.bindings);
   let gameMode: ModeId = s.mode ?? 'dm';
   const root = h('div', { class: 'screen fade-in' });
-  const cards = h('div', { class: ids.length > 4 ? 'cs-cards many' : 'cs-cards' });
+  // up to four champions: one column of big cards; more: a two-column grid that scrolls when it
+  // runs out of room, always above the options (same column, never under them)
+  const cards = h('div', { class: ids.length > 4 ? 'cs-cards grid' : 'cs-cards' });
   const info = h('div', { class: 'cs-info' });
   const renderInfo = () => {
     const c = CHAMPIONS[champ];
@@ -159,21 +161,68 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
       })),
     );
     cards.querySelectorAll('.cs-card').forEach((e) => e.classList.toggle('sel', (e as HTMLElement).dataset.id === champ));
+    revealSelected();
+  };
+  /** keeps the selected card inside the (scrolling) roster */
+  const revealSelected = () => {
+    const el = cards.querySelector<HTMLElement>('.cs-card.sel');
+    const scrolls = cards.scrollHeight > cards.clientHeight + 1;
+    cards.classList.toggle('scroll', scrolls);
+    if (!el || !scrolls) return;
+    const pad = el.offsetHeight * 0.4;
+    if (el.offsetTop - pad < cards.scrollTop) cards.scrollTop = el.offsetTop - pad;
+    else if (el.offsetTop + el.offsetHeight + pad > cards.scrollTop + cards.clientHeight) cards.scrollTop = el.offsetTop + el.offsetHeight + pad - cards.clientHeight;
+  };
+  const select = (id: ChampionId) => {
+    if (champ === id) return;
+    champ = id;
+    cb.sfx('uiSelect');
+    cb.pick(id);
+    renderInfo();
   };
   for (const id of ids) {
     const c = CHAMPIONS[id];
-    const card = h('div', { class: 'cs-card', 'data-id': id, style: `--c1:${c.colors[0]};--c2:${c.colors[1]}`, onclick: () => {
-      if (champ !== id) {
-        champ = id;
-        cb.sfx('uiSelect');
-        cb.pick(id);
-        renderInfo();
-      }
-    }, onmouseenter: () => cb.sfx('uiMove') },
+    const card = h('div', { class: 'cs-card', 'data-id': id, tabindex: 0, role: 'button', 'aria-label': `${c.name}, ${c.title}`, style: `--c1:${c.colors[0]};--c2:${c.colors[1]}`, onclick: () => select(id), onmouseenter: () => cb.sfx('uiMove'), onkeydown: (e: Event) => {
+      const k = (e as KeyboardEvent).code;
+      if (k !== 'Enter' && k !== 'NumpadEnter' && k !== 'Space') return;
+      // Enter on a focused card picks it (the screen's Enter would start the match)
+      e.preventDefault();
+      e.stopPropagation();
+      select(id);
+    } },
     h('div', { class: 'role' }, c.role === 'melee' ? 'MELEE' : 'RANGED'),
     h('div', { class: 'in' }, h('div', { class: 'nm' }, c.name), h('div', { class: 'tt' }, c.title)));
     cards.append(card);
   }
+  // keyboard: arrows move through the roster, Enter fights (practice), Esc goes back
+  const onKey = (e: KeyboardEvent) => {
+    if (!root.isConnected) {
+      window.removeEventListener('keydown', onKey);
+      return;
+    }
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.querySelector('.overlay')) return;
+    const cols = cards.classList.contains('grid') ? Math.max(1, getComputedStyle(cards).gridTemplateColumns.split(' ').length) : 1;
+    const i = ids.indexOf(champ);
+    let j = -1;
+    if (e.code === 'ArrowDown') j = i + cols;
+    else if (e.code === 'ArrowUp') j = i - cols;
+    else if (e.code === 'ArrowRight') j = i + 1;
+    else if (e.code === 'ArrowLeft') j = i - 1;
+    else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && mode === 'practice') {
+      e.preventDefault();
+      confirm(true);
+      return;
+    } else if (e.code === 'Escape') {
+      e.preventDefault();
+      cb.sfx('uiBack');
+      cb.back();
+      return;
+    } else return;
+    e.preventDefault();
+    if (j >= 0 && j < ids.length) select(ids[j]);
+  };
+  window.addEventListener('keydown', onKey);
   // options
   const opts = h('div', { class: 'cs-opts' });
   let roomInput: HTMLInputElement | null = null;
@@ -225,13 +274,20 @@ export function champSelect(mode: 'practice' | 'online', s: Settings, cb: Select
   else bottom.append(h('div', { class: 'btn dark', onclick: () => confirm(false) }, h('span', {}, 'ENTRA IN STANZA')), h('div', { class: 'btn red', onclick: () => confirm(true) }, h('span', {}, 'PARTITA VELOCE')));
   root.append(
     h('div', { class: 'cs-head' }, 'SCEGLI IL TUO CAMPIONE', h('small', {}, mode === 'practice' ? 'ALLENAMENTO CONTRO BOT' : 'ONLINE PVP · DEATHMATCH E RIFLETTORE')),
-    cards,
+    // roster and options share one column: the options always sit below the last card
+    h('div', { class: 'cs-left' }, cards, opts),
     info,
-    opts,
     bottom,
     h('div', { class: 'btn dark back', onclick: () => { cb.sfx('uiBack'); cb.back(); } }, h('span', {}, '◀ INDIETRO')),
   );
   renderInfo();
+  // the roster's size is only known once the screen is laid out (and changes with the window)
+  requestAnimationFrame(revealSelected);
+  const onResize = () => {
+    if (!root.isConnected) window.removeEventListener('resize', onResize);
+    else revealSelected();
+  };
+  window.addEventListener('resize', onResize);
   return root;
 }
 

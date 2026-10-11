@@ -78,6 +78,9 @@ Visualizzatore modelli/animazioni: `http://localhost:5173/?viewer&champ=kaiser&a
 | **T** | provocazione (emote, a terra e da fermo) |
 | **TAB** | classifica · **ESC** pausa |
 
+Nella **scelta del campione** puoi usare anche la tastiera: **frecce** per spostarti tra i campioni,
+**INVIO** per combattere (allenamento), **ESC** per tornare al menu.
+
 Tutti i tasti d'azione si possono **riassegnare** da *COMANDI* (menu principale) o da
 *IMPOSTAZIONI → TASTI* (anche in pausa): clicca il tasto e premi quello nuovo, anche un pulsante
 del mouse. Se il tasto è già usato da un'altra azione, le due si scambiano.
