@@ -56,16 +56,17 @@ function renderDrum(id: DrumId, sr: number, take: number): Stereo {
     case 'kick': {
       // rock kick: pitched membrane thump + beater click + a little shell resonance
       const n = len(0.55);
-      const body = sweep(n, sr, 145 * vary(0.03), 52, 0.035);
-      decay(body, sr, 0.45);
-      const sub = sweep(n, sr, 60, 47, 0.08);
-      decay(sub, sr, 0.5);
+      // a rock kick is tight: the body rings ~0.3 s, the sub only supports the attack
+      const body = sweep(n, sr, 150 * vary(0.03), 55, 0.032);
+      decay(body, sr, 0.32);
+      const sub = sweep(n, sr, 62, 50, 0.06);
+      decay(sub, sr, 0.22);
       const click = noise(len(0.012), 'white', r);
       filter(click, sr, ['highpass', 1800, 0.7], ['peaking', 4200, 1.5, 6]);
       decay(click, sr, 0.012);
       const out = new Float32Array(n);
       mixInto(out, body, 0.9);
-      mixInto(out, sub, 0.45);
+      mixInto(out, sub, 0.3);
       mixInto(out, click, 0.5);
       drive(out, 1.8, 0, 0.9);
       filter(out, sr, ['peaking', 380, 1.4, -5], ['highshelf', 6000, 0.7, 2]);
@@ -194,20 +195,21 @@ function renderDrum(id: DrumId, sr: number, take: number): Stereo {
       return stereoFrom(normalize(fadeEdges(out, sr), 0.9), 0.15, sr);
     }
     case 'gong': {
-      // tam-tam: inharmonic partials that bloom after the strike
+      // tam-tam: inharmonic partials; the high ones bloom late, after the strike, and shimmer
       const n = len(4.5);
       const l = new Float32Array(n);
       const rr = new Float32Array(n);
-      const parts = [1, 1.52, 2.03, 2.74, 3.1, 3.93, 4.6, 5.3, 6.81, 8.2];
-      parts.forEach((p, k) => {
-        const f = 72 * p * (1 + (r() - 0.5) * 0.01);
+      for (let k = 0; k < 18; k++) {
+        const f = 70 * Math.pow(k + 1, 1.45) * (1 + (r() - 0.5) * 0.03);
+        if (f > 6000) break;
         const tone = sweep(n, sr, f * 0.995, f, 0.6, r() * 6);
-        const bloom = 0.05 + k * 0.08;
+        const bloom = 0.03 + k * 0.035;
         for (let i = 0; i < n; i++) tone[i] *= 1 - Math.exp(-i / (bloom * sr));
-        decay(tone, sr, 4.2 - k * 0.25);
-        mixInto(k % 2 ? l : rr, tone, 0.5 / (1 + k * 0.3));
-        mixInto(k % 2 ? rr : l, tone, 0.3 / (1 + k * 0.3));
-      });
+        decay(tone, sr, Math.max(1.2, 4.4 - k * 0.12));
+        const a = 0.5 / (1 + k * 0.18);
+        mixInto(k % 2 ? l : rr, tone, a);
+        mixInto(k % 2 ? rr : l, tone, a * 0.6);
+      }
       const hit = noise(len(0.08), 'pink', r);
       filter(hit, sr, ['lowpass', 1200, 0.7]);
       decay(hit, sr, 0.08);

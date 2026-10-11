@@ -66,7 +66,12 @@ export class Graph {
   readonly noise: Record<NoiseColor, AudioBuffer>;
   private waves = new Map<string, PeriodicWave>();
 
-  constructor(readonly ctx: BaseAudioContext) {
+  /** `noise`: reuse another graph's noise buffers (offline note renders) */
+  constructor(readonly ctx: BaseAudioContext, noise?: Record<NoiseColor, AudioBuffer>) {
+    if (noise) {
+      this.noise = noise;
+      return;
+    }
     const sr = ctx.sampleRate;
     const make = (color: NoiseColor, seed: number) => {
       const len = sr * 2;

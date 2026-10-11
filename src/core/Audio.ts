@@ -206,7 +206,7 @@ export class AudioEngine {
       old.g.gain.setTargetAtTime(0, now, 0.012);
     }
     const t = now + 0.004 + delay;
-    const out = this.g.gain(v);
+    const out = this.g.gain(v * (def.gain ?? 1));
     list.push({ end: t + def.dur, g: out });
     this.voices.set(name, list);
     // routing

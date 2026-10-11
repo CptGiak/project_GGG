@@ -76,7 +76,7 @@ export async function guitarBank(): Promise<Rendered> {
 }
 
 /** a stretch of a song through the full music chain (optionally switching to the climax) */
-export async function song(o: { id: string; seconds: number; intensity?: number; climaxAt?: number; from?: string }): Promise<Rendered> {
+export async function song(o: { id: string; seconds: number; intensity?: number; climaxAt?: number; skip?: string[]; warm?: boolean; at?: number }): Promise<Rendered> {
   const { Graph } = await import('./graph');
   const { SampleBank } = await import('./samples');
   const { MusicPlayer } = await import('./music');
@@ -93,7 +93,15 @@ export async function song(o: { id: string; seconds: number; intensity?: number;
   master.connect(lim).connect(ctx.destination);
   const m = new MusicPlayer(g, bank, master);
   m.intensity = o.intensity ?? 0.6;
+  for (const k of o.skip ?? []) m.skip.add(k);
+  const w0 = performance.now();
+  if (o.warm) {
+    m.prewarm(o.id);
+    await m.ready();
+  }
+  const warmMs = performance.now() - w0;
   m.start(o.id);
+  if (o.at) m.seek(o.at);
   const t0 = performance.now();
   if (o.climaxAt !== undefined) {
     m.scheduleUntil(o.climaxAt);
@@ -101,8 +109,10 @@ export async function song(o: { id: string; seconds: number; intensity?: number;
   }
   m.scheduleUntil(o.seconds - 0.5);
   const scheduleMs = performance.now() - t0;
+  const r0 = performance.now();
   const buf = await ctx.startRendering();
-  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: { scheduleMs: Math.round(scheduleMs) } };
+  const renderMs = performance.now() - r0;
+  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: { warmMs: Math.round(warmMs), scheduleMs: Math.round(scheduleMs), renderMs: Math.round(renderMs), misses: [...m.band.misses].sort((a, b) => b[1] - a[1]).slice(0, 12) } };
 }
 
 /** every SFX (or a list) one after another, through a room, with a fresh variation each time */
@@ -133,7 +143,7 @@ export async function sfxSheet(o: { names?: string[]; gap?: number; arena?: stri
   for (const name of names) {
     const def = SFX[name];
     for (let k = 0; k < repeat; k++) {
-      const out = g.gain(1, master);
+      const out = g.gain(def.gain ?? 1, master);
       if (!def.ui) out.connect(g.gain(0.25 * (def.rev ?? 1), room));
       def.fn({ g, t, out, p: 1 + (Math.random() * 2 - 1) * (def.vary ?? 0.035), v: 1, r: Math.random, step: k, champ: o.champ ?? null, self: false, h: harmony, arena: o.arena ?? 'neon_city' });
       marks.push([name, +t.toFixed(2)]);
@@ -143,3 +153,4 @@ export async function sfxSheet(o: { names?: string[]; gap?: number; arena?: stri
   const buf = await ctx.startRendering();
   return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: marks };
 }
+

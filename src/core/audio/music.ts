@@ -65,6 +65,8 @@ export class MusicPlayer {
   private timer: number | null = null;
   private cache = new Map<string, Map<string, Prepared>>();
   intensity = 0.5;
+  /** parts left out (profiling and previews) */
+  skip = new Set<string>();
   /** last chord heard (for the tonal SFX) */
   harmony: Harmony = { root: 2, tones: [0, 3, 7], tonic: 2, scale: [0, 2, 3, 5, 7, 9, 10] };
 
@@ -74,7 +76,8 @@ export class MusicPlayer {
     out: AudioNode,
   ) {
     const c = g.ctx;
-    this.mix = g.gain(1);
+    // the band's summed level sits well under the glue compressor and the master limiter
+    this.mix = g.gain(0.5);
     const glue = c.createDynamicsCompressor();
     glue.threshold.value = -16;
     glue.knee.value = 8;
@@ -83,7 +86,10 @@ export class MusicPlayer {
     glue.release.value = 0.16;
     this.duckGain = g.gain(1);
     this.tone = g.filter('lowpass', 20000, 0.5);
-    this.mix.connect(glue).connect(this.tone).connect(this.duckGain).connect(out);
+    // master EQ: tame the sub below the kick and bass fundamentals (it only muddies small
+    // speakers), keep the 60-250 Hz punch
+    const eq = g.filter('lowshelf', 65, 0.7, undefined, -4);
+    this.mix.connect(glue).connect(g.filter('highpass', 30, 0.7)).connect(eq).connect(this.tone).connect(this.duckGain).connect(out);
     // score reverb: a hall, with the returns kept out of the low end
     const conv = c.createConvolver();
     conv.buffer = renderRoom(c, ROOMS.hall, 77);
@@ -115,36 +121,87 @@ export class MusicPlayer {
     return m;
   }
 
-  /** render the samples a song needs ahead of time (spread over idle ticks) */
+  /** render the samples and orchestra notes a song needs ahead of time (in the background) */
   prewarm(id: string): void {
     const song = SONGS[id];
     if (!song) return;
     const jobs: Array<() => void> = [];
     const seen = new Set<string>();
+    const once = (k: string, job: () => void) => {
+      if (seen.has(k)) return;
+      seen.add(k);
+      jobs.push(job);
+    };
+    const band = this.band;
+    // orchestra renders are queued right away (they run on the offline render thread)
+    const want = (part: Parameters<Band['want']>[0], n: number) => band.want(part, n);
+    const inRange = (pc: number, lo: number, hi: number) => {
+      const out: number[] = [];
+      for (let n = lo; n <= hi; n++) if (n % 12 === pc) out.push(n);
+      return out;
+    };
     for (const p of this.prepare(song).values()) {
-      for (const ev of p.sec.tracks.gtr ?? []) {
-        const { root, art } = this.gtrNote(p.sec, ev, song);
-        const k = `g${root}${art}`;
-        if (!seen.has(k)) {
-          seen.add(k);
-          jobs.push(() => this.bank.guitar(root, art));
-        }
+      const sec = p.sec;
+      for (const ev of sec.tracks.gtr ?? []) {
+        const { root, art } = this.gtrNote(sec, ev, song);
+        once(`g${root}${art}`, () => this.bank.guitar(root, art));
       }
-      for (const ev of p.sec.tracks.bass ?? []) {
-        const n = this.bassNote(ev, p.sec);
-        if (!seen.has(`b${n}`)) {
-          seen.add(`b${n}`);
-          jobs.push(() => this.bank.bass(n));
-        }
+      for (const ev of sec.tracks.bass ?? []) {
+        const n = this.bassNote(ev, sec);
+        once(`b${n}`, () => this.bank.bass(n));
       }
-      for (const ev of p.sec.tracks.lead ?? [])
-        for (const n of ev.notes)
-          if (!seen.has(`l${n}`)) {
-            seen.add(`l${n}`);
-            jobs.push(() => this.bank.guitar(n, 'lead'));
+      for (const ev of sec.tracks.lead ?? []) for (const n of ev.notes) once(`l${n}`, () => this.bank.guitar(n, 'lead'));
+      for (const ev of sec.tracks.brass ?? [])
+        for (const n of ev.notes) {
+          want('trumpet', n);
+          want('horn', n - 12);
+        }
+      for (const ev of sec.tracks.brass2 ?? []) for (const n of ev.notes) want('horn', n);
+      for (const ev of sec.tracks.choir ?? []) for (const n of ev.notes) want('choir', n);
+      for (const ev of sec.tracks.strings ?? [])
+        for (const n of ev.notes) {
+          if (ev.flags === 'o') {
+            const pc = ((n % 12) + 12) % 12;
+            let m = nearestPc(pc, 64) + (n - pc);
+            while (m > 81) m -= 12;
+            want(ev.len <= 2 ? 'spiccato' : 'strings', m);
+          } else {
+            want('strings', n);
+            want('strings', n - 12);
           }
+        }
+      for (const c of sec.chords) {
+        for (const tn of c.tones) {
+          const pc = (c.root + tn) % 12;
+          if (sec.tracks.stabs || sec.tracks.hit)
+            for (const n of inRange(pc, 55, 76)) {
+              want('stab', n);
+              want('stabFall', n);
+              want('stabFall', n - 12);
+              want('stab', n - 12);
+              if (sec.def.stabs?.includes('<')) {
+                want('trumpet', n);
+                want('trumpet', n - 12);
+              }
+              if (sec.tracks.hit) want('spiccato', n + 12);
+            }
+          if (sec.def.pad)
+            for (const n of inRange(pc, 52, 72)) {
+              if (sec.def.pad !== 'choir') want('strings', n);
+              if (sec.def.pad !== 'strings') want('choir', n);
+            }
+        }
+        if (sec.tracks.timp || sec.tracks.hit)
+          for (const pc of [c.bass, (c.bass + 7) % 12, c.root]) for (const n of inRange(pc, 40, 53)) want('timp', n);
+      }
     }
     this.bank.prewarm(jobs);
+  }
+
+  /** resolves when every background render queued so far is done (previews) */
+  async ready(): Promise<void> {
+    await new Promise((r) => setTimeout(r, 50));
+    await this.band.cache.idle();
   }
 
   start(id: string, fadeIn = 0.02): void {
@@ -160,6 +217,14 @@ export class MusicPlayer {
     this.cur = { song, sections: this.prepare(song), order: song.order, idx: 0, step: 0, nextTime: startAt, out, climax: false, pending: null, voicings: {}, done: false, fill: null, mini: null };
     Beat.bpm = song.bpm;
     if (this.timer === null && typeof window !== 'undefined' && !(c instanceof OfflineAudioContext)) this.timer = window.setInterval(() => this.tick(), 25);
+  }
+
+  /** jump to an entry of the arrangement (previews) */
+  seek(idx: number): void {
+    if (this.cur) {
+      this.cur.idx = Math.max(0, Math.min(idx, this.cur.order.length - 1));
+      this.cur.step = 0;
+    }
   }
 
   fadeOut(time = 1): void {
@@ -263,10 +328,10 @@ export class MusicPlayer {
     const n = ev.notes[0];
     const pc = ((n % 12) + 12) % 12;
     const off = n - pc;
-    // root between E1 and D#2, then the interval on top
-    let root = nearestPc(pc, 34);
-    while (root < 28) root += 12;
-    while (root > 39) root -= 12;
+    // root between A1 and G#2, then the interval on top
+    let root = nearestPc(pc, 38);
+    while (root < 33) root += 12;
+    while (root > 44) root -= 12;
     return root + off;
   }
 
@@ -289,34 +354,11 @@ export class MusicPlayer {
     }
 
     // ---- drums
-    const s = step % 16;
-    if (s === 0) {
-      // pick this bar's fill: the section's own on its last bar, a transition fill when the
-      // arrangement is about to switch, otherwise a short random fill closing every 4th bar
-      p.fill = null;
-      p.mini = null;
-      if (def.fill && lastBar) p.fill = FILLS[pick(def.fill.split('|'))] ?? null;
-      else if (p.pending && bar % 4 === 3) p.fill = FILLS.snareRoll;
-      else if (bar % 4 === 3 && def.minifill !== false && def.drums?.s) p.mini = pick(MINI_FILLS);
-    }
-    if (p.fill) {
-      for (const [lane, src] of Object.entries(p.fill) as Array<[string, string]>) {
-        const ch = src[s];
-        if (ch && ch !== '.' && ch !== '-') this.drumHit({ step, lane: lane as DrumEvent['lane'], ch }, t, s16, s);
-      }
-      // keep the written crash on the downbeat of the fill bar
-      for (const d of prep.drums[step]) if (d.lane === 'c' && s === 0) this.drumHit(d, t, s16, s);
-    } else if (p.mini && s >= 12) {
-      for (const d of prep.drums[step]) if (d.lane === 'k' || d.lane === 'c') this.drumHit(d, t, s16, s);
-      for (const [lane, src] of Object.entries(p.mini) as Array<[string, string]>) {
-        const ch = src[s - 12];
-        if (ch && ch !== '.') this.drumHit({ step, lane: lane as DrumEvent['lane'], ch }, t, s16, s);
-      }
-    } else for (const d of prep.drums[step]) this.drumHit(d, t, s16, s);
+    if (!this.skip.has('drums')) this.drums(p, prep, step, t, s16, bar, lastBar);
 
     // ---- pitched parts
     for (const { track, ev } of prep.byStep[step]) {
-      if (!gate(track)) continue;
+      if (!gate(track) || this.skip.has(track)) continue;
       const dur = ev.len * s16;
       const v = ev.vel * vol(track);
       switch (track) {
@@ -395,7 +437,7 @@ export class MusicPlayer {
     }
 
     // ---- sustained pads on each chord change
-    if (def.pad) {
+    if (def.pad && !this.skip.has('pad')) {
       const c = sec.chords.find((x) => x.step === step);
       if (c) {
         const dur = c.len * s16;
@@ -406,6 +448,34 @@ export class MusicPlayer {
         if (def.pad !== 'strings' && (I > 0.35 || def.pad === 'choir')) for (const n of voicing.slice(0, 3)) band.choir(n, t, dur, v * 0.8);
       }
     }
+  }
+
+  private drums(p: Playback, prep: Prepared, step: number, t: number, s16: number, bar: number, lastBar: boolean): void {
+    const def = prep.sec.def;
+    const s = step % 16;
+    if (s === 0) {
+      // pick this bar's fill: the section's own on its last bar, a transition fill when the
+      // arrangement is about to switch, otherwise a short random fill closing every 4th bar
+      p.fill = null;
+      p.mini = null;
+      if (def.fill && lastBar) p.fill = FILLS[pick(def.fill.split('|'))] ?? null;
+      else if (p.pending && bar % 4 === 3) p.fill = FILLS.snareRoll;
+      else if (bar % 4 === 3 && def.minifill !== false && def.drums?.s) p.mini = pick(MINI_FILLS);
+    }
+    if (p.fill) {
+      for (const [lane, src] of Object.entries(p.fill) as Array<[string, string]>) {
+        const ch = src[s];
+        if (ch && ch !== '.' && ch !== '-') this.drumHit({ step, lane: lane as DrumEvent['lane'], ch }, t, s16, s);
+      }
+      // keep the written crash on the downbeat of the fill bar
+      for (const d of prep.drums[step]) if (d.lane === 'c' && s === 0) this.drumHit(d, t, s16, s);
+    } else if (p.mini && s >= 12) {
+      for (const d of prep.drums[step]) if (d.lane === 'k' || d.lane === 'c') this.drumHit(d, t, s16, s);
+      for (const [lane, src] of Object.entries(p.mini) as Array<[string, string]>) {
+        const ch = src[s - 12];
+        if (ch && ch !== '.') this.drumHit({ step, lane: lane as DrumEvent['lane'], ch }, t, s16, s);
+      }
+    } else for (const d of prep.drums[step]) this.drumHit(d, t, s16, s);
   }
 
   private drumHit(d: DrumEvent, t: number, s16: number, s: number): void {

@@ -48,6 +48,8 @@ export interface SfxDef {
   combo?: number;
   /** music duck in dB when the sound is near the listener */
   duck?: number;
+  /** level trim, set from measured loudness so the mix keeps its hierarchy */
+  gain?: number;
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -318,10 +320,11 @@ function surface(c: SfxCtx, vol: number): void {
 export const SFX: Record<string, SfxDef> = {
   // ---- movement ------------------------------------------------------------------------------
   hookFire: {
+    gain: 2.5,
     dur: 0.3,
     max: 4,
     fn: (c) => {
-      c.g.noiseBurst({ type: 'highpass', f: 1600 * c.p, f1: 3200, t: c.t, dur: 0.11, vol: 0.4, a: 0.002, out: c.out });
+      c.g.noiseBurst({ color: 'pink', type: 'bandpass', f: 2400 * c.p, f1: 3800, q: 0.7, t: c.t, dur: 0.11, vol: 0.5, a: 0.002, out: c.out });
       c.g.tone({ type: 'square', f: 1900 * c.p, f1: 800, t: c.t, dur: 0.018, vol: 0.12, out: c.out });
       c.g.noiseBurst({ type: 'bandpass', f: 4200, q: 3, t: c.t, dur: 0.005, vol: 0.5, out: c.out });
       cable(c, 0.22, 0.22);
@@ -338,12 +341,13 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   hookDry: {
+    gain: 3,
     dur: 0.25,
     max: 2,
     fn: (c) => {
       c.g.noiseBurst({ type: 'bandpass', f: 2600, q: 5, t: c.t, dur: 0.01, vol: 0.4, out: c.out });
       c.g.noiseBurst({ type: 'bandpass', f: 1800, q: 5, t: c.t + 0.07, dur: 0.012, vol: 0.32, out: c.out });
-      c.g.noiseBurst({ type: 'highpass', f: 3500, t: c.t + 0.02, dur: 0.14, vol: 0.08, a: 0.02, out: c.out });
+      c.g.noiseBurst({ color: 'pink', type: 'bandpass', f: 3000, q: 0.8, t: c.t + 0.02, dur: 0.14, vol: 0.1, a: 0.02, out: c.out });
     },
   },
   jump: {
@@ -359,7 +363,7 @@ export const SFX: Record<string, SfxDef> = {
     dur: 0.4,
     max: 3,
     fn: (c) => {
-      c.g.noiseBurst({ type: 'highpass', f: 1300 * c.p, f1: 2600, t: c.t, dur: 0.3, vol: 0.42, a: 0.004, out: c.out });
+      c.g.noiseBurst({ color: 'pink', type: 'highpass', f: 1300 * c.p, f1: 2600, t: c.t, dur: 0.3, vol: 0.5, a: 0.004, out: c.out });
       c.g.noiseBurst({ type: 'bandpass', f: 900, q: 1.4, t: c.t, dur: 0.18, vol: 0.2, a: 0.004, out: c.out });
       sub(c, 110 * c.p, 52, 0.16, 0.35);
       c.g.noiseBurst({ type: 'bandpass', f: 3000, q: 6, t: c.t, dur: 0.008, vol: 0.3, out: c.out });
@@ -369,7 +373,7 @@ export const SFX: Record<string, SfxDef> = {
     dur: 0.3,
     max: 2,
     fn: (c) => {
-      c.g.noiseBurst({ type: 'highpass', f: 800 * c.p, f1: 2800, t: c.t, dur: 0.26, vol: 0.32, a: 0.012, out: c.out });
+      c.g.noiseBurst({ color: 'pink', type: 'highpass', f: 800 * c.p, f1: 2800, t: c.t, dur: 0.26, vol: 0.4, a: 0.012, out: c.out });
       c.g.noiseBurst({ type: 'bandpass', f: 2800, q: 6, t: c.t, dur: 0.008, vol: 0.25, out: c.out });
     },
   },
@@ -407,6 +411,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   footstep: {
+    gain: 1.25,
     dur: 0.12,
     max: 2,
     vary: 0.08,
@@ -420,6 +425,7 @@ export const SFX: Record<string, SfxDef> = {
 
   // ---- melee -----------------------------------------------------------------------------------
   swing: {
+    gain: 4.5,
     dur: 0.3,
     max: 4,
     combo: 0.7,
@@ -430,6 +436,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   swingHeavy: {
+    gain: 1.4,
     dur: 0.5,
     max: 3,
     combo: 0.9,
@@ -441,6 +448,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   whoosh: {
+    gain: 2.2,
     dur: 0.5,
     max: 3,
     fn: (c) => whoosh(c, { f0: 380, f1: 2400, f2: 600, dur: 0.45, q: 1.4, vol: 0.4 }),
@@ -458,6 +466,7 @@ export const SFX: Record<string, SfxDef> = {
     fn: (c) => impact(c, 0.95),
   },
   crit: {
+    gain: 1.25,
     dur: 0.5,
     max: 3,
     fn: (c) => {
@@ -508,6 +517,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   dodge: {
+    gain: 1.6,
     dur: 0.6,
     max: 2,
     fn: (c) => {
@@ -552,6 +562,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   charge: {
+    gain: 2.2,
     dur: 1,
     max: 2,
     fn: (c) => {
@@ -561,6 +572,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   orb: {
+    gain: 2.5,
     dur: 0.4,
     max: 4,
     fn: (c) => {
@@ -579,6 +591,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   lob: {
+    gain: 2.8,
     dur: 0.5,
     max: 3,
     fn: (c) => {
@@ -626,6 +639,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   kunai: {
+    gain: 4,
     dur: 0.4,
     max: 3,
     fn: (c) => {
@@ -648,6 +662,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   glitch: {
+    gain: 2,
     dur: 0.25,
     max: 2,
     fn: (c) => {
@@ -704,6 +719,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   ultReady: {
+    gain: 1.4,
     dur: 0.8,
     max: 1,
     ui: true,
@@ -725,6 +741,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   respawn: {
+    gain: 1.25,
     dur: 1,
     max: 2,
     ui: true,
@@ -735,6 +752,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   kill: {
+    gain: 1.6,
     dur: 0.8,
     max: 2,
     ui: true,
@@ -763,6 +781,7 @@ export const SFX: Record<string, SfxDef> = {
 
   // ---- 2D combat confirms ------------------------------------------------------------------------
   tick: {
+    gain: 2,
     dur: 0.08,
     max: 3,
     ui: true,
@@ -786,6 +805,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   perfectTick: {
+    gain: 1.4,
     dur: 0.2,
     max: 2,
     ui: true,
@@ -795,6 +815,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   alarm: {
+    gain: 2.8,
     dur: 0.3,
     max: 1,
     ui: true,
@@ -807,12 +828,14 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   medal1: {
+    gain: 1.4,
     dur: 0.5,
     max: 1,
     ui: true,
     fn: (c) => [0, 2].forEach((i, k) => bell(c, chordHz(c.h, i, 5), 0.3, 0.08, k * 0.07)),
   },
   medal2: {
+    gain: 1.4,
     dur: 0.6,
     max: 1,
     ui: true,
@@ -834,6 +857,7 @@ export const SFX: Record<string, SfxDef> = {
 
   // ---- UI --------------------------------------------------------------------------------------
   uiMove: {
+    gain: 2.5,
     dur: 0.05,
     max: 2,
     ui: true,
@@ -863,6 +887,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   countdown: {
+    gain: 2.2,
     dur: 0.3,
     max: 1,
     ui: true,
@@ -905,6 +930,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   buzz: {
+    gain: 3.5,
     dur: 0.4,
     max: 3,
     fn: (c) => {
@@ -931,6 +957,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   slurp: {
+    gain: 3.5,
     dur: 0.5,
     max: 2,
     fn: (c) => {
@@ -949,10 +976,11 @@ export const SFX: Record<string, SfxDef> = {
 
   // ---- Elisabbat -------------------------------------------------------------------------------
   hiss: {
+    gain: 2.5,
     dur: 0.4,
     max: 2,
     fn: (c) => {
-      c.g.noiseBurst({ type: 'highpass', f: 3200, f1: 5200, q: 0.9, t: c.t, dur: 0.32, vol: 0.3, a: 0.03, out: c.out });
+      c.g.noiseBurst({ color: 'pink', type: 'bandpass', f: 3600, f1: 5200, q: 0.9, t: c.t, dur: 0.32, vol: 0.4, a: 0.03, out: c.out });
       c.g.noiseBurst({ type: 'bandpass', f: 2600, q: 6, t: c.t, dur: 0.3, vol: 0.12, a: 0.05, out: c.out });
     },
   },
@@ -974,6 +1002,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   batPoof: {
+    gain: 2,
     dur: 0.6,
     max: 2,
     fn: (c) => {
@@ -983,6 +1012,7 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   bats: {
+    gain: 3.2,
     dur: 0.7,
     max: 2,
     fn: (c) => {
@@ -1003,10 +1033,11 @@ export const SFX: Record<string, SfxDef> = {
     },
   },
   claw: {
+    gain: 4,
     dur: 0.2,
     max: 3,
     fn: (c) => {
-      c.g.noiseBurst({ type: 'highpass', f: 2600, f1: 6200, q: 1.2, t: c.t, dur: 0.12, vol: 0.28, a: 0.01, out: c.out });
+      c.g.noiseBurst({ color: 'pink', type: 'bandpass', f: 2600, f1: 6200, q: 1.2, t: c.t, dur: 0.12, vol: 0.4, a: 0.01, out: c.out });
       c.g.noiseBurst({ type: 'bandpass', f: 4200, f1: 3000, q: 6, t: c.t + 0.02, dur: 0.06, vol: 0.12, out: c.out });
     },
   },
