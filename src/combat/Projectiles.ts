@@ -32,6 +32,8 @@ export interface ProjectileSpec {
   kbUp?: number;
   /** explosions: the generic fireball, boom and camera shake (default true; false = onBurst draws it) */
   blast?: boolean;
+  /** explosions: the SFX of the blast (default 'explosion'; champions name their own, e.g. 'rex.bomb') */
+  boom?: string;
   headshots?: boolean;
   /** damage falloff with distance travelled: full up to `from` m, down to `min` at `to` m */
   falloff?: { from: number; to: number; min: number };
@@ -358,7 +360,7 @@ export class Projectiles {
             const vn = p.vel.dot(wh.normal);
             p.vel.addScaledVector(wh.normal, -1.6 * vn).multiplyScalar(0.6);
             p.pos.copy(wh.point).addScaledVector(wh.normal, p.radius + 0.02);
-            m.audio.play('hookHit', p.pos, 0.3);
+            m.audio.play('bounce', p.pos, 0.6);
             p.fx?.bounce?.(wh.point, wh.normal);
             hitFighter = null;
           } else {
@@ -429,7 +431,7 @@ export class Projectiles {
     const r = p.explode ?? 3;
     if (p.blast !== false) {
       m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
-      m.audio.play('explosion', p.pos, 0.9);
+      m.audio.play(p.boom ?? 'explosion', p.pos, 0.9, p.owner.champId);
       m.shake(0.25, p.pos);
     }
     p.onBurst?.(p.pos.clone());

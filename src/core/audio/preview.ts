@@ -122,38 +122,146 @@ export async function song(o: { id: string; seconds: number; intensity?: number;
   return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: { cached: m.band.cache.size, warmMs: Math.round(warmMs), scheduleMs: Math.round(scheduleMs), renderMs: Math.round(renderMs), misses: [...m.band.misses].sort((a, b) => b[1] - a[1]).slice(0, 12) } };
 }
 
-/** every SFX (or a list) one after another, through a room, with a fresh variation each time */
+/**
+ * The movement loops through the 'move' bus as in the game: stand 1 s, accelerate to top speed
+ * while hooked and airborne, boost, coast, land and run. Info: the timeline.
+ */
+export async function loopsRender(o: { seconds?: number } = {}): Promise<Rendered> {
+  const { Graph } = await import('./graph');
+  const { Loops } = await import('../Audio');
+  const { CATS, dbToGain } = await import('./mix');
+  const sr = 48000;
+  const seconds = o.seconds ?? 12;
+  const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sr), sr);
+  const g = new Graph(ctx);
+  const cat = CATS.move;
+  const bus = g.gain(dbToGain(cat.db), g.filter('highpass', cat.hp, 0.7, g.filter('lowpass', cat.lp, 0.6, g.filter('peaking', 3000, 0.8, ctx.destination, cat.presence ?? 0))));
+  const loops = new Loops(g, bus, bus, () => undefined);
+  const timeline: Array<[number, string]> = [];
+  const state = (t: number) => {
+    if (t < 1) return { speed: 0, boost: false, grounded: true, hooked: 0 };
+    if (t < 5) return { speed: ((t - 1) / 4) * 55, boost: false, grounded: false, hooked: 1 };
+    if (t < 7) return { speed: 55, boost: true, grounded: false, hooked: 0 };
+    if (t < 9) return { speed: 55 - ((t - 7) / 2) * 35, boost: false, grounded: false, hooked: 0 };
+    return { speed: 9, boost: false, grounded: true, hooked: 0 };
+  };
+  for (let t = 0; t < seconds - 0.05; t += 0.05) {
+    const at = t;
+    void ctx.suspend(at).then(() => {
+      const s = state(at);
+      loops.update(s.speed, s.boost, { grounded: s.grounded, hooked: s.hooked, wallRun: false, dt: 0.05 });
+      void ctx.resume();
+    });
+  }
+  timeline.push([0, 'stand'], [1, 'hooked, accelerating to 55 m/s'], [5, 'boosting at 55'], [7, 'coasting down'], [9, 'running 9 m/s']);
+  const buf = await ctx.startRendering();
+  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: timeline };
+}
+
+/** the catalogue's names (returned in `info`, with a token render) */
+export async function sfxNames(): Promise<Rendered> {
+  const { SFX } = await import('./sfx');
+  return { channels: [new Float32Array(480), new Float32Array(480)], sampleRate: 48000, info: Object.keys(SFX) };
+}
+
+/**
+ * Every SFX (or a list) dry, one at a time with silence between. `raw` (the default): no trim, no
+ * level, no bus, for loudness measurement (tools/audio/mix_trims.mjs). `raw: false`: as the game
+ * plays it next to the listener (trim, rank, category level and EQ). A name may carry a champion
+ * after "@" ("hit.blade@kaiser") and per-play data after "#" as JSON ("hit.blade#{\"w\":0.9}").
+ */
+export async function sfxDry(o: { names?: string[]; repeat?: number; arena?: string; self?: boolean; raw?: boolean; v?: number }): Promise<Rendered> {
+  const { Graph } = await import('./graph');
+  const { SFX } = await import('./sfx');
+  const { TRIMS } = await import('./trims');
+  const { CATS, dbToGain } = await import('./mix');
+  const names = o.names ?? Object.keys(SFX);
+  const repeat = o.repeat ?? 3;
+  const raw = o.raw ?? true;
+  const pad = 0.5;
+  const parse = (full: string) => {
+    const [head, json] = full.split('#');
+    const [name, champ] = head.split('@');
+    return { name, champ, arg: json ? (JSON.parse(json) as Record<string, unknown>) : undefined };
+  };
+  let total = 0.5;
+  for (const n of names) total += (SFX[parse(n).name].dur + pad) * repeat;
+  const sr = 48000;
+  const ctx = new OfflineAudioContext(2, Math.ceil(total * sr), sr);
+  const g = new Graph(ctx);
+  const harmony = { root: 2, tones: [0, 3, 7], tonic: 2, scale: [0, 2, 3, 5, 7, 9, 10] };
+  const marks: Array<[string, number, number]> = [];
+  let t = 0.25;
+  for (const full of names) {
+    const { name, champ, arg } = parse(full);
+    const def = SFX[name];
+    const cat = CATS[def.cat];
+    for (let k = 0; k < repeat; k++) {
+      let dst: AudioNode = ctx.destination;
+      let lvl = 1;
+      if (!raw) {
+        dst = g.filter('highpass', cat.hp, 0.7, g.filter('lowpass', cat.lp, 0.6, g.filter('peaking', 3000, 0.8, ctx.destination, cat.presence ?? 0)));
+        lvl = dbToGain((TRIMS[name] ?? 0) + (def.lvl ?? 0) + cat.db);
+      }
+      const out = g.gain(lvl * (o.v ?? 1), dst);
+      def.fn({ g, t, out, p: 1 + (Math.random() * 2 - 1) * (def.vary ?? 0.035), v: o.v ?? 1, r: Math.random, step: 0, champ: champ ?? null, self: !!o.self, h: harmony, arena: o.arena ?? 'neon_city', arg });
+      marks.push([full, +t.toFixed(3), +(t + def.dur + pad * 0.9).toFixed(3)]);
+      t += def.dur + pad;
+    }
+  }
+  const buf = await ctx.startRendering();
+  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: marks };
+}
+
+/**
+ * Sounds one after another as the game mixes them (trim, rank, category level and EQ, the arena
+ * room for world sounds), with a fresh variation and an escalating combo step each repeat. Names
+ * take "@champion" and "#{json arg}" like sfxDry.
+ */
 export async function sfxSheet(o: { names?: string[]; gap?: number; arena?: string; champ?: string; repeat?: number }): Promise<Rendered> {
   const { Graph } = await import('./graph');
   const { SFX } = await import('./sfx');
+  const { TRIMS } = await import('./trims');
+  const { CATS, dbToGain } = await import('./mix');
   const { renderRoom, ROOMS } = await import('./reverb');
   const names = o.names ?? Object.keys(SFX);
   const gap = o.gap ?? 0.15;
   const repeat = o.repeat ?? 1;
+  const parse = (full: string) => {
+    const [head, json] = full.split('#');
+    const [name, champ] = head.split('@');
+    return { name, champ: champ ?? o.champ, arg: json ? (JSON.parse(json) as Record<string, unknown>) : undefined };
+  };
   let total = 1;
-  for (const n of names) total += (SFX[n].dur + gap) * repeat;
+  for (const n of names) total += (SFX[parse(n).name].dur + gap) * repeat;
   const sr = 48000;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * sr), sr);
   const g = new Graph(ctx);
-  const master = g.gain(0.9);
+  const master = g.gain(1);
   const lim = ctx.createDynamicsCompressor();
-  lim.threshold.value = -3;
-  lim.ratio.value = 16;
-  lim.attack.value = 0.002;
+  lim.threshold.value = -2;
+  lim.ratio.value = 20;
+  lim.knee.value = 0;
+  lim.attack.value = 0.001;
   master.connect(lim).connect(ctx.destination);
   const room = ctx.createConvolver();
   room.buffer = renderRoom(ctx, ROOMS[o.arena ?? 'neon_city']);
-  room.connect(g.gain(0.8, master));
+  room.connect(g.gain(0.7, master));
+  const roomIn = g.gain(1);
+  roomIn.connect(g.filter('highpass', 250, 0.6)).connect(g.filter('lowpass', 7000, 0.6)).connect(room);
   const harmony = { root: 2, tones: [0, 3, 7], tonic: 2, scale: [0, 2, 3, 5, 7, 9, 10] };
   const marks: Array<[string, number]> = [];
   let t = 0.3;
-  for (const name of names) {
+  for (const full of names) {
+    const { name, champ, arg } = parse(full);
     const def = SFX[name];
+    const cat = CATS[def.cat];
     for (let k = 0; k < repeat; k++) {
-      const out = g.gain(def.gain ?? 1, master);
-      if (!def.ui) out.connect(g.gain(0.25 * (def.rev ?? 1), room));
-      def.fn({ g, t, out, p: 1 + (Math.random() * 2 - 1) * (def.vary ?? 0.035), v: 1, r: Math.random, step: k, champ: o.champ ?? null, self: false, h: harmony, arena: o.arena ?? 'neon_city' });
-      marks.push([name, +t.toFixed(2)]);
+      const bus = g.filter('highpass', cat.hp, 0.7, g.filter('lowpass', cat.lp, 0.6, g.filter('peaking', 3000, 0.8, master, cat.presence ?? 0)));
+      const out = g.gain(dbToGain((TRIMS[name] ?? 0) + (def.lvl ?? 0) + cat.db), bus);
+      if (!cat.ui) out.connect(g.gain(0.12 * cat.rev * (def.rev ?? 1), roomIn));
+      def.fn({ g, t, out, p: 1 + (Math.random() * 2 - 1) * (def.vary ?? 0.035), v: 1, r: Math.random, step: k, champ: champ ?? null, self: false, h: harmony, arena: o.arena ?? 'neon_city', arg });
+      marks.push([full, +t.toFixed(2)]);
       t += def.dur + gap;
     }
   }

@@ -1129,7 +1129,7 @@ export class Fighter {
       const p = this.pos.clone().addScaledVector(_f, 0.6);
       m.vfx.landing(p, this.champ.colors[0], 0.5);
       m.vfx.hitSpark(p.setY(p.y + 0.1), UP, this.champ.colors[0], false);
-      m.audio.play('block', this.pos, 0.7);
+      m.audio.play('taunt.plant', this.pos);
       m.shake(0.15, this.pos);
     } else if (ev === 'sparkle') {
       const h = this.head(new THREE.Vector3());
@@ -1137,7 +1137,7 @@ export class Fighter {
         const a = (i / 14) * Math.PI * 2;
         m.vfx.add.emit({ pos: h.clone(), vel: new THREE.Vector3(Math.cos(a) * 3, 2 + Math.random() * 2, Math.sin(a) * 3), life: 0.6, size: 0.12, color: i % 2 ? this.champ.colors[0] : this.champ.colors[1], shape: 2, drag: 2 });
       }
-      m.audio.play('note', this.pos, 0.6);
+      m.audio.play('taunt.sparkle', this.pos);
     }
   }
 
