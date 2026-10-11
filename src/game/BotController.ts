@@ -260,7 +260,7 @@ export class BotController {
       }
       // signature skill: Kaiser's wave reaches ~8 m, Nova's kunai ~12 m
       // signature skills: Kaiser's wave ~8 m, Nova's X ~13 m, Akali's fan ~12 m, Qiyana's line ~8.5 m
-      const sigRange: Record<string, number> = { kaiser: 7.5, nova: 12, akali: 11, qiyana: 8 };
+      const sigRange: Record<string, number> = { kaiser: 7.5, nova: 12, akali: 11, qiyana: 8, elisabbat: 9 };
       if (f.champId !== 'locke' && cds.sig <= 0 && dist < (sigRange[f.champId] ?? 8) && onTarget && Math.random() < dt * (0.8 + diff * 1.5)) it.skillPressed = true;
       if (cds.abi <= 0 && dist > 5 && dist < 18 && onTarget && Math.random() < dt * (0.6 + diff)) it.abilityPressed = true;
       if (f.champId === 'nova' && cds.sec <= 0 && dist < 9 && Math.random() < dt * 0.4) it.secondaryPressed = true;
@@ -270,6 +270,20 @@ export class BotController {
       if (f.champId === 'locke' && cds.sig <= 0 && dist > 4 && dist < 22 && aimDot > 0.995 && Math.random() < dt * 1.2) it.skillPressed = true;
       if (f.champId === 'locke' && cds.sec <= 0 && (f.hp < f.maxHp * 0.4 || dist < 5) && Math.random() < dt * 0.8) it.secondaryPressed = true;
       if (f.champId === 'qiyana' && cds.sec <= 0 && dist > 4 && dist < 14 && Math.random() < dt * 0.6) it.secondaryPressed = true;
+      // Elisabbat: bat form to dive in from afar or to flee when hurt, then bite out of it;
+      // Spellvamp more eagerly when hurt (it heals)
+      if (f.champId === 'elisabbat') {
+        const bat = kit.hints?.().sec === 'UMANA';
+        if (bat) {
+          if (f.hp < f.maxHp * 0.3) it.move.set(this.strafe * 0.5, -1);
+          else {
+            it.move.set(0, 1);
+            if (dist < 7 && cds.sig <= 0) it.skillPressed = true;
+            else if (dist < 3) it.attackPressed = true;
+          }
+        } else if (cds.sec <= 0 && ((dist > 12 && dist < 30) || (f.hp < f.maxHp * 0.3 && dist < 10)) && Math.random() < dt * (0.4 + diff * 0.6)) it.secondaryPressed = true;
+        if (!bat && cds.sig <= 0 && dist < 9 && onTarget && f.hp < f.maxHp * 0.7 && Math.random() < dt * 1.5) it.skillPressed = true;
+      }
       if (f.ult >= 1 && dist < 9 && Math.random() < dt * 0.8) it.ultimatePressed = true;
       // second cast of a two-part ultimate
       if (kit.hints?.().ult === 'x2' && dist < 12 && Math.random() < dt * 1.5) it.ultimatePressed = true;

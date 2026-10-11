@@ -62,8 +62,8 @@ export interface ChampionData {
   passive?: { name: string; desc: string };
 }
 
-export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera' | 'akali' | 'qiyana' | 'locke' | 'pooh';
-export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera', 'akali', 'qiyana', 'locke', 'pooh'];
+export type ChampionId = 'kaiser' | 'nova' | 'rex' | 'sera' | 'akali' | 'qiyana' | 'locke' | 'pooh' | 'elisabbat';
+export const CHAMPION_IDS: ChampionId[] = ['kaiser', 'nova', 'rex', 'sera', 'akali', 'qiyana', 'locke', 'pooh', 'elisabbat'];
 
 /** champions modelled on League of Legends ones (models from tools/blender/build_lol.py) */
 export const LOL_CHAMPIONS: ChampionId[] = ['akali', 'qiyana', 'locke'];
@@ -238,6 +238,30 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
       sec: { slot: 'sec', key: 'C', name: 'Nuvoletta Nera', desc: 'Si aggrappa a un palloncino blu e sale fluttuando per 4 s (tira i barattoli anche da lassù). Premi di nuovo C per lasciarlo.', cooldown: 12, damage: {}, range: 0, maxRate: 0 },
       abi: { slot: 'abi', key: 'F', name: 'Pensa, Pensa, Pensa', desc: 'Si ferma e si picchietta la testa per pensare. Se nessuno lo stordisce gli viene un\'Idea: si cura, la Panzata torna pronta e i 3 barattoli seguenti diventano Super Barattoli.', cooldown: 16, damage: {}, range: 0, maxRate: 0 },
       ult: { slot: 'ult', key: 'R', name: 'Sciame d\'Api', desc: 'Lancia un alveare nel punto mirato: per 4,5 s le api inseguono i nemici vicini pungendoli e rallentandoli. Chi è sporco di miele viene punto più forte.', cooldown: 0, damage: { hive: 120, sting: 20, sting2: 30 }, range: 50, maxRate: 16, stream: ['sting', 'sting2'] },
+    },
+  },
+  // ---- Elisabbat: vampire princess (modelled on the user's Meshy model) -----------------------
+  elisabbat: {
+    id: 'elisabbat',
+    name: 'ELISABBAT',
+    title: 'La Principessa Vampira',
+    role: 'melee',
+    difficulty: 2,
+    hp: 960,
+    speed: 1.08,
+    ultCharge: 1400,
+    colors: ['#a24cff', '#ff2e6a'],
+    weapon: 'Artigli e pipistrelli',
+    bio: 'Erede al trono dei vampiri di Transilvania, fuggita dalla corte per diventare una star. Elegante, letale e sempre assetata: con un morso la vita del nemico diventa la sua.',
+    // the bat transformation opens a short invulnerable window (the cooldown is 11 s)
+    invulnActs: { bat: { sec: 0.45, every: 9 } },
+    passive: { name: 'Marchio di Sangue', desc: 'Artigli e pipistrelli marchiano i nemici (max 3, per 5 s). Spellvamp consuma i marchi: più danni e più cura.' },
+    abilities: {
+      sig: { slot: 'sig', key: 'LMB', name: 'Spellvamp', desc: 'Scatta sul nemico mirato e lo morde: lo blocca per un istante, gli ruba vita e ti cura della metà dei danni. Ogni Marchio di Sangue aggiunge 35 danni. Dalla forma di pipistrello è una picchiata col morso.', cooldown: 6, damage: { bite: 100, feast: 105 }, range: 14, maxRate: 3 },
+      atk: { slot: 'atk', key: 'RMB', name: 'Artigli di Velluto', desc: 'Combo di 3 colpi con gli artigli, il terzo è un doppio fendente a X. Ogni colpo lascia un Marchio di Sangue. In aria: picchiata con gli artigli.', cooldown: 0, damage: { c1: 44, c2: 44, c3: 74, air: 58 }, range: 7, maxRate: 8, momentum: ['c1', 'c2', 'c3', 'air'], backstab: ['c1', 'c2', 'c3', 'air'] },
+      sec: { slot: 'sec', key: 'C', name: 'Forma di Pipistrello', desc: 'Si trasforma in un pipistrello per 3 s: vola dove miri (SPAZIO per salire), è piccola e difficile da colpire e per un istante è invulnerabile. Premi di nuovo C, o attacca, per tornare umana.', cooldown: 11, damage: {}, range: 0, maxRate: 0 },
+      abi: { slot: 'abi', key: 'F', name: 'Sciame di Pipistrelli', desc: 'Scaglia 6 pipistrelli che inseguono i nemici vicino al mirino: ogni morso marchia e rallenta.', cooldown: 8, damage: { bat: 26 }, range: 40, maxRate: 10 },
+      ult: { slot: 'ult', key: 'R', name: 'Notte Eterna', desc: 'Si leva con ali spettrali e per 3 s scatena intorno a sé un vortice di pipistrelli che ferisce e rallenta; alla fine i pipistrelli si avventano su chi è nel vortice. Ti cura del 30% dei danni (max 220).', cooldown: 0, damage: { storm: 20, finale: 150 }, range: 16, maxRate: 16, stream: ['storm'] },
     },
   },
 };

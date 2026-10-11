@@ -702,7 +702,8 @@ export class Match implements MatchContext {
       const hidden = f.isHiddenFrom(this.local);
       f.visual.root.visible = f.alive ? (!blink || f.spawnProtect <= 0) && !hidden : f.deadTime < 0.55;
       f.setGhost(f === this.local && f.stealthed);
-      for (const o of f.visual.worldObjects) o.visible = f.visual.root.visible;
+      // cloth follows the body (a shapeshifted champion hides its body pivot)
+      for (const o of f.visual.worldObjects) o.visible = f.visual.root.visible && f.visual.pivot.visible;
       if (hidden) for (const h of f.hooks) h.visual.setVisible(false);
       // death shatter + respawn (practice authority)
       if (!f.alive) {

@@ -61,7 +61,8 @@ export class CameraRig {
 
   update(dt: number, f: Fighter, world: CollisionWorld): void {
     _target.copy(f.pos);
-    _target.y += 1.55;
+    // a shapeshifted (tiny) fighter is followed lower and closer
+    _target.y += f.tiny ? 1.25 : 1.55;
     if (!this.initialized) this.snapTo(f);
     // follow: tight on the ground, slightly springy in flight
     const speed = f.speed;
@@ -71,7 +72,7 @@ export class CameraRig {
 
     // distance & fov react to speed
     const sp = THREE.MathUtils.clamp((speed - 8) / 45, 0, 1);
-    const targetDist = (this.distance + sp * 0.8 + (this.orbit ? 3 : 0)) * (1 - this.zoom * 0.45);
+    const targetDist = (this.distance + sp * 0.8 + (this.orbit ? 3 : 0)) * (1 - this.zoom * 0.45) * (f.tiny ? 0.72 : 1);
     this.dist += (targetDist - this.dist) * (1 - Math.exp(-6 * dt));
     const targetFov = this.baseFov + sp * 12 - this.zoom * 34;
     this.fov += (targetFov - this.fov) * (1 - Math.exp(-5 * dt));

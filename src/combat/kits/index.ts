@@ -1,6 +1,7 @@
 import type { ChampionId } from '../../../shared/champions';
 import type { Kit } from '../../game/types';
 import { AkaliKit } from './akaliKit';
+import { ElisabbatKit } from './elisabbatKit';
 import { KaiserKit } from './kaiserKit';
 import { LockeKit } from './lockeKit';
 import { NovaKit } from './novaKit';
@@ -25,6 +26,8 @@ export function createKit(id: ChampionId): Kit {
       return new LockeKit();
     case 'pooh':
       return new PoohKit();
+    case 'elisabbat':
+      return new ElisabbatKit();
     case 'kaiser':
     default:
       return new KaiserKit();

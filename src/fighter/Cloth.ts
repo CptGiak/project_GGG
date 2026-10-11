@@ -437,9 +437,24 @@ export class ClothSheet {
         idxInner.push(layer + a, layer + b, layer + c, layer + b, layer + d, layer + c);
       }
     }
+    // u across the columns, v (and aT, for gradientToon) from the anchors down to the hem
+    const uv = new Float32Array(layer * 2 * 2);
+    const tAttr = new Float32Array(layer * 2);
+    for (let l = 0; l < 2; l++) {
+      for (let v = 0; v < V; v++) {
+        for (let u = 0; u < U; u++) {
+          const i = l * layer + v * U + u;
+          uv[i * 2] = u / (o.closed ? U : U - 1);
+          uv[i * 2 + 1] = v / (V - 1);
+          tAttr[i] = v / (V - 1);
+        }
+      }
+    }
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    this.geo.setAttribute('aT', new THREE.BufferAttribute(tAttr, 1));
     this.geo.setAttribute('aOutline', new THREE.BufferAttribute(new Float32Array(layer * 2).fill(1), 1));
     this.geo.setIndex([...idxOuter, ...idxInner]);
     this.geo.addGroup(0, idxOuter.length, 0);

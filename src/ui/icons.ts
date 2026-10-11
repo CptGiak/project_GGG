@@ -45,6 +45,12 @@ export const ICONS: Record<string, string> = {
   balloon: P('<ellipse cx="26" cy="17" rx="12" ry="14" fill="currentColor" fill-opacity="0.3"/><path d="M24 31 L28 31 L26 34 Z" fill="currentColor"/><path d="M26 34 Q19 39 24 46"/><path d="M20 10 Q22 7 25 7" stroke-opacity="0.6"/>'),
   idea: P('<path d="M24 7 Q35 7 35 18 Q35 25 30 29 V35 H18 V29 Q13 25 13 18 Q13 7 24 7 Z" fill="currentColor" fill-opacity="0.3"/><path d="M19 39 H29 M20 44 H28"/><path d="M3 18 H8 M40 18 H45 M7 5 L11 9 M41 5 L37 9"/>'),
   bees: P('<ellipse cx="17" cy="29" rx="12" ry="14" fill="currentColor" fill-opacity="0.3"/><path d="M7 23 H27 M6 31 H28 M9 39 H25"/><circle cx="36" cy="11" r="3" fill="currentColor"/><path d="M36 8 Q33 3 30 6 M36 8 Q39 3 42 6"/><circle cx="41" cy="27" r="2.5" fill="currentColor"/><path d="M41 25 Q39 21 37 23 M41 25 Q43 21 45 23"/>'),
+  // Elisabbat
+  fangs: P('<path d="M5 14 Q24 32 43 14"/><path d="M14 20 L17 36 L21 23 Z M27 23 L31 36 L34 20 Z" fill="currentColor"/><path d="M20 42 Q24 46 28 42" stroke-opacity="0.6"/>'),
+  claws: P('<path d="M8 40 Q14 22 28 8"/><path d="M17 43 Q23 25 37 12"/><path d="M27 45 Q33 29 44 19"/>'),
+  bat: P('<path d="M24 19 L21 12 L22.5 19 Q14 14 3 19 Q10 23 8 30 Q14 26 18 31 Q21 27 24 35 Q27 27 30 31 Q34 26 40 30 Q38 23 45 19 Q34 14 25.5 19 L27 12 Z" fill="currentColor" fill-opacity="0.35"/>'),
+  batswarm: P('<path d="M12 14 Q8 11 3 13 Q6 15 5 18 Q8 16 10 19 Q12 16 14 19 Q16 16 19 18 Q18 15 21 13 Q16 11 12 14 Z M32 22 Q27 18 21 21 Q25 24 24 28 Q28 25 30 29 Q32 25 34 29 Q36 25 40 28 Q39 24 43 21 Q37 18 32 22 Z M18 34 Q15 32 11 33 Q13 35 13 37 Q15 36 17 38 Q18 36 19 38 Q21 36 23 37 Q23 35 25 33 Q21 32 18 34 Z" fill="currentColor" fill-opacity="0.45"/><path d="M4 44 L44 6" stroke-opacity="0.3" stroke-dasharray="3 5"/>'),
+  night: P('<path d="M30 5 A19 19 0 1 0 43 33 A15 15 0 1 1 30 5 Z" fill="currentColor" fill-opacity="0.3"/><path d="M6 38 Q10 34 14 38 Q18 34 22 38" /><path d="M24 44 Q27 41 30 44 Q33 41 36 44" stroke-opacity="0.6"/>'),
 };
 
 const MAP: Record<string, Record<string, string>> = {
@@ -56,6 +62,7 @@ const MAP: Record<string, Record<string, string>> = {
   qiyana: { sig: 'ring', atk: 'slashes', sec: 'elements', abi: 'pounce', ult: 'quake' },
   locke: { sig: 'nails', atk: 'stake', sec: 'flame', abi: 'ashes', ult: 'reliquary' },
   pooh: { sig: 'belly', atk: 'hunny', sec: 'balloon', abi: 'idea', ult: 'bees' },
+  elisabbat: { sig: 'fangs', atk: 'claws', sec: 'bat', abi: 'batswarm', ult: 'night' },
 };
 
 export function abilityIcon(champ: string, slot: string): string {

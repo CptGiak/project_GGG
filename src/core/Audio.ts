@@ -485,6 +485,42 @@ const SFX: Record<string, SfxFn> = {
     a.noiseHit(t, 0.06, o, 0.4, 'highpass', 3000, 3000);
     a.osc('sine', 900, 220, t, 0.06, o, 0.2);
   },
+  // ---- Elisabbat ------------------------------------------------------------------------------
+  /** vampire hiss before the lunge */
+  hiss: (a, o, t) => a.noiseHit(t, 0.32, o, 0.35, 'highpass', 3200, 5200, 0.9, 0.02),
+  /** fangs sinking in: a crunch and a thump */
+  bite: (a, o, t) => {
+    a.noiseHit(t, 0.08, o, 0.7, 'bandpass', 1900, 700, 2);
+    a.osc('square', 220, 80, t, 0.06, o, 0.18);
+    a.osc('sine', 150, 60, t, 0.14, o, 0.5);
+    a.noiseHit(t + 0.05, 0.06, o, 0.45, 'bandpass', 2700, 1300, 3);
+  },
+  /** the life she drinks */
+  drink: (a, o, t) => {
+    a.osc('sine', 320, 120, t, 0.24, o, 0.28, 0.02);
+    a.osc('triangle', 540, 260, t + 0.08, 0.2, o, 0.12, 0.02);
+    a.noiseHit(t, 0.3, o, 0.18, 'lowpass', 900, 300, 1, 0.03);
+  },
+  /** bursting into (or out of) the bat: a whoosh and wingbeats */
+  batPoof: (a, o, t) => {
+    a.noiseHit(t, 0.4, o, 0.45, 'bandpass', 600, 2400, 1.2, 0.02);
+    for (let i = 0; i < 6; i++) a.noiseHit(t + 0.04 + i * 0.035, 0.03, o, 0.28, 'bandpass', 1300 + i * 80, 1300, 2.2);
+    a.osc('sine', 4600, 5600, t + 0.12, 0.05, o, 0.05);
+  },
+  /** a swarm of bats: fluttering and squeaks */
+  bats: (a, o, t) => {
+    for (let i = 0; i < 10; i++) a.noiseHit(t + i * 0.045, 0.03, o, 0.22, 'bandpass', 1100 + (i % 3) * 300, 1100, 2.4);
+    for (let i = 0; i < 3; i++) a.osc('sine', 4200 + i * 500, 5200 + i * 300, t + 0.05 + i * 0.12, 0.05, o, 0.05);
+  },
+  /** Eternal Night: a deep gust full of wings */
+  storm: (a, o, t) => {
+    a.noiseHit(t, 1.3, o, 0.5, 'bandpass', 260, 900, 0.8, 0.25);
+    a.osc('sawtooth', 70, 48, t, 1.1, o, 0.14, 0.2);
+    for (let i = 0; i < 16; i++) a.noiseHit(t + 0.1 + i * 0.06, 0.03, o, 0.18, 'bandpass', 1000 + (i % 4) * 250, 1000, 2.4);
+    for (let i = 0; i < 4; i++) a.osc('sine', 4000 + i * 450, 5000 + i * 300, t + 0.2 + i * 0.2, 0.05, o, 0.05);
+  },
+  /** claws through the air */
+  claw: (a, o, t) => a.noiseHit(t, 0.12, o, 0.3, 'highpass', 2600, 6200, 1.2, 0.01),
 };
 
 // =============================================================================================

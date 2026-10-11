@@ -16,6 +16,7 @@ const PREVIEWS: Record<ChampionId, string[]> = {
   qiyana: ['taunt', 'wrath', 'c1', 'c2', 'audacity', 'air'],
   locke: ['taunt', 'nails', 'c1', 'c2', 'c3', 'c4', 'pursuit'],
   pooh: ['think', 'throw', 'bump', 'taunt', 'throw', 'ult'],
+  elisabbat: ['taunt', 'bite', 'c1', 'c2', 'c3', 'swarm', 'ult'],
 };
 
 const BEAM_VERT = /* glsl */ `
