@@ -1,29 +1,63 @@
 import * as THREE from 'three';
 import { Beat } from './Beat';
+import { Graph } from './audio/graph';
+import { MusicPlayer } from './audio/music';
+import { renderRoom, ROOMS } from './audio/reverb';
+import { SampleBank } from './audio/samples';
+import { SFX, type SfxCtx } from './audio/sfx';
+import { ARENA_SONG } from './audio/songs';
 
 /**
- * Fully synthesized audio: SFX via Web Audio graphs and a procedural "True Damage"-ish beat
- * (kick / snare / hats / sub bass / chord stabs) scheduled with a look-ahead clock.
+ * Fully synthesized audio: layered SFX (src/core/audio/sfx.ts) placed in a room that matches the
+ * arena, and an adaptive orchestral-rock score (src/core/audio/songs) played by a synthesized band.
+ *
+ * Signal flow:
+ *   world SFX -> distance lowpass -> pan -> worldDuck -> sfxBus --+
+ *                              \-> room send -> arena reverb ----+
+ *   2D confirms / UI ------------------------------> uiBus ------+-> master -> limiter -> out
+ *   score -> MusicPlayer (glue comp, muffle, duck) -> musicBus --+
  */
 
-type SfxFn = (a: AudioEngine, out: AudioNode, t: number, v: number) => void;
-
 const _v = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
+interface Voice {
+  end: number;
+  g: GainNode;
+}
+
+interface Source {
+  pos: THREE.Vector3;
+  champ: string;
+  local: boolean;
+}
 
 export class AudioEngine {
   ctx: AudioContext | null = null;
   master!: GainNode;
   sfxBus!: GainNode;
   musicBus!: GainNode;
-  private noise!: AudioBuffer;
+  private uiBus!: GainNode;
+  private worldDuck!: GainNode;
+  private roomIn!: GainNode;
+  private room!: ConvolverNode;
+  private g!: Graph;
+  private bank!: SampleBank;
   private listenerPos = new THREE.Vector3();
   private listenerRight = new THREE.Vector3(1, 0, 0);
+  private listenerFwd = new THREE.Vector3(0, 0, -1);
   volumes = { master: 0.8, sfx: 0.9, music: 0.45 };
-  private windGain: GainNode | null = null;
-  private windFilter: BiquadFilterNode | null = null;
-  private boostGain: GainNode | null = null;
   private music: MusicPlayer | null = null;
   private lastPlay = new Map<string, number>();
+  private voices = new Map<string, Voice[]>();
+  /** recent plays per name+source, for combo escalation */
+  private combos = new Map<string, { t: number; step: number }>();
+  private sources: Source[] = [];
+  private arena = 'neon_city';
+  private battleSong = 'city';
+  private loops: Loops | null = null;
+  private musicIntensity = 0.5;
+  private heat = 0;
 
   /** must be called from a user gesture */
   unlock(): void {
@@ -33,26 +67,41 @@ export class AudioEngine {
     }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
-    this.ctx = new AC();
+    this.ctx = new AC({ latencyHint: 'interactive' });
     const ctx = this.ctx;
     Beat.attachClock(() => ctx.currentTime);
-    this.master = this.ctx.createGain();
-    this.master.gain.value = this.volumes.master;
-    const comp = this.ctx.createDynamicsCompressor();
-    comp.threshold.value = -14;
-    comp.ratio.value = 4;
-    this.master.connect(comp).connect(this.ctx.destination);
-    this.sfxBus = this.ctx.createGain();
-    this.sfxBus.gain.value = this.volumes.sfx;
-    this.sfxBus.connect(this.master);
-    this.musicBus = this.ctx.createGain();
-    this.musicBus.gain.value = this.volumes.music;
-    this.musicBus.connect(this.master);
-    const len = this.ctx.sampleRate * 2;
-    this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-    const d = this.noise.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    this.setupLoops();
+    const g = new Graph(ctx);
+    this.g = g;
+    this.bank = new SampleBank(ctx);
+    // master: a fast, high-ratio limiter so stacked layers never clip
+    this.master = g.gain(this.volumes.master);
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 2;
+    limiter.ratio.value = 16;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.12;
+    this.master.connect(limiter).connect(ctx.destination);
+    // SFX: a gentle glue compressor, then the world duck (big moments push the rest down)
+    this.sfxBus = g.gain(this.volumes.sfx);
+    const glue = ctx.createDynamicsCompressor();
+    glue.threshold.value = -16;
+    glue.knee.value = 6;
+    glue.ratio.value = 3;
+    glue.attack.value = 0.004;
+    glue.release.value = 0.15;
+    this.sfxBus.connect(glue).connect(this.master);
+    this.worldDuck = g.gain(1, this.sfxBus);
+    this.uiBus = g.gain(1, this.sfxBus);
+    // arena room
+    this.room = ctx.createConvolver();
+    this.roomIn = g.gain(1);
+    this.roomIn.connect(g.filter('highpass', 220, 0.6)).connect(this.room);
+    this.room.connect(g.gain(0.8, this.sfxBus));
+    this.room.buffer = renderRoom(ctx, ROOMS[this.arena] ?? ROOMS.neon_city);
+    this.musicBus = g.gain(this.volumes.music, this.master);
+    this.bank.prewarmDrums();
+    this.loops = new Loops(this);
   }
 
   setVolumes(v: Partial<AudioEngine['volumes']>): void {
@@ -66,138 +115,204 @@ export class AudioEngine {
   setListener(pos: THREE.Vector3, right: THREE.Vector3): void {
     this.listenerPos.copy(pos);
     this.listenerRight.copy(right);
+    this.listenerFwd.crossVectors(UP, right).normalize();
   }
 
-  /** play a named SFX, optionally positioned in the world */
-  play(name: string, pos?: THREE.Vector3, volume = 1): void {
+  /** the arena sets the room, the footstep surface and the battle theme */
+  setArena(id: string): void {
+    this.arena = id;
+    this.battleSong = ARENA_SONG[id] ?? 'city';
+    if (this.ctx) {
+      this.room.buffer = renderRoom(this.ctx, ROOMS[id] ?? ROOMS.neon_city);
+      this.ensureMusic().prewarm(this.battleSong);
+    }
+  }
+
+  /** fighters are registered so sounds played at their position carry their sonic signature */
+  registerFighter(pos: THREE.Vector3, champ: string, local: boolean): void {
+    this.sources = this.sources.filter((s) => s.pos !== pos);
+    this.sources.push({ pos, champ, local });
+  }
+
+  clearFighters(): void {
+    this.sources = [];
+  }
+
+  private sourceAt(pos: THREE.Vector3 | undefined): Source | null {
+    if (!pos) return null;
+    let best: Source | null = null;
+    let bd = 2.5 * 2.5;
+    for (const s of this.sources) {
+      if (s.pos === pos) return s;
+      const d = s.pos.distanceToSquared(pos);
+      if (d < bd) {
+        bd = d;
+        best = s;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Play a named SFX, optionally positioned in the world. `src` names the champion responsible
+   * when the position belongs to someone else (a hit lands on the victim but sounds like the
+   * attacker's weapon).
+   */
+  play(name: string, pos?: THREE.Vector3, volume = 1, src?: string): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    const fn = SFX[name];
-    if (!fn) return;
-    // throttle identical sounds within 25ms
+    const def = SFX[name];
+    if (!def) return;
     const now = ctx.currentTime;
-    const last = this.lastPlay.get(name) ?? -1;
-    if (now - last < 0.025) return;
+    // identical sounds within 25 ms merge into one
+    if (now - (this.lastPlay.get(name) ?? -1) < 0.025) return;
     this.lastPlay.set(name, now);
+    const source = this.sourceAt(pos);
+    const self = !!source?.local;
     let v = volume;
     let pan = 0;
-    if (pos) {
+    let cutoff = 20000;
+    let send = 0.12;
+    let delay = 0;
+    let near = 1;
+    const ui = def.ui || !pos;
+    if (!ui && pos) {
       _v.subVectors(pos, this.listenerPos);
       const d = _v.length();
       v *= 1 / (1 + d * 0.045);
       if (v < 0.02) return;
-      pan = d > 0.5 ? THREE.MathUtils.clamp(_v.normalize().dot(this.listenerRight), -1, 1) * 0.7 : 0;
+      near = THREE.MathUtils.clamp(1 - d / 45, 0, 1);
+      if (d > 0.5) {
+        _v.multiplyScalar(1 / d);
+        pan = THREE.MathUtils.clamp(_v.dot(this.listenerRight), -1, 1) * 0.75;
+        // behind the head: duller, like the ear's own shadow
+        if (_v.dot(this.listenerFwd) < -0.3) cutoff *= 0.55;
+      }
+      // air absorption and a wetter mix with distance
+      cutoff *= THREE.MathUtils.clamp(Math.exp(-(d - 5) / 38), 0.19, 1);
+      send = 0.1 + THREE.MathUtils.clamp(d / 55, 0, 1) * 0.55;
+      // far explosions arrive late (sound travels ~340 m/s)
+      if (def.duck && d > 25) delay = Math.min(0.12, d / 340);
     }
-    const g = ctx.createGain();
-    g.gain.value = v;
-    let out: AudioNode = g;
-    if (pan !== 0 && ctx.createStereoPanner) {
-      const p = ctx.createStereoPanner();
-      p.pan.value = pan;
-      g.connect(p);
-      p.connect(this.sfxBus);
-    } else g.connect(this.sfxBus);
-    out = g;
-    fn(this, out, now + 0.005, 1);
+    if (self && !ui) {
+      // your own actions sit closer and drier
+      pan *= 0.4;
+      send *= 0.6;
+    }
+    // voice limiting: steal the oldest instance of the same sound
+    const list = (this.voices.get(name) ?? []).filter((x) => x.end > now);
+    if (list.length >= (def.max ?? 4)) {
+      const old = list.shift()!;
+      old.g.gain.setTargetAtTime(0, now, 0.012);
+    }
+    const t = now + 0.004 + delay;
+    const out = this.g.gain(v * (def.gain ?? 1));
+    list.push({ end: t + def.dur, g: out });
+    this.voices.set(name, list);
+    // routing
+    if (ui) out.connect(this.uiBus);
+    else {
+      const lp = this.g.filter('lowpass', cutoff, 0.5);
+      out.connect(lp);
+      const p = this.g.pan(pan, this.worldDuck);
+      lp.connect(p);
+      lp.connect(this.g.gain(send * (def.rev ?? 1), this.roomIn));
+    }
+    // combo escalation: repeats from the same source within the window
+    let step = 0;
+    if (def.combo) {
+      const key = `${name}:${source?.champ ?? src ?? (ui ? 'ui' : 'world')}`;
+      const prev = this.combos.get(key);
+      step = prev && now - prev.t < def.combo ? prev.step + 1 : 0;
+      this.combos.set(key, { t: now, step });
+    }
+    const vary = def.vary ?? 0.035;
+    const c: SfxCtx = {
+      g: this.g,
+      t,
+      out,
+      p: 1 + (Math.random() * 2 - 1) * vary,
+      v: volume,
+      r: Math.random,
+      step,
+      champ: src ?? source?.champ ?? null,
+      self,
+      h: this.ensureMusic().harmony,
+      arena: this.arena,
+    };
+    def.fn(c);
+    // the score makes room for big moments nearby; the world ducks under the loudest events
+    if (def.duck && near > 0.35) {
+      this.music?.duck(def.duck * near, 0.18, 0.6);
+      if (def.duck >= 4) this.duckWorld(2.5 * near, 0.08, 0.4);
+    }
+    if (name === 'hit' || name === 'hitHeavy' || name === 'explosion' || name === 'slam') this.heat = Math.min(1, this.heat + (name === 'hit' ? 0.04 : 0.12) * near);
   }
 
-  // ---------------------------------------------------------------------------------------------
-  // building blocks
-  // ---------------------------------------------------------------------------------------------
-
-  noiseSrc(t: number, dur: number): AudioBufferSourceNode {
-    const s = this.ctx!.createBufferSource();
-    s.buffer = this.noise;
-    s.loop = true;
-    s.start(t, Math.random() * 1.5);
-    s.stop(t + dur + 0.05);
-    return s;
-  }
-
-  osc(type: OscillatorType, f0: number, f1: number, t: number, dur: number, out: AudioNode, vol: number, attack = 0.002): void {
-    const c = this.ctx!;
-    const o = c.createOscillator();
-    o.type = type;
-    o.frequency.setValueAtTime(f0, t);
-    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01));
-    o.connect(g).connect(out);
-    o.start(t);
-    o.stop(t + dur + 0.05);
-  }
-
-  noiseHit(t: number, dur: number, out: AudioNode, vol: number, type: BiquadFilterType, f0: number, f1: number, q = 1, attack = 0.002): void {
-    const c = this.ctx!;
-    const s = this.noiseSrc(t, dur);
-    const f = c.createBiquadFilter();
-    f.type = type;
-    f.Q.value = q;
-    f.frequency.setValueAtTime(f0, t);
-    if (f1 !== f0) f.frequency.exponentialRampToValueAtTime(Math.max(10, f1), t + dur);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.01));
-    s.connect(f).connect(g).connect(out);
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // loops: wind + boost hiss
-  // ---------------------------------------------------------------------------------------------
-
-  private setupLoops(): void {
-    const c = this.ctx!;
-    const wind = c.createBufferSource();
-    wind.buffer = this.noise;
-    wind.loop = true;
-    this.windFilter = c.createBiquadFilter();
-    this.windFilter.type = 'bandpass';
-    this.windFilter.frequency.value = 500;
-    this.windFilter.Q.value = 0.6;
-    this.windGain = c.createGain();
-    this.windGain.gain.value = 0;
-    wind.connect(this.windFilter).connect(this.windGain).connect(this.sfxBus);
-    wind.start();
-    const boost = c.createBufferSource();
-    boost.buffer = this.noise;
-    boost.loop = true;
-    const bf = c.createBiquadFilter();
-    bf.type = 'highpass';
-    bf.frequency.value = 1800;
-    this.boostGain = c.createGain();
-    this.boostGain.gain.value = 0;
-    boost.connect(bf).connect(this.boostGain).connect(this.sfxBus);
-    boost.start();
-  }
-
-  /** speed in m/s of the listener's fighter, boosting flag */
-  updateLoops(speed: number, boosting: boolean): void {
-    if (!this.ctx || !this.windGain || !this.boostGain || !this.windFilter) return;
+  private duckWorld(db: number, hold: number, release: number): void {
+    if (!this.ctx) return;
+    const p = this.worldDuck.gain;
     const t = this.ctx.currentTime;
-    const w = THREE.MathUtils.clamp((speed - 8) / 50, 0, 1);
-    this.windGain.gain.setTargetAtTime(w * w * 0.35, t, 0.1);
-    this.windFilter.frequency.setTargetAtTime(300 + w * 1400, t, 0.1);
-    this.boostGain.gain.setTargetAtTime(boosting ? 0.07 : 0, t, 0.05);
+    const target = Math.pow(10, -db / 20);
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(p.value, t);
+    p.linearRampToValueAtTime(target, t + 0.02);
+    p.setValueAtTime(target, t + 0.02 + hold);
+    p.linearRampToValueAtTime(1, t + 0.02 + hold + release);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // loops: wind, gas jet, cable, footsteps
+  // ---------------------------------------------------------------------------------------------
+
+  /** speed in m/s of the listener's fighter, boosting flag, and its movement state */
+  updateLoops(speed: number, boosting: boolean, st?: { grounded: boolean; hooked: number; wallRun: boolean; dt: number }): void {
+    if (!this.ctx || !this.loops) return;
+    this.loops.update(speed, boosting, st);
+    // combat heat cools down; it lifts the score's intensity while fights are on
+    this.heat = Math.max(0, this.heat - (st?.dt ?? 1 / 60) * 0.08);
+    if (this.music) this.music.intensity = Math.max(this.musicIntensity, this.heat * 0.9 + 0.25);
   }
 
   silenceLoops(): void {
-    if (!this.ctx || !this.windGain || !this.boostGain) return;
-    const t = this.ctx.currentTime;
-    this.windGain.gain.setTargetAtTime(0, t, 0.05);
-    this.boostGain.gain.setTargetAtTime(0, t, 0.05);
+    this.loops?.silence();
+  }
+
+  /** @internal used by the loops */
+  get graph(): Graph {
+    return this.g;
+  }
+  get sfxInput(): AudioNode {
+    return this.worldDuck;
+  }
+  get roomInput(): AudioNode {
+    return this.roomIn;
+  }
+  get arenaId(): string {
+    return this.arena;
   }
 
   // ---------------------------------------------------------------------------------------------
   // music
   // ---------------------------------------------------------------------------------------------
 
-  startMusic(style: 'menu' | 'battle'): void {
+  private ensureMusic(): MusicPlayer {
+    if (!this.music) this.music = new MusicPlayer(this.g, this.bank, this.musicBus);
+    return this.music;
+  }
+
+  startMusic(style: 'menu' | 'battle' | 'results'): void {
     if (!this.ctx) return;
-    if (!this.music) this.music = new MusicPlayer(this);
-    this.music.start(style);
+    const m = this.ensureMusic();
+    m.setMuffle(0);
+    if (style === 'menu') {
+      m.intensity = this.musicIntensity = 0.6;
+      m.start('menu', 1.5);
+      m.prewarm(this.battleSong);
+    } else if (style === 'battle') {
+      this.musicIntensity = 0.5;
+      m.start(this.battleSong, 0.4);
+    } else m.start('results', 1.5);
   }
 
   stopMusic(): void {
@@ -205,434 +320,140 @@ export class AudioEngine {
   }
 
   setMusicIntensity(v: number): void {
-    if (this.music) this.music.intensity = v;
+    this.musicIntensity = v;
+  }
+
+  /** final minute of the match */
+  setClimax(on: boolean): void {
+    this.music?.setClimax(on);
+  }
+
+  /** low health / death muffles the score */
+  setDanger(v: number): void {
+    this.music?.setMuffle(v);
+  }
+
+  /** a musical stinger over the score (the local player's ultimate) */
+  stinger(kind: 'power' | 'rise'): void {
+    this.music?.stinger(kind);
+  }
+
+  /** end of match: fanfare or lament, then the results loop */
+  matchEnd(won: boolean): void {
+    if (!this.ctx) return;
+    const m = this.ensureMusic();
+    m.setMuffle(0);
+    m.start(won ? 'victory' : 'defeat', 0.02);
+    const id = won ? 'victory' : 'defeat';
+    window.setTimeout(() => {
+      if (this.music?.songId === null || this.music?.songId === id) this.music?.start('results', 2);
+    }, won ? 9500 : 12000);
   }
 }
 
 // =============================================================================================
-// SFX recipes
+// Continuous movement sounds
 // =============================================================================================
 
-const SFX: Record<string, SfxFn> = {
-  hookFire: (a, o, t) => {
-    a.noiseHit(t, 0.14, o, 0.5, 'bandpass', 3800, 700, 2.5);
-    a.osc('square', 1900, 900, t, 0.035, o, 0.08);
-  },
-  hookHit: (a, o, t) => {
-    a.osc('sine', 430, 400, t, 0.18, o, 0.3);
-    a.osc('sine', 1180, 1100, t, 0.12, o, 0.15);
-    a.noiseHit(t, 0.05, o, 0.4, 'highpass', 3000, 3000);
-  },
-  jump: (a, o, t) => a.noiseHit(t, 0.18, o, 0.25, 'lowpass', 900, 300),
-  gasBurst: (a, o, t) => {
-    a.noiseHit(t, 0.3, o, 0.45, 'highpass', 1400, 2400, 0.7, 0.005);
-    a.osc('sine', 110, 55, t, 0.12, o, 0.3);
-  },
-  boostStart: (a, o, t) => a.noiseHit(t, 0.25, o, 0.35, 'highpass', 900, 2600, 0.7, 0.01),
-  dash: (a, o, t) => {
-    a.noiseHit(t, 0.22, o, 0.5, 'bandpass', 380, 2600, 1.4, 0.01);
-    a.osc('sine', 160, 70, t, 0.1, o, 0.25);
-  },
-  wallkick: (a, o, t) => {
-    a.osc('sine', 140, 60, t, 0.12, o, 0.4);
-    a.noiseHit(t, 0.2, o, 0.3, 'highpass', 1600, 2400);
-  },
-  land: (a, o, t) => {
-    a.osc('sine', 95, 45, t, 0.18, o, 0.55);
-    a.noiseHit(t, 0.15, o, 0.3, 'lowpass', 1200, 200);
-  },
-  swing: (a, o, t) => a.noiseHit(t, 0.2, o, 0.45, 'bandpass', 300, 1800, 1.8, 0.03),
-  swingHeavy: (a, o, t) => {
-    a.noiseHit(t, 0.32, o, 0.55, 'bandpass', 180, 1100, 1.5, 0.05);
-    a.osc('sine', 70, 50, t, 0.25, o, 0.2, 0.05);
-  },
-  hit: (a, o, t) => {
-    a.osc('sine', 180, 55, t, 0.14, o, 0.7);
-    a.noiseHit(t, 0.08, o, 0.55, 'bandpass', 2400, 900, 1.2);
-    a.osc('square', 90, 60, t, 0.05, o, 0.12);
-  },
-  hitHeavy: (a, o, t) => {
-    a.osc('sine', 140, 35, t, 0.35, o, 0.9);
-    a.noiseHit(t, 0.15, o, 0.7, 'bandpass', 1800, 400, 1);
-    a.osc('sawtooth', 60, 30, t, 0.3, o, 0.15);
-  },
-  crit: (a, o, t) => {
-    a.osc('triangle', 1760, 1760, t, 0.25, o, 0.22);
-    a.osc('triangle', 2640, 2640, t + 0.04, 0.3, o, 0.16);
-  },
-  block: (a, o, t) => {
-    a.osc('square', 820, 760, t, 0.12, o, 0.12);
-    a.osc('sine', 1650, 1500, t, 0.2, o, 0.2);
-    a.noiseHit(t, 0.06, o, 0.4, 'highpass', 4000, 4000);
-  },
-  parry: (a, o, t) => {
-    a.osc('sine', 2200, 2400, t, 0.5, o, 0.3);
-    a.osc('sine', 3300, 3600, t, 0.4, o, 0.18);
-    a.noiseHit(t, 0.3, o, 0.3, 'highpass', 5000, 8000);
-  },
-  shot: (a, o, t) => {
-    a.osc('sawtooth', 900, 120, t, 0.12, o, 0.22);
-    a.osc('sine', 120, 50, t, 0.12, o, 0.45);
-    a.noiseHit(t, 0.06, o, 0.25, 'highpass', 2500, 2500);
-  },
-  chargeShot: (a, o, t) => {
-    a.osc('sawtooth', 220, 40, t, 0.5, o, 0.35);
-    a.osc('sine', 80, 30, t, 0.6, o, 0.7);
-    a.noiseHit(t, 0.3, o, 0.5, 'lowpass', 4000, 300, 0.8);
-  },
-  charge: (a, o, t) => a.osc('triangle', 180, 900, t, 0.9, o, 0.12, 0.2),
-  orb: (a, o, t) => {
-    a.osc('sine', 880, 1320, t, 0.18, o, 0.2);
-    a.osc('sine', 1760, 1760, t, 0.1, o, 0.08);
-  },
-  note: (a, o, t) => {
-    a.osc('triangle', 1046, 1046, t, 0.3, o, 0.16);
-    a.osc('sine', 1568, 1568, t, 0.25, o, 0.1);
-  },
-  beam: (a, o, t) => {
-    a.osc('sawtooth', 330, 340, t, 0.5, o, 0.12, 0.05);
-    a.osc('sine', 660, 680, t, 0.5, o, 0.12, 0.05);
-  },
-  explosion: (a, o, t) => {
-    a.noiseHit(t, 0.7, o, 0.9, 'lowpass', 2400, 120, 0.7, 0.005);
-    a.osc('sine', 90, 30, t, 0.6, o, 0.9);
-  },
-  wave: (a, o, t) => {
-    a.osc('sine', 220, 880, t, 0.4, o, 0.35, 0.02);
-    a.noiseHit(t, 0.45, o, 0.4, 'bandpass', 600, 3000, 1.2, 0.02);
-  },
-  teleport: (a, o, t) => {
-    a.osc('square', 1600, 200, t, 0.15, o, 0.1);
-    a.noiseHit(t, 0.12, o, 0.3, 'bandpass', 5000, 800, 3);
-  },
-  kunai: (a, o, t) => {
-    // five quick glitchy blade whips, one per beat sixteenth
-    for (let i = 0; i < 5; i++) {
-      a.noiseHit(t + i * 0.018, 0.09, o, 0.22, 'bandpass', 2600 + i * 500, 7000, 4, 0.004);
-      a.osc('square', 1900 - i * 140, 600, t + i * 0.018, 0.05, o, 0.05);
-    }
-  },
-  slug: (a, o, t) => {
-    // heavy single shot: sub kick + bright crack + short tail
-    a.osc('sine', 150, 38, t, 0.32, o, 0.75);
-    a.osc('sawtooth', 1300, 160, t, 0.16, o, 0.2);
-    a.noiseHit(t, 0.1, o, 0.45, 'highpass', 3000, 1800);
-    a.noiseHit(t + 0.03, 0.4, o, 0.22, 'lowpass', 2400, 250, 0.7);
-  },
-  lob: (a, o, t) => {
-    // rising sung high note
-    a.osc('triangle', 784, 1568, t, 0.32, o, 0.18, 0.02);
-    a.osc('sine', 1568, 2093, t + 0.05, 0.3, o, 0.1, 0.02);
-  },
-  hookDry: (a, o, t) => {
-    // empty launcher: a dry mechanical click and a short hiss
-    a.osc('square', 180, 90, t, 0.05, o, 0.18);
-    a.osc('square', 140, 70, t + 0.06, 0.05, o, 0.14);
-    a.noiseHit(t + 0.02, 0.12, o, 0.12, 'highpass', 4000, 4000);
-  },
-  cutin: (a, o, t) => {
-    a.noiseHit(t, 0.35, o, 0.5, 'bandpass', 900, 7000, 1.4, 0.01);
-    for (const [f, d] of [[523, 0], [659, 0.02], [784, 0.04], [1046, 0.06]] as const) a.osc('sawtooth', f, f, t + 0.08 + d, 0.45, o, 0.09, 0.005);
-    a.osc('sine', 160, 50, t + 0.08, 0.4, o, 0.6);
-  },
-  ultReady: (a, o, t) => {
-    a.osc('triangle', 523, 523, t, 0.2, o, 0.15);
-    a.osc('triangle', 784, 784, t + 0.1, 0.2, o, 0.15);
-    a.osc('triangle', 1046, 1046, t + 0.2, 0.35, o, 0.15);
-  },
-  ult: (a, o, t) => {
-    a.osc('sawtooth', 110, 880, t, 0.6, o, 0.25, 0.1);
-    a.noiseHit(t, 0.7, o, 0.4, 'bandpass', 400, 6000, 1, 0.1);
-  },
-  slam: (a, o, t) => {
-    a.osc('sine', 120, 28, t, 0.8, o, 1.0);
-    a.noiseHit(t, 0.5, o, 0.8, 'lowpass', 3000, 150, 0.6);
-    a.osc('square', 55, 40, t, 0.4, o, 0.15);
-  },
-  death: (a, o, t) => {
-    for (let i = 0; i < 6; i++) a.noiseHit(t + i * 0.03, 0.12, o, 0.35, 'highpass', 3000 + i * 600, 6000, 2);
-    a.osc('sine', 880, 110, t, 0.6, o, 0.2);
-  },
-  kill: (a, o, t) => {
-    a.osc('square', 660, 660, t, 0.12, o, 0.12);
-    a.osc('square', 990, 990, t + 0.09, 0.2, o, 0.12);
-    a.osc('sine', 1320, 1320, t + 0.18, 0.35, o, 0.12);
-  },
-  uiMove: (a, o, t) => a.osc('square', 1400, 1400, t, 0.04, o, 0.06),
-  uiSelect: (a, o, t) => {
-    a.osc('square', 880, 880, t, 0.06, o, 0.08);
-    a.osc('square', 1320, 1320, t + 0.05, 0.1, o, 0.08);
-  },
-  uiBack: (a, o, t) => a.osc('square', 700, 450, t, 0.08, o, 0.08),
-  countdown: (a, o, t) => a.osc('square', 660, 660, t, 0.15, o, 0.12),
-  go: (a, o, t) => {
-    a.osc('square', 990, 990, t, 0.4, o, 0.14);
-    a.osc('sawtooth', 495, 495, t, 0.4, o, 0.08);
-  },
-  respawn: (a, o, t) => {
-    a.osc('sine', 330, 990, t, 0.4, o, 0.2, 0.05);
-    a.noiseHit(t, 0.4, o, 0.2, 'bandpass', 800, 4000, 1, 0.1);
-  },
-  // --- combat feedback (2D confirms are played without a position) ---
-  /** hit confirm: short, dry, readable at any distance */
-  tick: (a, o, t) => {
-    a.osc('square', 2600, 1900, t, 0.035, o, 0.08);
-    a.osc('sine', 1300, 1300, t, 0.05, o, 0.1);
-  },
-  /** critical / headshot confirm */
-  dink: (a, o, t) => {
-    a.osc('triangle', 3136, 3136, t, 0.16, o, 0.2);
-    a.osc('sine', 4700, 4700, t + 0.015, 0.12, o, 0.09);
-  },
-  killConfirm: (a, o, t) => {
-    a.osc('square', 784, 784, t, 0.07, o, 0.07);
-    a.osc('square', 1175, 1175, t + 0.06, 0.08, o, 0.07);
-    a.osc('sine', 1568, 1568, t + 0.12, 0.3, o, 0.12);
-    a.osc('sine', 90, 35, t, 0.35, o, 0.6);
-  },
-  /** momentum strike: a high blade hiss over a sub drop */
-  slice: (a, o, t) => {
-    a.noiseHit(t, 0.2, o, 0.55, 'bandpass', 7500, 1200, 2.2, 0.002);
-    a.osc('sine', 110, 38, t, 0.3, o, 0.7);
-    a.osc('triangle', 2093, 1568, t, 0.12, o, 0.08);
-  },
-  /** perfect dodge: air rush + bright shimmer */
-  dodge: (a, o, t) => {
-    a.noiseHit(t, 0.32, o, 0.45, 'bandpass', 500, 3600, 1.6, 0.01);
-    a.osc('sine', 1568, 2093, t, 0.35, o, 0.16);
-    a.osc('triangle', 3136, 3136, t + 0.05, 0.3, o, 0.08);
-  },
-  /** counter hit: accent stab over the normal impact */
-  counter: (a, o, t) => {
-    a.osc('square', 1046, 1046, t, 0.07, o, 0.1);
-    a.osc('square', 1568, 1568, t + 0.05, 0.12, o, 0.08);
-    a.osc('sawtooth', 220, 50, t, 0.3, o, 0.25);
-    a.noiseHit(t, 0.14, o, 0.35, 'highpass', 4000, 7000);
-  },
-  /** ready cue (counter / riposte window, perfect charge) */
-  perfectTick: (a, o, t) => {
-    a.osc('triangle', 2637, 2637, t, 0.08, o, 0.14);
-    a.osc('sine', 5274, 5274, t, 0.05, o, 0.05);
-  },
-  /** an enemy hooked you */
-  alarm: (a, o, t) => {
-    a.osc('square', 880, 660, t, 0.09, o, 0.08);
-    a.osc('square', 880, 660, t + 0.12, 0.09, o, 0.08);
-  },
-  whoosh: (a, o, t) => a.noiseHit(t, 0.45, o, 0.4, 'bandpass', 400, 2400, 1.4, 0.05),
-  medal1: (a, o, t) => {
-    a.osc('square', 1046, 1046, t, 0.08, o, 0.06);
-    a.osc('square', 1318, 1318, t + 0.07, 0.14, o, 0.06);
-  },
-  medal2: (a, o, t) => {
-    a.osc('square', 1046, 1046, t, 0.07, o, 0.06);
-    a.osc('square', 1318, 1318, t + 0.06, 0.07, o, 0.06);
-    a.osc('square', 1568, 1568, t + 0.12, 0.2, o, 0.07);
-  },
-  medal3: (a, o, t) => {
-    for (const [f, d] of [[1046, 0], [1318, 0.06], [1568, 0.12], [2093, 0.18]] as const) a.osc('sawtooth', f, f, t + d, 0.2, o, 0.05);
-    a.osc('sine', 65, 40, t, 0.5, o, 0.5);
-  },
-  ultTick: (a, o, t) => a.osc('sine', 880, 1320, t, 0.06, o, 0.1),
-  /** Nova's glitch mark / reset */
-  glitch: (a, o, t) => {
-    a.osc('square', 1200, 300, t, 0.06, o, 0.06);
-    a.osc('square', 1200, 300, t + 0.08, 0.06, o, 0.05);
-  },
-  /** Sera's chord: a C major triad */
-  chord: (a, o, t) => {
-    for (const f of [523, 659, 784]) a.osc('triangle', f, f, t, 0.45, o, 0.08);
-  },
-  /** Pooh's belly bump: a rubbery boing over a soft thud */
-  boing: (a, o, t) => {
-    a.osc('sine', 150, 420, t, 0.09, o, 0.55);
-    a.osc('sine', 420, 180, t + 0.08, 0.26, o, 0.4);
-    a.osc('triangle', 300, 600, t + 0.02, 0.1, o, 0.12);
-    a.osc('sine', 90, 45, t, 0.16, o, 0.6);
-    a.noiseHit(t, 0.08, o, 0.3, 'lowpass', 900, 250);
-  },
-  /** a honey pot breaking: clay crack and a wet splat */
-  splat: (a, o, t) => {
-    a.noiseHit(t, 0.05, o, 0.45, 'highpass', 2600, 1800, 0.8);
-    a.noiseHit(t + 0.02, 0.3, o, 0.6, 'lowpass', 1400, 220, 1.2, 0.01);
-    a.osc('sine', 260, 90, t + 0.02, 0.14, o, 0.4);
-  },
-  /** the bee swarm */
-  buzz: (a, o, t) => {
-    a.osc('sawtooth', 205, 225, t, 0.32, o, 0.06, 0.04);
-    a.osc('sawtooth', 236, 214, t + 0.03, 0.3, o, 0.05, 0.04);
-    a.noiseHit(t, 0.3, o, 0.05, 'bandpass', 900, 1100, 3, 0.04);
-  },
-  /** Idea!: lightbulb ding and a little rising arpeggio */
-  idea: (a, o, t) => {
-    a.osc('triangle', 784, 784, t, 0.12, o, 0.12);
-    a.osc('triangle', 1047, 1047, t + 0.08, 0.12, o, 0.12);
-    a.osc('sine', 1568, 1568, t + 0.16, 0.7, o, 0.2);
-    a.osc('sine', 3136, 3136, t + 0.16, 0.4, o, 0.05);
-  },
-  /** a paw tapping his head */
-  tap: (a, o, t) => {
-    a.osc('sine', 300, 170, t, 0.07, o, 0.3);
-    a.noiseHit(t, 0.04, o, 0.15, 'lowpass', 1500, 600);
-  },
-  /** licking up a puddle of honey */
-  slurp: (a, o, t) => {
-    a.noiseHit(t, 0.32, o, 0.25, 'bandpass', 500, 1900, 3, 0.04);
-    a.osc('sine', 220, 520, t, 0.25, o, 0.15, 0.03);
-  },
-  /** the balloon string let go */
-  pop: (a, o, t) => {
-    a.noiseHit(t, 0.06, o, 0.4, 'highpass', 3000, 3000);
-    a.osc('sine', 900, 220, t, 0.06, o, 0.2);
-  },
-  // ---- Elisabbat ------------------------------------------------------------------------------
-  /** vampire hiss before the lunge */
-  hiss: (a, o, t) => a.noiseHit(t, 0.32, o, 0.35, 'highpass', 3200, 5200, 0.9, 0.02),
-  /** fangs sinking in: a crunch and a thump */
-  bite: (a, o, t) => {
-    a.noiseHit(t, 0.08, o, 0.7, 'bandpass', 1900, 700, 2);
-    a.osc('square', 220, 80, t, 0.06, o, 0.18);
-    a.osc('sine', 150, 60, t, 0.14, o, 0.5);
-    a.noiseHit(t + 0.05, 0.06, o, 0.45, 'bandpass', 2700, 1300, 3);
-  },
-  /** the life she drinks */
-  drink: (a, o, t) => {
-    a.osc('sine', 320, 120, t, 0.24, o, 0.28, 0.02);
-    a.osc('triangle', 540, 260, t + 0.08, 0.2, o, 0.12, 0.02);
-    a.noiseHit(t, 0.3, o, 0.18, 'lowpass', 900, 300, 1, 0.03);
-  },
-  /** bursting into (or out of) the bat: a whoosh and wingbeats */
-  batPoof: (a, o, t) => {
-    a.noiseHit(t, 0.4, o, 0.45, 'bandpass', 600, 2400, 1.2, 0.02);
-    for (let i = 0; i < 6; i++) a.noiseHit(t + 0.04 + i * 0.035, 0.03, o, 0.28, 'bandpass', 1300 + i * 80, 1300, 2.2);
-    a.osc('sine', 4600, 5600, t + 0.12, 0.05, o, 0.05);
-  },
-  /** a swarm of bats: fluttering and squeaks */
-  bats: (a, o, t) => {
-    for (let i = 0; i < 10; i++) a.noiseHit(t + i * 0.045, 0.03, o, 0.22, 'bandpass', 1100 + (i % 3) * 300, 1100, 2.4);
-    for (let i = 0; i < 3; i++) a.osc('sine', 4200 + i * 500, 5200 + i * 300, t + 0.05 + i * 0.12, 0.05, o, 0.05);
-  },
-  /** Eternal Night: a deep gust full of wings */
-  storm: (a, o, t) => {
-    a.noiseHit(t, 1.3, o, 0.5, 'bandpass', 260, 900, 0.8, 0.25);
-    a.osc('sawtooth', 70, 48, t, 1.1, o, 0.14, 0.2);
-    for (let i = 0; i < 16; i++) a.noiseHit(t + 0.1 + i * 0.06, 0.03, o, 0.18, 'bandpass', 1000 + (i % 4) * 250, 1000, 2.4);
-    for (let i = 0; i < 4; i++) a.osc('sine', 4000 + i * 450, 5000 + i * 300, t + 0.2 + i * 0.2, 0.05, o, 0.05);
-  },
-  /** claws through the air */
-  claw: (a, o, t) => a.noiseHit(t, 0.12, o, 0.3, 'highpass', 2600, 6200, 1.2, 0.01),
-};
+/**
+ * Wind in three bands that open up with speed (rumble, rush, and a high whistle only near top
+ * speed) with cloth flutter, the gas jet while boosting, a singing cable while hooked, and
+ * footsteps whose cadence follows the run speed.
+ */
+class Loops {
+  private rumble: GainNode;
+  private rush: GainNode;
+  private rushF: BiquadFilterNode;
+  private whistle: GainNode;
+  private whistleF: BiquadFilterNode;
+  private flutter: GainNode;
+  private jet: GainNode;
+  private jetF: BiquadFilterNode;
+  private cable: GainNode;
+  private cableOsc: OscillatorNode[] = [];
+  private flutterLfo: OscillatorNode;
+  private stepT = 0;
 
-// =============================================================================================
-// Procedural music
-// =============================================================================================
-
-class MusicPlayer {
-  private timer: number | null = null;
-  private step = 0;
-  private nextTime = 0;
-  private style: 'menu' | 'battle' = 'menu';
-  intensity = 0.5;
-  private out: GainNode;
   constructor(private a: AudioEngine) {
-    this.out = a.ctx!.createGain();
-    this.out.gain.value = 0.9;
-    this.out.connect(a.musicBus);
-  }
-
-  start(style: 'menu' | 'battle'): void {
-    this.style = style;
-    if (this.timer !== null) return;
-    this.nextTime = this.a.ctx!.currentTime + 0.1;
-    this.step = 0;
-    this.timer = window.setInterval(() => this.schedule(), 25);
-  }
-
-  stop(): void {
-    if (this.timer !== null) window.clearInterval(this.timer);
-    this.timer = null;
-  }
-
-  private schedule(): void {
-    const ctx = this.a.ctx!;
-    const bpm = this.style === 'menu' ? 92 : 104;
-    Beat.bpm = bpm;
-    const s16 = 60 / bpm / 4;
-    while (this.nextTime < ctx.currentTime + 0.12) {
-      this.playStep(this.step, this.nextTime, s16);
-      // swing on odd 16ths
-      this.nextTime += s16 * (this.step % 2 === 0 ? 1.08 : 0.92);
-      this.step = (this.step + 1) % 128;
+    const g = a.graph;
+    const c = g.ctx;
+    const out = a.sfxInput;
+    const loopNoise = (color: 'white' | 'pink' | 'brown', rate = 1) => {
+      const s = c.createBufferSource();
+      s.buffer = g.noise[color];
+      s.loop = true;
+      s.playbackRate.value = rate;
+      s.start();
+      return s;
+    };
+    // wind
+    this.rumble = g.gain(0, out);
+    loopNoise('brown', 0.7).connect(g.filter('lowpass', 260, 0.7)).connect(this.rumble);
+    this.flutter = g.gain(1, out);
+    this.rush = g.gain(0, this.flutter);
+    this.rushF = g.filter('bandpass', 600, 0.7);
+    loopNoise('pink').connect(this.rushF).connect(this.rush);
+    this.whistle = g.gain(0, this.flutter);
+    this.whistleF = g.filter('bandpass', 3000, 9);
+    loopNoise('white').connect(this.whistleF).connect(this.whistle);
+    // cloth flutter: amplitude modulation at a jittery 8-25 Hz
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 13;
+    const depth = g.gain(0.25);
+    lfo.connect(depth).connect(this.flutter.gain);
+    lfo.start();
+    this.flutterLfo = lfo;
+    // gas jet: hiss plus a resonant nozzle tone
+    this.jet = g.gain(0, out);
+    this.jetF = g.filter('bandpass', 2400, 1.2);
+    loopNoise('white').connect(g.filter('highpass', 1500, 0.7)).connect(this.jetF).connect(this.jet);
+    // cable hum: two slightly detuned triangles through a bandpass (a singing wire)
+    this.cable = g.gain(0, out);
+    const bp = g.filter('bandpass', 900, 3, this.cable);
+    for (const f of [180, 181.7]) {
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      o.connect(bp);
+      o.start();
+      this.cableOsc.push(o);
     }
   }
 
-  private playStep(step: number, t: number, s16: number): void {
-    const a = this.a;
-    const o = this.out;
-    const bar = Math.floor(step / 16);
-    const s = step % 16;
-    const battle = this.style === 'battle';
-    const I = this.intensity;
-    // A minor-ish progression: Am - F - C - G (two bars each)
-    const roots = [45, 41, 48, 43];
-    const chordIdx = Math.floor(bar / 2) % 4;
-    const root = roots[chordIdx];
-    const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
-    // kick
-    const kickPat = battle ? [0, 3, 8, 10] : [0, 7, 10];
-    if (kickPat.includes(s)) {
-      Beat.push(t, false, s / 4);
-      a.osc('sine', 150, 42, t, 0.32, o, 0.75);
-      a.osc('square', 60, 40, t, 0.04, o, 0.1);
-    }
-    // snare / clap
-    if (s === 4 || s === 12) {
-      Beat.push(t, true, s / 4);
-      a.noiseHit(t, 0.18, o, 0.35, 'bandpass', 1800, 1200, 0.8);
-      a.osc('triangle', 220, 160, t, 0.08, o, 0.25);
-      if (battle) a.noiseHit(t + 0.012, 0.12, o, 0.2, 'highpass', 2500, 2500);
-    }
-    // hats
-    const hatOn = battle ? true : s % 2 === 0;
-    if (hatOn) {
-      const open = s % 8 === 6;
-      a.noiseHit(t, open ? 0.14 : 0.035, o, (s % 4 === 2 ? 0.13 : 0.07) * (0.6 + I * 0.5), 'highpass', 7000, 7000);
-    }
-    if (battle && I > 0.6 && (s === 14 || s === 15)) a.noiseHit(t, 0.03, o, 0.07, 'highpass', 8000, 8000);
-    // sub bass
-    const bassPat = [0, 3, 6, 10, 13];
-    if (bassPat.includes(s)) {
-      const n = root - 12 + (s === 10 ? 7 : s === 13 ? 10 : 0);
-      const c = a.ctx!;
-      const os = c.createOscillator();
-      os.type = 'sawtooth';
-      os.frequency.value = midi(n);
-      const f = c.createBiquadFilter();
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime(900 + I * 900, t);
-      f.frequency.exponentialRampToValueAtTime(160, t + s16 * 2.5);
-      const g = c.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.32, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + s16 * 2.8);
-      os.connect(f).connect(g).connect(o);
-      os.start(t);
-      os.stop(t + s16 * 3);
-      a.osc('sine', midi(n), midi(n), t, s16 * 2.8, o, 0.35);
-    }
-    // chord stabs (off-beat)
-    if ((s === 2 || s === 9) && (battle || bar % 2 === 0)) {
-      const third = chordIdx === 0 ? 3 : 4;
-      for (const iv of [12, 12 + third, 19, 24]) {
-        a.osc('sawtooth', midi(root + iv), midi(root + iv), t, s16 * 1.6, o, 0.035);
-        a.osc('square', midi(root + iv) * 1.004, midi(root + iv) * 1.004, t, s16 * 1.4, o, 0.018);
+  update(speed: number, boosting: boolean, st?: { grounded: boolean; hooked: number; wallRun: boolean; dt: number }): void {
+    const t = this.a.graph.ctx.currentTime;
+    const w = THREE.MathUtils.clamp((speed - 6) / 50, 0, 1);
+    const airborne = st ? !st.grounded : true;
+    const k = airborne ? 1 : 0.55;
+    this.rumble.gain.setTargetAtTime(w * 0.3 * k, t, 0.12);
+    this.rush.gain.setTargetAtTime(w * w * 0.32 * k, t, 0.1);
+    this.rushF.frequency.setTargetAtTime(400 + w * 1100, t, 0.12);
+    const top = THREE.MathUtils.clamp((speed - 38) / 20, 0, 1);
+    this.whistle.gain.setTargetAtTime(top * 0.05 * k, t, 0.15);
+    this.whistleF.frequency.setTargetAtTime(2200 + top * 2500 + Math.random() * 300, t, 0.2);
+    this.flutterLfo.frequency.setTargetAtTime(8 + w * 14 + Math.random() * 3, t, 0.3);
+    // gas
+    this.jet.gain.setTargetAtTime(boosting ? 0.09 : 0, t, boosting ? 0.03 : 0.08);
+    this.jetF.frequency.setTargetAtTime(2000 + Math.random() * 900, t, 0.05);
+    // cable: pitch rises with speed (tension), only while hooked
+    const hooked = st ? st.hooked > 0 : false;
+    this.cable.gain.setTargetAtTime(hooked ? 0.012 + w * 0.025 : 0, t, hooked ? 0.06 : 0.1);
+    const f = 150 + speed * 6;
+    this.cableOsc[0].frequency.setTargetAtTime(f, t, 0.08);
+    this.cableOsc[1].frequency.setTargetAtTime(f * 1.009, t, 0.08);
+    // footsteps
+    if (st && (st.grounded || st.wallRun) && speed > 1.5) {
+      const rate = st.wallRun ? 7.5 : THREE.MathUtils.clamp(1.6 + speed * 0.16, 1.8, 4.6);
+      this.stepT += st.dt * rate;
+      if (this.stepT >= 1) {
+        this.stepT -= 1;
+        this.a.play('footstep', undefined, Math.min(1, 0.35 + speed / 25));
       }
-    }
-    // lead arp in battle at high intensity
-    if (battle && I > 0.45 && s % 2 === 1) {
-      const scale = [0, 3, 5, 7, 10, 12];
-      const n = root + 24 + scale[(step * 7 + bar) % scale.length];
-      a.osc('triangle', midi(n), midi(n), t, s16 * 0.9, o, 0.05 * I);
-    }
+    } else this.stepT = 0.6;
+  }
+
+  silence(): void {
+    const t = this.a.graph.ctx.currentTime;
+    for (const g of [this.rumble, this.rush, this.whistle, this.jet, this.cable]) g.gain.setTargetAtTime(0, t, 0.05);
   }
 }

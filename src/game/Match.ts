@@ -110,6 +110,8 @@ export class Match implements MatchContext {
     if (opts.gameMode === 'spot') this.rules.durationSec = Math.ceil(SPOT_DURATION_SEC);
     this.clock = this.rules.durationSec;
     this.arena = buildArena(opts.arenaId);
+    audio.clearFighters();
+    audio.setArena(opts.arenaId);
     this.scene.add(this.arena.root);
     applyMood(this.scene, this.arena.mood);
     setKeyLight(this.arena.sun);
@@ -157,6 +159,7 @@ export class Match implements MatchContext {
     const cb = bl?.colorB ?? new THREE.Color(f.champ.colors[1]);
     this.ghosts.set(f, new WeaponGhosts(this.scene, [visual.weaponR, visual.weaponL], ca, cb));
     this.fighters.push(f);
+    this.audio.registerFighter(f.pos, champ, kind === 'local');
     return f;
   }
 
@@ -402,6 +405,7 @@ export class Match implements MatchContext {
     this.hud?.ultCutIn(f, f.champ.abilities.ult.name, this.portraits.get(f.champId) ?? null, f !== this.local);
     if (f === this.local) {
       this.audio.play('cutin');
+      this.audio.stinger('power');
       this.flash = Math.max(this.flash, 0.2);
     } else this.audio.play('cutin', undefined, 0.5);
   }
@@ -528,10 +532,10 @@ export class Match implements MatchContext {
     if (blocked) {
       _v.subVectors(at, target.chest(_r)).normalize();
       this.vfx.blockSpark(at, _v);
-      this.audio.play('block', at, 0.9);
+      this.audio.play('block', at, 0.9, attacker?.champId);
     } else {
-      this.audio.play(amount > 120 ? 'hitHeavy' : 'hit', at, 1);
-      if (info.crit) this.audio.play('crit', at, 0.8);
+      this.audio.play(amount > 120 ? 'hitHeavy' : 'hit', at, 1, attacker?.champId);
+      if (info.crit) this.audio.play('crit', at, 0.8, attacker?.champId);
     }
     if (attacker && attacker !== this.local && target !== this.local) {
       _v.subVectors(at, attacker.chest(_r)).normalize();
@@ -641,6 +645,7 @@ export class Match implements MatchContext {
     if (this.state === 'ended') return;
     this.state = 'ended';
     this.celebrate(winner);
+    this.audio.matchEnd(winner === this.local);
     this.onEnd?.(winner);
   }
 
@@ -747,7 +752,12 @@ export class Match implements MatchContext {
     this.camPos.copy(this.cam.camera.position);
     rightOf(this.cam.yaw, _r);
     this.audio.setListener(this.camPos, _r);
-    this.audio.updateLoops(this.local.alive ? this.local.speed : 0, this.local.boosting);
+    this.audio.updateLoops(this.local.alive ? this.local.speed : 0, this.local.boosting, {
+      grounded: this.local.grounded,
+      hooked: this.local.hooks.filter((h) => h.attached).length,
+      wallRun: this.local.wallRun > 0,
+      dt,
+    });
 
     // weapon afterimages + trails
     for (const [f, g] of this.ghosts) g.update(simDt, f.trailOn && f.alive && f.visual.root.visible, f.alive && f.ulting);
@@ -775,6 +785,13 @@ export class Match implements MatchContext {
     this.flash = Math.max(0, this.flash - dt * 3);
     fx.uFlash.value = this.flash * 0.5;
     this.audio.setMusicIntensity(THREE.MathUtils.clamp(0.4 + sp * 0.6, 0, 1));
+    // the score muffles when you are about to die, and goes to its climax for the last minute
+    // (or when someone is three kills from winning)
+    this.audio.setDanger(this.local.alive ? THREE.MathUtils.clamp((0.3 - this.local.hp / this.local.maxHp) / 0.3, 0, 1) * 0.45 : 0.7);
+    if (this.state === 'playing') {
+      const lead = this.fighters.reduce((m, f) => Math.max(m, f.kills), 0);
+      if ((this.clock <= 60 && this.rules.durationSec > 90) || (!this.spot && lead >= this.rules.killsToWin - 3)) this.audio.setClimax(true);
+    }
 
     this.hud?.update(dt, this);
     this.input.endFrame();

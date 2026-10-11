@@ -16,3 +16,6 @@ tools/blender/_*_debug.png
 tools/blender/lol/_cache/
 # League of Legends renders (derived from Riot assets): local only
 docs/art/lol/
+
+# listening previews rendered by .claude/skills/game-sfx/scripts/render.mjs
+audio-previews/
