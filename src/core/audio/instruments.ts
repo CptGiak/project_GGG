@@ -202,7 +202,8 @@ export function timpaniVoice(g: Graph, out: AudioNode, midi: number, t: number, 
 interface Job {
   key: string;
   len: number;
-  build: (g: Graph, out: AudioNode) => void;
+  /** draw the note into `out`, starting at time `t` */
+  build: (g: Graph, out: AudioNode, t: number) => void;
 }
 
 export class NoteCache {
@@ -231,27 +232,55 @@ export class NoteCache {
     return new Promise((res) => this.waiters.push(res));
   }
 
+  /**
+   * Several notes share one offline context, each on its own output channel (a context can hold
+   * up to 32): one render for the batch instead of one per note.
+   */
   private pump(): void {
     if (this.busy) return;
-    const job = this.queue.shift();
-    if (!job) {
+    if (!this.queue.length) {
       this.waiters.splice(0).forEach((w) => w());
       return;
     }
+    const batch = this.queue.splice(0, 16);
+    const len = Math.max(...batch.map((j) => j.len));
     this.busy = true;
-    const sr = this.main.ctx.sampleRate;
-    const oc = new OfflineAudioContext(1, Math.ceil(job.len * sr), sr);
-    job.build(new Graph(oc, this.main.noise), oc.destination);
+    const main = this.main.ctx;
+    const sr = main.sampleRate;
+    const oc = new OfflineAudioContext(batch.length, Math.ceil(len * sr), sr);
+    oc.destination.channelInterpretation = 'discrete';
+    const merger = oc.createChannelMerger(batch.length);
+    merger.connect(oc.destination);
+    const g = new Graph(oc, this.main.noise);
+    batch.forEach((j, i) => {
+      // the note's own gain, closed at its length so the slice ends cleanly
+      const out = oc.createGain();
+      out.channelCount = 1;
+      out.channelCountMode = 'explicit';
+      out.gain.setValueAtTime(1, j.len - 0.012);
+      out.gain.linearRampToValueAtTime(0, j.len - 0.002);
+      out.connect(merger, 0, i);
+      j.build(g, out, 0);
+    });
     oc.startRendering()
       .then((b) => {
-        this.bufs.set(job.key, b);
+        batch.forEach((j, i) => {
+          const n = Math.floor(j.len * sr);
+          const buf = main.createBuffer(1, n, sr);
+          buf.copyToChannel(b.getChannelData(i).slice(0, n), 0);
+          this.bufs.set(j.key, buf);
+        });
       })
       .catch(() => undefined)
       .finally(() => {
-        this.pending.delete(job.key);
+        for (const j of batch) this.pending.delete(j.key);
         this.busy = false;
         this.pump();
       });
+  }
+
+  get size(): number {
+    return this.bufs.size;
   }
 }
 
@@ -372,28 +401,28 @@ export class Band {
     const c = this.cache;
     switch (part) {
       case 'trumpet':
-        c.want(`bt${midi}`, SUS.brass + 0.2, (g, o) => brassVoice(g, o, midi, 0, SUS.brass, REF_VEL, 'trumpet'));
+        c.want(`bt${midi}`, SUS.brass + 0.2, (g, o, t) => brassVoice(g, o, midi, t, SUS.brass, REF_VEL, 'trumpet'));
         break;
       case 'horn':
-        c.want(`bh${midi}`, SUS.horn + 0.2, (g, o) => brassVoice(g, o, midi, 0, SUS.horn, REF_VEL, 'horn'));
+        c.want(`bh${midi}`, SUS.horn + 0.2, (g, o, t) => brassVoice(g, o, midi, t, SUS.horn, REF_VEL, 'horn'));
         break;
       case 'stab':
-        c.want(`bs${midi}`, 0.4, (g, o) => brassVoice(g, o, midi, 0, 0.16, REF_VEL, 'stab'));
+        c.want(`bs${midi}`, 0.4, (g, o, t) => brassVoice(g, o, midi, t, 0.16, REF_VEL, 'stab'));
         break;
       case 'stabFall':
-        c.want(`bf${midi}`, 0.4, (g, o) => brassVoice(g, o, midi, 0, 0.16, REF_VEL, 'stab', 18, true));
+        c.want(`bf${midi}`, 0.4, (g, o, t) => brassVoice(g, o, midi, t, 0.16, REF_VEL, 'stab', 18, true));
         break;
       case 'strings':
-        c.want(`sl${midi}`, SUS.strings + 0.35, (g, o) => stringsVoice(g, o, midi, 0, SUS.strings, REF_VEL, false));
+        c.want(`sl${midi}`, SUS.strings + 0.35, (g, o, t) => stringsVoice(g, o, midi, t, SUS.strings, REF_VEL, false));
         break;
       case 'spiccato':
-        c.want(`ss${midi}`, 0.3, (g, o) => stringsVoice(g, o, midi, 0, 0.13, REF_VEL, true));
+        c.want(`ss${midi}`, 0.3, (g, o, t) => stringsVoice(g, o, midi, t, 0.13, REF_VEL, true));
         break;
       case 'choir':
-        c.want(`ch${midi}`, SUS.choir + 0.5, (g, o) => choirVoice(g, o, midi, 0, SUS.choir, REF_VEL));
+        c.want(`ch${midi}`, SUS.choir + 0.5, (g, o, t) => choirVoice(g, o, midi, t, SUS.choir, REF_VEL));
         break;
       case 'timp':
-        c.want(`tp${midi}`, 1.8, (g, o) => timpaniVoice(g, o, midi, 0, REF_VEL));
+        c.want(`tp${midi}`, 1.8, (g, o, t) => timpaniVoice(g, o, midi, t, REF_VEL));
         break;
     }
   }

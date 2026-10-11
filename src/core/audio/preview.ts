@@ -102,17 +102,24 @@ export async function song(o: { id: string; seconds: number; intensity?: number;
   const warmMs = performance.now() - w0;
   m.start(o.id);
   if (o.at) m.seek(o.at);
-  const t0 = performance.now();
-  if (o.climaxAt !== undefined) {
-    m.scheduleUntil(o.climaxAt);
-    m.setClimax(true);
+  // schedule just in time, like the live clock: suspend the render every half second, add the
+  // next notes, resume (scheduling everything up front bloats the graph)
+  let scheduleMs = 0;
+  const step = 0.5;
+  for (let t = 0; t < o.seconds - 0.5; t += step) {
+    const at = t;
+    void ctx.suspend(at).then(() => {
+      const t0 = performance.now();
+      if (o.climaxAt !== undefined && at >= o.climaxAt) m.setClimax(true);
+      m.scheduleUntil(Math.min(o.seconds - 0.5, at + step + 0.2));
+      scheduleMs += performance.now() - t0;
+      void ctx.resume();
+    });
   }
-  m.scheduleUntil(o.seconds - 0.5);
-  const scheduleMs = performance.now() - t0;
   const r0 = performance.now();
   const buf = await ctx.startRendering();
-  const renderMs = performance.now() - r0;
-  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: { warmMs: Math.round(warmMs), scheduleMs: Math.round(scheduleMs), renderMs: Math.round(renderMs), misses: [...m.band.misses].sort((a, b) => b[1] - a[1]).slice(0, 12) } };
+  const renderMs = performance.now() - r0 - scheduleMs;
+  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: { cached: m.band.cache.size, warmMs: Math.round(warmMs), scheduleMs: Math.round(scheduleMs), renderMs: Math.round(renderMs), misses: [...m.band.misses].sort((a, b) => b[1] - a[1]).slice(0, 12) } };
 }
 
 /** every SFX (or a list) one after another, through a room, with a fresh variation each time */
