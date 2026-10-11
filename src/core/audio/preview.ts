@@ -269,3 +269,61 @@ export async function sfxSheet(o: { names?: string[]; gap?: number; arena?: stri
   return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: marks };
 }
 
+
+/**
+ * A timed scenario through the game's own SFX chain at default settings (trim, rank, category
+ * bus, SFX slider, glue, master, limiter; world sounds through the arena room): for A/B listening.
+ * events: [time, name, volume?, champion?, arg?]
+ */
+export async function scenario(o: { events: Array<[number, string, number?, string?, Record<string, unknown>?]>; arena?: string; seconds?: number }): Promise<Rendered> {
+  const { Graph } = await import('./graph');
+  const { SFX } = await import('./sfx');
+  const { TRIMS } = await import('./trims');
+  const { CATS, dbToGain, sliderGain, DEFAULT_VOLUMES } = await import('./mix');
+  const { renderRoom, ROOMS } = await import('./reverb');
+  const sr = 48000;
+  const seconds = o.seconds ?? Math.max(...o.events.map((e) => e[0])) + 2;
+  const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sr), sr);
+  const g = new Graph(ctx);
+  const master = g.gain(sliderGain(DEFAULT_VOLUMES.master));
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -2;
+  lim.knee.value = 0;
+  lim.ratio.value = 20;
+  lim.attack.value = 0.001;
+  lim.release.value = 0.1;
+  master.connect(lim).connect(ctx.destination);
+  const sfxBus = g.gain(sliderGain(DEFAULT_VOLUMES.sfx));
+  const glue = ctx.createDynamicsCompressor();
+  glue.threshold.value = -15;
+  glue.knee.value = 10;
+  glue.ratio.value = 2;
+  glue.attack.value = 0.012;
+  glue.release.value = 0.2;
+  sfxBus.connect(glue).connect(master);
+  const room = ctx.createConvolver();
+  room.buffer = renderRoom(ctx, ROOMS[o.arena ?? 'neon_city']);
+  room.connect(g.gain(0.7, sfxBus));
+  const roomIn = g.gain(1);
+  roomIn.connect(g.filter('highpass', 250, 0.6)).connect(g.filter('lowpass', 7000, 0.6)).connect(room);
+  const buses: Record<string, AudioNode> = {};
+  for (const [k, cat] of Object.entries(CATS)) buses[k] = g.gain(dbToGain(cat.db), g.filter('highpass', cat.hp, 0.7, g.filter('lowpass', cat.lp, 0.6, g.filter('peaking', 3000, 0.8, sfxBus, cat.presence ?? 0))));
+  const harmony = { root: 2, tones: [0, 3, 7], tonic: 2, scale: [0, 2, 3, 5, 7, 9, 10] };
+  const steps = new Map<string, { t: number; step: number }>();
+  for (const [t, name, vol = 1, champ, arg] of o.events) {
+    const def = SFX[name];
+    if (!def) continue;
+    const cat = CATS[def.cat];
+    const out = g.gain(vol * dbToGain((TRIMS[name] ?? 0) + (def.lvl ?? 0)), buses[def.cat]);
+    if (!cat.ui) out.connect(g.gain(0.1 * cat.rev * (def.rev ?? 1), roomIn));
+    let step = 0;
+    if (def.combo) {
+      const prev = steps.get(name);
+      step = prev && t - prev.t < def.combo ? prev.step + 1 : 0;
+      steps.set(name, { t, step });
+    }
+    def.fn({ g, t, out, p: 1 + (Math.random() * 2 - 1) * (def.vary ?? 0.035), v: vol, r: Math.random, step, champ: champ ?? null, self: true, h: harmony, arena: o.arena ?? 'neon_city', arg });
+  }
+  const buf = await ctx.startRendering();
+  return { channels: [buf.getChannelData(0), buf.getChannelData(1)], sampleRate: sr, info: o.events.length };
+}

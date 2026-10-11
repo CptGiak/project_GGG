@@ -19,3 +19,6 @@ docs/art/lol/
 
 # listening previews rendered by .claude/skills/game-sfx/scripts/render.mjs
 audio-previews/
+
+# python bytecode from the audio analysis scripts
+__pycache__/
