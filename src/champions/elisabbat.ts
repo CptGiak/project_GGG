@@ -574,7 +574,7 @@ export function buildElisabbat(): ChampionVisual {
       length: 0.52 + back * 0.3,
     });
   }
-  const hair = new ClothSheet({ anchor: B.head, columns: hairCols, rows: 6, closed: false, stiffness: 0.05, stiffFalloff: 0.6, damping: 0.9, gravity: 9, thickness: 0.03, outer: M.hair, inner: M.hairIn, smoothH: 2, smoothV: 2, slackH: 1.5 }, hairSpheres);
+  const hair = new ClothSheet({ anchor: B.head, columns: hairCols, rows: 6, closed: false, stiffness: 0.05, stiffFalloff: 0.75, damping: 0.9, gravity: 9, thickness: 0.03, outer: M.hair, inner: M.hairIn, smoothH: 2, smoothV: 2, slackH: 1.5, restYawOnly: true }, hairSpheres);
   // --- bat form (hidden until she transforms) and the spectral wings of her ultimate -----------------
   const bat = buildBatForm(b);
   const ultWings = new THREE.Group();

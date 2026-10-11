@@ -52,6 +52,8 @@ const _dir = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _ref = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _fwd = new THREE.Vector3();
 
 export class ClothChain {
   readonly p: THREE.Vector3[] = [];
@@ -379,6 +381,11 @@ export interface SheetOptions {
   smoothV?: number;
   /** horizontal stretch allowed before the constraint kicks in (flare) */
   slackH?: number;
+  /**
+   * the rest shape turns only with the anchor's heading, not its pitch / roll: long hair keeps
+   * hanging down when the head bows or tilts
+   */
+  restYawOnly?: boolean;
 }
 
 export class ClothSheet {
@@ -491,6 +498,10 @@ export class ClothSheet {
   private computeAnchors(): void {
     const o = this.o;
     o.anchor.getWorldQuaternion(_q);
+    if (o.restYawOnly) {
+      _fwd.set(0, 0, 1).applyQuaternion(_q);
+      _q.setFromAxisAngle(_up, Math.atan2(_fwd.x, _fwd.z));
+    }
     for (let c = 0; c < this.cols; c++) {
       const col = o.columns[c];
       o.anchor.localToWorld(this.p[this.idx(c, 0)].copy(col.offset));

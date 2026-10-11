@@ -257,11 +257,11 @@ export const CHAMPIONS: Record<ChampionId, ChampionData> = {
     invulnActs: { bat: { sec: 0.45, every: 9 } },
     passive: { name: 'Marchio di Sangue', desc: 'Artigli e pipistrelli marchiano i nemici (max 3, per 5 s). Spellvamp consuma i marchi: più danni e più cura.' },
     abilities: {
-      sig: { slot: 'sig', key: 'LMB', name: 'Spellvamp', desc: 'Scatta sul nemico mirato e lo morde: lo blocca per un istante, gli ruba vita e ti cura della metà dei danni. Ogni Marchio di Sangue aggiunge 35 danni. Dalla forma di pipistrello è una picchiata col morso.', cooldown: 6, damage: { bite: 100, feast: 105 }, range: 14, maxRate: 3 },
-      atk: { slot: 'atk', key: 'RMB', name: 'Artigli di Velluto', desc: 'Combo di 3 colpi con gli artigli, il terzo è un doppio fendente a X. Ogni colpo lascia un Marchio di Sangue. In aria: picchiata con gli artigli.', cooldown: 0, damage: { c1: 44, c2: 44, c3: 74, air: 58 }, range: 7, maxRate: 8, momentum: ['c1', 'c2', 'c3', 'air'], backstab: ['c1', 'c2', 'c3', 'air'] },
-      sec: { slot: 'sec', key: 'C', name: 'Forma di Pipistrello', desc: 'Si trasforma in un pipistrello per 3 s: vola dove miri (SPAZIO per salire), è piccola e difficile da colpire e per un istante è invulnerabile. Premi di nuovo C, o attacca, per tornare umana.', cooldown: 11, damage: {}, range: 0, maxRate: 0 },
+      sig: { slot: 'sig', key: 'LMB', name: 'Spellvamp', desc: 'Scatta sul nemico mirato e lo morde: lo blocca, gli ruba vita e ti cura di metà dei danni (+35 per Marchio). Anche in picchiata dal pipistrello.', cooldown: 6, damage: { bite: 100, feast: 105 }, range: 14, maxRate: 3 },
+      atk: { slot: 'atk', key: 'RMB', name: 'Artigli di Velluto', desc: 'Combo di 3 colpi di artigli, l\'ultimo a X: ogni colpo lascia un Marchio di Sangue. In aria: picchiata con gli artigli.', cooldown: 0, damage: { c1: 44, c2: 44, c3: 74, air: 58 }, range: 7, maxRate: 8, momentum: ['c1', 'c2', 'c3', 'air'], backstab: ['c1', 'c2', 'c3', 'air'] },
+      sec: { slot: 'sec', key: 'C', name: 'Forma di Pipistrello', desc: 'Per 3 s vola come pipistrello dove miri (SPAZIO sale): piccola, difficile da colpire, invulnerabile all\'inizio. C o un attacco per tornare umana.', cooldown: 11, damage: {}, range: 0, maxRate: 0 },
       abi: { slot: 'abi', key: 'F', name: 'Sciame di Pipistrelli', desc: 'Scaglia 6 pipistrelli che inseguono i nemici vicino al mirino: ogni morso marchia e rallenta.', cooldown: 8, damage: { bat: 26 }, range: 40, maxRate: 10 },
-      ult: { slot: 'ult', key: 'R', name: 'Notte Eterna', desc: 'Si leva con ali spettrali e per 3 s scatena intorno a sé un vortice di pipistrelli che ferisce e rallenta; alla fine i pipistrelli si avventano su chi è nel vortice. Ti cura del 30% dei danni (max 220).', cooldown: 0, damage: { storm: 20, finale: 150 }, range: 16, maxRate: 16, stream: ['storm'] },
+      ult: { slot: 'ult', key: 'R', name: 'Notte Eterna', desc: 'Ali spettrali e un vortice di pipistrelli per 3 s: ferisce e rallenta chi è vicino, poi i pipistrelli si avventano. Ti cura del 30% dei danni.', cooldown: 0, damage: { storm: 20, finale: 150 }, range: 16, maxRate: 16, stream: ['storm'] },
     },
   },
 };

@@ -113,8 +113,15 @@ del mouse. Se il tasto è già usato da un'altra azione, le due si scambiano.
 | **LOCKE** — *L'Esorcista Cinereo* | Mischia | paletto d'argento e chiodi | **Ritual Nails** (la sua Q): fila di chiodi che rallenta e lascia cariche, rilanciabile 2 volte | Exorcism: combo di 4 colpi che fa esplodere le cariche | Soul Ignition (la sua W): velocità e cura sui danni per 4 s | Ashen Pursuit: teletrasporto + fendente circolare | Purgatory: reliquiario che sigilla i nemici sotto il 25% |
 | **POOH** — *Orso di Poco Cervello* (guest star) | Distanza | barattoli di miele HUNNY | **Panzata**: carica a pancia in fuori, chi viene colpito rimbalza via stordito (colpo di slancio: più arrivi veloce, più fa male) | Barattoli di miele a parabola (tieni premuto): schizzo che rallenta, sporca di miele e lascia una pozza appiccicosa | Nuvoletta Nera: sale appeso a un palloncino blu per 4 s, lancia barattoli da lassù (C di nuovo per lasciarlo) | **Pensa, Pensa, Pensa**: si ferma e si picchietta la testa; se nessuno lo stordisce gli viene un'Idea (cura, Panzata pronta, 3 Super Barattoli) | Sciame d'Api: alveare lanciato nel punto mirato, le api inseguono i nemici per 4,5 s (punture più forti su chi è sporco di miele) |
 
+| **ELISABBAT** — *La Principessa Vampira* | Mischia | artigli e pipistrelli | **Spellvamp**: scatta sul nemico mirato e lo morde, lo blocca per un istante e ti cura di metà dei danni (+35 per ogni Marchio di Sangue); dalla forma di pipistrello è una picchiata | Artigli di Velluto: combo di 3 colpi di artigli, l'ultimo a X (in aria: picchiata) | **Forma di Pipistrello**: per 3 s diventa un piccolo pipistrello e vola dove miri (SPAZIO sale), difficile da colpire e invulnerabile all'inizio; C di nuovo o un attacco per tornare umana | Sciame di Pipistrelli: 6 pipistrelli che inseguono i nemici vicino al mirino, marchiano e rallentano | Notte Eterna: ali spettrali e un vortice di pipistrelli intorno a sé per 3 s, poi i pipistrelli si avventano su chi è dentro (cura del 30% dei danni) |
+
 Passiva di Pooh, **Ghiotto di Miele**: le pozze dei barattoli rallentano i nemici e Pooh le lecca passandoci
 sopra per curarsi (una pozza ogni 3 s).
+
+Passiva di Elisabbat, **Marchio di Sangue**: artigli e pipistrelli lasciano Marchi di Sangue sui nemici (max 3,
+per 5 s) che lo Spellvamp consuma per fare più danni e curarla di più. Il suo modello riprende quello creato
+dall'utente su Meshy (proporzioni da bambola, capelli viola a ciocche con frangia, bustino viola, gonna a
+balze, stivali con fibbie e plateau).
 
 Ogni modello è costruito da primitive scolpite (lathe, sweep, estrusioni avvolte, ciocche curve) su uno
 scheletro di 19 ossa, con **cloth simulation** (cappotti, gonne, sciarpe, code di cavallo, nastri),
