@@ -122,10 +122,17 @@ confirm-category sounds that come from another fighter (their perfect timing is 
   peak under -1 dBTP (safety limiter at -2 dBFS working < 10 % of the time). That is the
   "portable/PC" end of the published targets (console -24 LKFS +-2 by Sony ASWG-R001, mobile and
   portable -16 to -18) because a browser game plays on laptop speakers next to other tabs.
-  Measured after the rework, Kaiser-only bot match: master -18.3 LUFS, limiter active 4 %,
-  > 3 dB only 0.1 %, glue active 19 %.
-- **Music balance**: in combat the score sits around -22 LUFS integrated (stereo) with SFX events
-  peaking 6-10 dB above it (momentary); menus +3 dB (no SFX to make room for). Big moments duck
+  Measured after the rework with all nine kits, two 75 s bot matches at default settings
+  (Kaiser on neon_city against Nova, Rex, Sera, Akali, Qiyana; Rex on stage against Locke, Pooh,
+  Elisabbat, Kaiser, Sera): master -18.1 LUFS both, limiter active 2.0 % / 1.2 % (never more
+  than 3 dB), glue active 14 %, 7.3-7.9 sounds/s within 25 m. SFX bus bands, before -> after:
+  20-120 Hz -2.2 -> -6.7 dB, 500-2000 Hz -13.8 -> -6.9, 2-5 kHz -12.7 -> -18, 5-9 kHz
+  -21.8 -> -30, 9-20 kHz -25.8 -> -40: the weight moved from sub and hiss into the body.
+- **Music balance**: in combat the score sits around -22 LUFS integrated (stereo), level with
+  the SFX integrated (within 2 dB) while SFX events peak about 7 dB above it (momentary); menus
+  +3 dB (no SFX to make room for). Before the rework the SFX sat 2.6 dB over the score
+  integrated and 6.5 dB over it 95 % of the time (a constant wall); now 2.6 dB at the 95th
+  percentile and about 7 dB on the biggest events, so the action stands out when it matters. Big moments duck
   it 2-5 dB for ~0.2 s plus a 0.6 s release; ultimates and explosions also duck the basic, move
   and foley buses 3-4 dB.
 - **Defaults**: master 100 %, SFX 100 %, music 85 %: the mix is designed at the top of the

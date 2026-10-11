@@ -19,7 +19,7 @@ by code at runtime (Web Audio nodes plus JS-rendered buffers), so two facts driv
 
 ```
 src/core/Audio.ts            AudioEngine: category buses, safety limiter, play(name, pos?, vol?,
-                             srcChamp?, arg?), impact(...) (one world hit per damage event),
+                             src?, arg?), impact(...) (one world hit per damage event),
                              confirm(...) (the local attacker's 2D feedback), distance curves,
                              air absorption, arena room, voice budgets, rate limits, ducking,
                              combo tracking, movement loops, music control
@@ -34,7 +34,8 @@ src/core/audio/sfx.ts        shared catalogue (movement, generic combat, confirm
 src/core/audio/impacts.ts    hit impacts per material and IMPACTS[champion]["slot.part"], the
                              confirms (hit, crit, counter, block, momentum, kill) and hurt
 src/core/audio/kits/*.ts     each champion's ability sounds, named "<champion>.<sound>"
-src/core/audio/graph.ts      live node helpers (tone, noiseBurst, fm, modal, drive, crush, echo)
+src/core/audio/graph.ts      live node helpers (tone, noiseBurst, fm, modal, drive, crush, echo);
+                             `softAttack` (on for SFX): attacks up to 8 ms rise linearly
 src/core/audio/dsp.ts        offline JS DSP (biquad, noise colours, Karplus-Strong, drive, decay)
 src/core/audio/samples.ts    JS-rendered bank: drum kit with round-robin takes, double-tracked
                              guitars, bass
@@ -45,15 +46,19 @@ src/core/audio/score.ts      score notation parser + validator, voice leading
 src/core/audio/music.ts      adaptive sequencer: intensity gates, fills, climax, stingers, harmony
 src/core/audio/songs/*.ts    the composed cues (menu, city, stage, tartarus, jingles)
 src/core/audio/preview.ts    dev-only offline renders driven by scripts/render.mjs
-tools/audio/mix_trims.mjs    loudness-normalises the catalogue (writes trims.ts)
+tools/audio/mix_trims.mjs    loudness-normalises the catalogue (writes trims.ts, ~1 min for all)
+tools/audio/check_sfx.ts     every played name exists, every damage part has an impact, no dead
+                             or untrimmed sounds
 tools/audio/check_songs.ts   score validator (bar lengths, ranges, clashes)
 ```
 
-Game code calls `audio.play('<champion>.<sound>', pos)`; kits pass the fighter's own `f.pos`, so
-the engine knows who made the sound (`registerFighter`). Damage never plays a sound from a kit:
-`Match` calls `audio.impact(...)` (material from `IMPACTS`) and `audio.confirm(...)`. Unknown
-names are silently ignored, so a new ability can call a new name first and you add the recipe
-after. Mixing (levels, defaults, fatigue, the measured history): [references/mixing.md](references/mixing.md).
+Game code calls `audio.play('<champion>.<sound>', pos)`. At the fighter's own `f.pos` the engine
+knows who made the sound (`registerFighter`); anywhere else (a target point, a projectile, a
+blink's arrival) pass the fighter too, `audio.play(name, at, 1, f)`, or the sound is credited to
+whoever stands there. Damage never plays a sound from a kit: `Match` calls `audio.impact(...)`
+(material from `IMPACTS`) and `audio.confirm(...)`. Unknown names are silent (the dev build warns
+once in the console), so a new ability can call a new name first and you add the recipe after;
+`npx tsx tools/audio/check_sfx.ts` lists them. Mixing (levels, defaults, fatigue, the measured history): [references/mixing.md](references/mixing.md).
 
 ## Workflow
 
