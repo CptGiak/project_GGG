@@ -4,13 +4,15 @@
  * headless Chromium, measures its momentary loudness (BS.1770, LUFS-M) and writes
  * src/core/audio/trims.ts so each one plays at REF_LUFS (mix.ts) before the mix table applies.
  *
- *   node tools/audio/mix_trims.mjs                 # all sounds
+ *   node tools/audio/mix_trims.mjs                 # all sounds (rebuilds the table)
  *   node tools/audio/mix_trims.mjs kaiser. hit.    # only names starting with these prefixes
  *                                                  # (the other trims are kept)
  *
- * Needs python3 with numpy and scipy (pip install scipy) for the measurement.
+ * Needs python3 with numpy and scipy (pip install scipy) for the measurement, and renders in
+ * batches of 20 sounds on several headless pages at once: one offline render of the whole
+ * catalogue keeps every node alive for its whole length and takes many minutes.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,27 +23,52 @@ const skill = path.join(root, '.claude/skills/game-sfx/scripts');
 const trimsFile = path.join(root, 'src/core/audio/trims.ts');
 const prefixes = process.argv.slice(2);
 const ref = Number(/REF_LUFS\s*=\s*(-?[\d.]+)/.exec(fs.readFileSync(path.join(root, 'src/core/audio/mix.ts'), 'utf8'))[1]);
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trims-'));
+
+// one dev server for all the renders (render.mjs would otherwise start one per page)
+const port = 5199;
+const up = () => fetch(`http://localhost:${port}`).then(() => true, () => false);
+let vite = null;
+if (!(await up())) {
+  vite = spawn('npx', ['vite', '--port', String(port), '--strictPort'], { cwd: root, stdio: 'ignore', detached: true });
+  for (let i = 0; i < 60 && !(await up()); i++) await new Promise((r) => setTimeout(r, 500));
+}
 
 // the catalogue's names, without running the game: ask the dev page
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'trims-'));
-const out = path.join(tmp, 'dry');
+const listOut = path.join(tmp, 'names');
+execFileSync('node', [path.join(skill, 'render.mjs'), 'sfxNames', '{}', listOut], { stdio: 'ignore' });
+const all = JSON.parse(fs.readFileSync(`${listOut}.json`, 'utf8')).info;
+const names = prefixes.length ? all.filter((n) => prefixes.some((p) => n.startsWith(p))) : all;
+console.log(`measuring ${names.length} sounds`);
 
-let names = null;
-if (prefixes.length) {
-  // render.mjs only takes explicit names when filtering: list them through a tiny render
-  const listOut = path.join(tmp, 'names');
-  execFileSync('node', [path.join(skill, 'render.mjs'), 'sfxNames', '{}', listOut], { stdio: 'inherit' });
-  const all = JSON.parse(fs.readFileSync(`${listOut}.json`, 'utf8')).info;
-  names = all.filter((n) => prefixes.some((p) => n.startsWith(p)));
-  console.log(`measuring ${names.length} sounds`);
+const run = (args) =>
+  new Promise((resolve, reject) => {
+    const p = spawn(args[0], args.slice(1), { stdio: 'ignore' });
+    p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${args.slice(0, 3).join(' ')} exited ${code}`))));
+  });
+const batches = [];
+for (let i = 0; i < names.length; i += 20) batches.push(names.slice(i, i + 20));
+const stats = {};
+let next = 0;
+const worker = async () => {
+  while (next < batches.length) {
+    const k = next++;
+    const out = path.join(tmp, `dry${k}`);
+    await run(['node', path.join(skill, 'render.mjs'), 'sfxDry', JSON.stringify({ repeat: 3, raw: true, names: batches[k] }), out]);
+    await run(['python3', path.join(skill, 'sfxstats.py'), out, '--json', `${out}.stats.json`]);
+    Object.assign(stats, JSON.parse(fs.readFileSync(`${out}.stats.json`, 'utf8')));
+    console.log(`  batch ${k + 1}/${batches.length}`);
+  }
+};
+try {
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(4, os.cpus().length - 1)) }, worker));
+} finally {
+  if (vite) process.kill(-vite.pid);
 }
-execFileSync('node', [path.join(skill, 'render.mjs'), 'sfxDry', JSON.stringify({ repeat: 3, raw: true, ...(names ? { names } : {}) }), out], { stdio: 'inherit' });
-execFileSync('python3', [path.join(skill, 'sfxstats.py'), out, '--json', `${out}.stats.json`], { stdio: 'inherit' });
-const stats = JSON.parse(fs.readFileSync(`${out}.stats.json`, 'utf8'));
-// re-read right before writing and only touch the measured names: several runs (one per champion)
-// may work at the same time
+// a full run rebuilds the table (dropping removed sounds); a prefixed run re-reads it right before
+// writing and only touches the measured names, since several runs (one per champion) may overlap
 const trims = {};
-for (const m of fs.readFileSync(trimsFile, 'utf8').matchAll(/^\s+'([^']+)': (-?[\d.]+),$/gm)) trims[m[1]] = Number(m[2]);
+if (prefixes.length) for (const m of fs.readFileSync(trimsFile, 'utf8').matchAll(/^\s+'([^']+)': (-?[\d.]+),$/gm)) trims[m[1]] = Number(m[2]);
 for (const [name, s] of Object.entries(stats)) {
   const t = Math.max(-36, Math.min(36, ref - s.lufsM));
   trims[name] = Math.round(t * 2) / 2;

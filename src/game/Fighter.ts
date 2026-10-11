@@ -716,7 +716,7 @@ export class Fighter {
               this.grounded = false;
             }
             m.vfx.hookImpact(hk.anchor, hk.normal, this.champ.colors[0]);
-            m.audio.play('hookHit', hk.anchor, 0.8);
+            m.audio.play('hookHit', hk.anchor, 0.8, this);
           } else {
             hk.state = 'retract';
           }

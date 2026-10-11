@@ -162,31 +162,7 @@ const SHARED: Record<string, SfxDef> = {
     },
   },
 
-  // ---- generic combat (fallbacks; champions use their own kit sounds) ---------------------------
-  swing: {
-    cat: 'basic',
-    dur: 0.25,
-    max: 4,
-    fn: (c) => {
-      whoosh(c, { f0: 450, f1: 1800, f2: 650, dur: rr(c, 0.15, 0.2), q: 1.6, vol: 0.4 });
-    },
-  },
-  swingHeavy: {
-    cat: 'basic',
-    lvl: 3,
-    dur: 0.45,
-    max: 3,
-    fn: (c) => {
-      whoosh(c, { f0: 260, f1: 1300, f2: 380, dur: rr(c, 0.32, 0.4), q: 1.3, vol: 0.45 });
-      crunch(c, { f: 380, f1: 200, dur: 0.35, vol: 0.2, a: 0.1 });
-    },
-  },
-  whoosh: {
-    cat: 'basic',
-    dur: 0.5,
-    max: 3,
-    fn: (c) => whoosh(c, { f0: 380, f1: 2000, f2: 600, dur: 0.42, q: 1.3, vol: 0.4 }),
-  },
+  // ---- shared combat (every champion's casts and swings live in kits/) --------------------------
   explosion: {
     cat: 'big',
     dur: 2,
@@ -194,29 +170,6 @@ const SHARED: Record<string, SfxDef> = {
     duck: 3,
     rev: 1.2,
     fn: (c) => boom(c, Math.min(1.2, c.v)),
-  },
-  slam: {
-    cat: 'big',
-    lvl: 1,
-    dur: 2,
-    max: 2,
-    duck: 4,
-    rev: 1.2,
-    fn: (c) => {
-      boom(c, Math.min(1.2, c.v));
-      ring(c, { f: 130, decay: 0.5, vol: 0.1, bright: 0.3 });
-      blip(c, { type: 'triangle', f: chordHz(c.h, 0, 2), f1: chordHz(c.h, 0, 1), glide: 0.6, dur: 0.8, vol: 0.3, out: c.g.filter('lowpass', 600, 0.8, c.out) });
-    },
-  },
-  wave: {
-    cat: 'skill',
-    dur: 0.7,
-    max: 3,
-    fn: (c) => {
-      thump(c, { f0: 180, f1: 70, dur: 0.25, vol: 0.5 });
-      hiss(c, { f: 500, f1: 2400, q: 1.1, dur: 0.45, vol: 0.35, a: 0.03 });
-      crunch(c, { f: 900, f1: 200, dur: 0.35, vol: 0.2 });
-    },
   },
   teleport: {
     cat: 'skill',
@@ -308,22 +261,6 @@ const SHARED: Record<string, SfxDef> = {
       sub(c, chordHz(c.h, 0, 1), chordHz(c.h, 0, 1) * 0.5, 0.5, 0.35, 0.18);
     },
   },
-  // generic ultimate cast; enemies' ultimates add a low threat chord so you know to move
-  ult: {
-    cat: 'ult',
-    dur: 1.6,
-    max: 3,
-    duck: 4,
-    rev: 1.2,
-    fn: (c) => {
-      zap(c, chordHz(c.h, 0, 2), chordHz(c.h, 0, 4), 0.55, 0.12, 'sawtooth');
-      swell(c, 0.5, 300, 3000, 0.25);
-      thump(c, { f0: 120, f1: 45, dur: 0.6, vol: 0.55, at: 0.5 });
-      if (!c.self) stab(c, { notes: [chordHz(c.h, 0, 2), chordHz(c.h, 0, 2) * 1.06], dur: 0.8, vol: 0.2, at: 0.45, cutoff: 600, open: 900, type: 'sawtooth' });
-      signature(c, 'ult');
-    },
-  },
-
   // ---- player feedback (2D) ---------------------------------------------------------------------
   ultReady: {
     cat: 'confirm',

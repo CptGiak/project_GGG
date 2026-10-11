@@ -53,6 +53,9 @@ interface CatBus {
   voices: Voice[];
 }
 
+/** who makes a sound: the fighter (identity, self, combos), or just a champion id (flavour) */
+export type SoundSrc = string | { id: string; champId: string };
+
 export interface ImpactInfo {
   champ: string | null;
   slot?: string;
@@ -80,7 +83,9 @@ export class AudioEngine {
   private buses = {} as Record<Cat, CatBus>;
   private roomIn!: GainNode;
   private room!: ConvolverNode;
+  /** music graph (its envelopes as tuned) and SFX graph (soft attacks), sharing noise buffers */
   private g!: Graph;
+  private sg!: Graph;
   private bank!: SampleBank;
   private listenerPos = new THREE.Vector3();
   private listenerRight = new THREE.Vector3(1, 0, 0);
@@ -94,6 +99,8 @@ export class AudioEngine {
   private combos = new Map<string, { t: number; step: number }>();
   private lastImpact = new Map<string, { t: number; w: number }>();
   private lastConfirm = -1;
+  /** names already reported missing (dev) */
+  private unknown = new Set<string>();
   private sources: Source[] = [];
   private arena = 'neon_city';
   private battleSong = 'city';
@@ -114,6 +121,8 @@ export class AudioEngine {
     Beat.attachClock(() => ctx.currentTime);
     const g = new Graph(ctx);
     this.g = g;
+    this.sg = new Graph(ctx, g.noise);
+    this.sg.softAttack = true;
     this.bank = new SampleBank(ctx);
     // master: a safety limiter only (the mix is built to stay under it)
     this.master = g.gain(sliderGain(this.volumes.master));
@@ -153,7 +162,7 @@ export class AudioEngine {
     this.musicBus = g.gain(sliderGain(this.volumes.music) * dbToGain(MUSIC_DB), this.master);
     this.musicCtx = g.gain(dbToGain(MUSIC_MENU_DB), this.musicBus);
     this.bank.prewarmDrums();
-    this.loops = new Loops(g, this.buses.move.input, this.buses.foley.input, (vol) => this.play('footstep', undefined, vol));
+    this.loops = new Loops(this.sg, this.buses.move.input, this.buses.foley.input, (vol) => this.play('footstep', undefined, vol));
   }
 
   /** slider positions 0..1 (mapped to dB inside) */
@@ -208,22 +217,34 @@ export class AudioEngine {
   }
 
   /**
-   * Play a named SFX, optionally positioned in the world. `src` names the champion responsible
-   * when the position belongs to someone else (a hit lands on the victim but sounds like the
-   * attacker's weapon); `arg` carries per-play data to the recipe.
+   * Play a named SFX, optionally positioned in the world; `arg` carries per-play data to the
+   * recipe. `src` says who makes the sound. Without it, the fighter standing at `pos` is assumed.
+   * A fighter passed here owns the sound wherever it plays (a pillar landing at a target point is
+   * still Sera's, and the local player's own when she is). A champion id only sets the flavour,
+   * for a hit landing on the victim but sounding like the attacker's weapon.
    */
-  play(name: string, pos?: THREE.Vector3, volume = 1, src?: string, arg?: Record<string, unknown>): void {
+  play(name: string, pos?: THREE.Vector3, volume = 1, src?: SoundSrc, arg?: Record<string, unknown>): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const def = SFX[name];
-    if (!def) return;
+    if (!def) {
+      if (import.meta.env.DEV && !this.unknown.has(name)) {
+        this.unknown.add(name);
+        console.warn(`[audio] unknown sound '${name}' (silent)`);
+      }
+      return;
+    }
     const spec = CATS[def.cat];
     const bus = this.buses[def.cat];
     const now = ctx.currentTime;
-    const source = this.sourceAt(pos);
+    let source = this.sourceAt(pos);
+    if (typeof src === 'object') source = this.sources.find((s) => s.id === src.id) ?? source;
+    const champ = typeof src === 'object' ? src.champId : (src ?? source?.champ ?? null);
     const self = !!source?.local;
-    // confirms are personal feedback: someone else's perfect timing is not yours to hear
-    if (def.cat === 'confirm' && source && !self) return;
+    // own sounds at the fighter itself sit close and dry (not a projectile of theirs landing afar)
+    const atSelf = self && (!pos || source!.pos === pos || source!.pos.distanceToSquared(pos) < 6.25);
+    // confirms and UI cues are personal feedback: someone else's perfect timing is not yours to hear
+    if ((def.cat === 'confirm' || def.cat === 'ui') && source && !self) return;
     // identical sounds from one source within 25 ms merge; `gap` rate-limits rapid fire and ticks
     const key = `${name}:${source?.id ?? (pos ? 'world' : '2d')}`;
     const last = this.lastPlay.get(key) ?? -1;
@@ -239,7 +260,7 @@ export class AudioEngine {
       _v.subVectors(pos, this.listenerPos);
       const d = _v.length();
       const [n0, far] = def.range ?? [spec.near, spec.far];
-      const dg = self ? 1 : distanceGain(d, n0, far);
+      const dg = atSelf ? 1 : distanceGain(d, n0, far);
       if (dg * volume < 0.004) return;
       v *= dg;
       near = THREE.MathUtils.clamp(1 - d / 45, 0, 1);
@@ -254,7 +275,7 @@ export class AudioEngine {
       send = spec.rev * (def.rev ?? 1) * (0.08 + THREE.MathUtils.clamp(d / 50, 0, 1) * 0.5);
       // far explosions arrive late (sound travels ~340 m/s)
       if (def.duck && d > 25) delay = Math.min(0.12, d / 340);
-      if (self) {
+      if (atSelf) {
         // your own actions sit closer and drier
         pan *= 0.4;
         send *= 0.6;
@@ -277,7 +298,7 @@ export class AudioEngine {
     }
     this.lastPlay.set(key, now);
     const t = now + 0.004 + delay;
-    const out = this.g.gain(v);
+    const out = this.sg.gain(v);
     const voice = { end: t + def.dur, g: out, level: v };
     list.push(voice);
     this.voices.set(name, list);
@@ -285,29 +306,29 @@ export class AudioEngine {
     // routing
     if (ui) out.connect(bus.input);
     else {
-      const lp = this.g.filter('lowpass', cutoff, 0.5);
+      const lp = this.sg.filter('lowpass', cutoff, 0.5);
       out.connect(lp);
-      lp.connect(this.g.pan(pan, bus.input));
-      if (send > 0.001) lp.connect(this.g.gain(send, this.roomIn));
+      lp.connect(this.sg.pan(pan, bus.input));
+      if (send > 0.001) lp.connect(this.sg.gain(send, this.roomIn));
     }
     // combo escalation: repeats from the same source within the window
     let step = 0;
     if (def.combo) {
-      const ck = `${name}:${source?.id ?? src ?? (ui ? 'ui' : 'world')}`;
+      const ck = `${name}:${source?.id ?? champ ?? (ui ? 'ui' : 'world')}`;
       const prev = this.combos.get(ck);
       step = prev && now - prev.t < def.combo ? prev.step + 1 : 0;
       this.combos.set(ck, { t: now, step });
     }
     const vary = def.vary ?? 0.035;
     const c: SfxCtx = {
-      g: this.g,
+      g: this.sg,
       t,
       out,
       p: 1 + (Math.random() * 2 - 1) * vary,
       v: volume,
       r: Math.random,
       step,
-      champ: src ?? source?.champ ?? null,
+      champ,
       self,
       h: this.ensureMusic().harmony,
       arena: this.arena,

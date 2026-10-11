@@ -1,11 +1,12 @@
 /**
  * KAISER, "Bassline": a holographic greatsword played like a bass guitar.
  *
- * Timbre family: low saw/triangle bass notes on the score's chord root (octaves 1-3), a filter
- * wobble on the heavy moves, power chords through gentle drive. The blade itself is a low-mid
- * air sweep with a faint holo hum; nothing of his lives above ~4 kHz.
+ * Timbre family: low saw/triangle bass notes on the score's chord root (octaves 2-3, octave 1 and
+ * real sub only in the ultimate), a filter wobble on the heavy moves, power chords through gentle
+ * drive. The blade itself is a low-mid air sweep with a faint holo hum; nothing of his lives above
+ * ~4 kHz.
  */
-import { boom, chordHz, click, crunch, hiss, ring, signature, smack, stab, sub, surface, swell, thump, whoosh, type SfxCtx, type SfxDef } from '../layers';
+import { boom, chordHz, click, crunch, hiss, ring, signature, smack, stab, surface, swell, thump, whoosh, type SfxCtx, type SfxDef } from '../layers';
 
 /** a bass note on the chord root: saw through a low-pass that closes, optional pitch glide */
 function bass(c: SfxCtx, o: { oct: number; dur: number; vol: number; at?: number; to?: number; cutoff?: number; deg?: number }): void {
@@ -58,9 +59,9 @@ export const KAISER: Record<string, SfxDef> = {
     dur: 0.6,
     max: 2,
     fn: (c) => {
-      thump(c, { f0: 150, f1: 55, dur: 0.22, vol: 0.75 });
+      thump(c, { f0: 150, f1: 80, dur: 0.22, vol: 0.75 });
       crunch(c, { f: 1000, f1: 180, dur: 0.22, vol: 0.3 });
-      bass(c, { oct: 2, dur: 0.35, vol: 0.35, cutoff: 700 });
+      bass(c, { oct: 2, dur: 0.35, vol: 0.3, cutoff: 700 });
       surface(c, 0.6);
     },
   },
@@ -76,7 +77,7 @@ export const KAISER: Record<string, SfxDef> = {
       const r = chordHz(c.h, 0, 2);
       stab(c, { notes: [r, r * 1.4983, r * 2], dur: 0.75, vol: 0.4, cutoff: 900, open: 2600, drive: 2.2, a: 0.003 });
       bass(c, { oct: 2, dur: 0.6, vol: 0.4, cutoff: 600 });
-      thump(c, { f0: 130, f1: 55, dur: 0.3, vol: 0.7 });
+      thump(c, { f0: 130, f1: 75, dur: 0.3, vol: 0.7 });
       smack(c, { f: 900, q: 0.9, dur: 0.06, vol: 0.4, drop: 0.5 });
       crunch(c, { f: 1300, f1: 200, dur: 0.35, vol: 0.3 });
       click(c, { f: 2400, dur: 0.006, vol: 0.12 });
@@ -91,9 +92,8 @@ export const KAISER: Record<string, SfxDef> = {
     fn: (c) => {
       const r = chordHz(c.h, 0, 3);
       stab(c, { notes: [r, r * 1.4983], dur: 0.35, vol: 0.3, cutoff: 1400, open: 3200, drive: 1.6 });
-      thump(c, { f0: 170, f1: 70, dur: 0.16, vol: 0.55 });
+      thump(c, { f0: 170, f1: 85, dur: 0.16, vol: 0.6 });
       smack(c, { f: 1200, q: 1, dur: 0.04, vol: 0.3, drop: 0.5 });
-      sub(c, 60, 38, 0.18, 0.25);
     },
   },
   // Mute Guard raised: a palm-muted bass "chk" and the shield humming on
@@ -103,7 +103,7 @@ export const KAISER: Record<string, SfxDef> = {
     dur: 0.3,
     max: 2,
     fn: (c) => {
-      bass(c, { oct: 2, dur: 0.07, vol: 0.4, cutoff: 600 });
+      bass(c, { oct: 3, dur: 0.07, vol: 0.4, cutoff: 900 });
       smack(c, { f: 700, q: 2, dur: 0.02, vol: 0.25, drop: 0.8 });
       ring(c, { f: 420, decay: 0.25, vol: 0.05, bright: 0.2, ratios: [1, 2.4] });
       hiss(c, { f: 900, f1: 1400, q: 2, dur: 0.2, vol: 0.05, a: 0.06 });

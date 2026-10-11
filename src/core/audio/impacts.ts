@@ -15,6 +15,7 @@ import { bell, blip, blop, chordHz, click, crunch, flutter, hiss, lerp, mallet, 
 
 export type Mat =
   | 'blade'
+  | 'holo'
   | 'greatsword'
   | 'ringblade'
   | 'claw'
@@ -23,7 +24,6 @@ export type Mat =
   | 'blunt'
   | 'bullet'
   | 'slug'
-  | 'beam'
   | 'sonic'
   | 'shock'
   | 'aoe'
@@ -61,40 +61,45 @@ export const IMPACTS: Record<string, Record<string, ImpactSpec>> = {
     'ult.slam': I('aoe', 1),
   },
   nova: {
-    'sig.cross': I('blade', 0.5),
-    'atk.c1': I('blade', 0.28),
-    'atk.c2': I('blade', 0.28),
-    'atk.c3': I('blade', 0.35),
-    'atk.c4': I('blade', 0.55),
-    'atk.air': I('blade', 0.45),
-    'sec.pass': I('blade', 0.45),
-    'abi.cut': I('blade', 0.85),
-    'ult.hit': I('blade', 0.45, 0.1),
+    'sig.cross': I('holo', 0.5),
+    'atk.c1': I('holo', 0.28),
+    'atk.c2': I('holo', 0.28),
+    'atk.c3': I('holo', 0.35),
+    'atk.c4': I('holo', 0.55),
+    'atk.air': I('holo', 0.45),
+    'sec.pass': I('holo', 0.45),
+    'abi.cut': I('holo', 0.85),
+    // each barrage strike already plays its note: the impact stays under the riff
+    'ult.hit': I('holo', 0.35, 0.1),
   },
   rex: {
     'sig.slug': I('slug', 0.8),
-    'atk.shot': I('bullet', 0.3, 0.1),
-    'sec.charge': I('beam', 0.85),
-    'sec.perfect': I('beam', 1),
+    // 7 shots a second: every other one lands an impact, under the shot itself
+    'atk.shot': I('bullet', 0.25, 0.2),
+    'sec.charge': I('slug', 0.85),
+    'sec.perfect': I('slug', 1),
     'abi.blast': I('aoe', 0.7),
-    'ult.note': I('sonic', 0.4, 0.08),
+    'ult.note': I('sonic', 0.4, 0.15),
   },
   sera: {
-    'sig.note': I('sonic', 0.55),
-    'sig.core': I('sonic', 0.8),
+    // the burst's edge stays small so the core reads as the hit
+    'sig.note': I('sonic', 0.45),
+    'sig.core': I('sonic', 0.9),
     'atk.orb': I('sonic', 0.35),
-    'sec.tick': I('beam', 0.2, 0.22),
+    'sec.tick': I('sonic', 0.15, 0.3),
     'abi.wave': I('shock', 0.6),
     'ult.pillar': I('aoe', 1),
   },
   akali: {
-    'sig.q': I('blade', 0.4),
+    // thrown steel pierces
+    'sig.q': I('nail', 0.4),
     'atk.c1': I('blade', 0.3),
     'atk.c2': I('blade', 0.3),
     'atk.c3': I('blade', 0.42),
     'atk.air': I('blade', 0.45),
-    'atk.mark': I('blade', 0.65),
-    'abi.flip1': I('blade', 0.4),
+    // the mark bursts (the attacker also hears akali.markPop)
+    'atk.mark': I('shock', 0.5),
+    'abi.flip1': I('nail', 0.4),
     'abi.flip2': I('blade', 0.6),
     'ult.ex1': I('blade', 0.7),
     'ult.ex2': I('blade', 0.95),
@@ -107,10 +112,12 @@ export const IMPACTS: Record<string, Record<string, ImpactSpec>> = {
     'atk.c1': I('ringblade', 0.35),
     'atk.c2': I('ringblade', 0.35),
     'atk.air': I('ringblade', 0.45),
-    'atk.royal': I('holy', 0.35),
+    // the proc lands with the swing: lighter, so only the swing's impact plays (qiyana.royal tells)
+    'atk.royal': I('ringblade', 0.2),
     'abi.e': I('ringblade', 0.6),
-    'ult.wave': I('shock', 0.7),
-    'ult.burst': I('rock', 0.95),
+    'ult.wave': I('shock', 0.6),
+    // qiyana.burst is the stone blast: each body caught in it only thuds
+    'ult.burst': I('aoe', 0.85),
   },
   locke: {
     'sig.q': I('nail', 0.35),
@@ -119,32 +126,37 @@ export const IMPACTS: Record<string, Record<string, ImpactSpec>> = {
     'atk.c3': I('stake', 0.42),
     'atk.c4': I('stake', 0.65),
     'atk.air': I('stake', 0.45),
-    'atk.stake': I('stake', 0.4),
-    'atk.nails': I('nail', 0.75),
+    // lands with the combo hit: lighter, so one impact plays
+    'atk.stake': I('stake', 0.2),
+    // locke.nailBurst carries the detonation
+    'atk.nails': I('nail', 0.6),
     'atk.dash': I('stake', 0.5),
-    'abi.e': I('blade', 0.55),
+    'abi.e': I('stake', 0.55),
     'ult.purg': I('aoe', 0.7),
-    'ult.seal': I('holy', 1),
+    // locke.seal brings the choir and the bell
+    'ult.seal': I('holy', 0.6),
   },
   pooh: {
-    'sig.bump': I('blunt', 0.75),
-    'atk.pot': I('honey', 0.4),
-    'atk.big': I('honey', 0.65),
-    'atk.goo': I('honey', 0.08, 0.5),
-    'ult.hive': I('honey', 0.7),
+    'sig.bump': I('blunt', 0.65),
+    'atk.pot': I('honey', 0.25),
+    'atk.big': I('honey', 0.45),
+    // standing in the goo: a tick a second is plenty
+    'atk.goo': I('honey', 0.08, 0.95),
+    'ult.hive': I('aoe', 0.7),
     'ult.sting': I('sting', 0.1, 0.25),
     'ult.sting2': I('sting', 0.18, 0.25),
   },
   elisabbat: {
     'sig.bite': I('bite', 0.7),
-    'sig.feast': I('bite', 0.85),
+    'sig.feast': I('bite', 0.75),
     'atk.c1': I('claw', 0.3),
     'atk.c2': I('claw', 0.3),
     'atk.c3': I('claw', 0.55),
     'atk.air': I('claw', 0.45),
     'abi.bat': I('bat', 0.2, 0.07),
-    'ult.storm': I('bat', 0.15, 0.25),
-    'ult.finale': I('claw', 0.9),
+    'ult.storm': I('bat', 0.15, 0.45),
+    // elisabbat.finale is the blast: bodies caught in it thud
+    'ult.finale': I('aoe', 0.8),
   },
 };
 
@@ -202,6 +214,14 @@ export const IMPACT_SFX: Record<string, SfxDef> = {
     smack(c, { f: 2300, q: 2.2, dur: 0.025, vol: 0.12, drop: 0.85 });
     ring(c, { f: rr(c, 1700, 2100), decay: 0.05 + 0.04 * w, vol: 0.022, bright: 0.3 });
   }),
+  'hit.holo': hitDef((c, w) => {
+    core(c, w, { body: lerp(320, 200, w), bodyVol: 0.6, smackF: lerp(1600, 1100, w), smackVol: 0.34 });
+    // Nova's digital edge: a crushed blip falling off a chord tone instead of a steel ring (the
+    // level is set after the crusher, which would round a quieter input away)
+    const crushed = c.g.crush(4, c.g.gain(0.09 + 0.05 * w, c.g.filter('lowpass', 2600, 0.7, c.out)));
+    const f = chordHz(c.h, Math.floor(c.r() * 3), 5);
+    c.g.tone({ type: 'triangle', f, f1: f * 0.75, t: c.t + 0.006, dur: 0.04 + 0.03 * w, vol: 0.5, a: 0.001, out: crushed });
+  }),
   'hit.greatsword': hitDef((c, w) => {
     core(c, w, { body: lerp(240, 150, w), bodyVol: 0.85, smackF: lerp(1200, 850, w), smackVol: 0.45 });
     ring(c, { f: rr(c, 640, 760), decay: 0.12 + 0.08 * w, vol: 0.05, bright: 0.35 });
@@ -247,15 +267,6 @@ export const IMPACT_SFX: Record<string, SfxDef> = {
     core(c, w, { body: 200, bodyVol: 0.9, smackF: 1000, smackVol: 0.5 });
     blip(c, { type: 'sawtooth', f: chordHz(c.h, 0, 2), f1: chordHz(c.h, 0, 1), dur: 0.2, vol: 0.12, out: c.g.filter('lowpass', 500, 1, c.out) });
   }),
-  'hit.beam': hitDef(
-    (c, w) => {
-      // a sizzle that locks onto the chord
-      hiss(c, { f: 1600, f1: 1200, q: 1.4, dur: 0.06 + 0.12 * w, vol: 0.25, a: 0.004 });
-      blip(c, { f: chordHz(c.h, 2, 4), dur: 0.08 + 0.1 * w, vol: 0.2 });
-      if (w > 0.6) core(c, w, { body: 180, bodyVol: 0.6, smackVol: 0.3 });
-    },
-    { dur: 0.3, max: 3 },
-  ),
   'hit.sonic': hitDef((c, w) => {
     // a soft pop and a chime on the chord
     thump(c, { f0: lerp(280, 180, w), f1: 110, dur: 0.07 + 0.08 * w, vol: 0.45 });
@@ -309,8 +320,9 @@ export const IMPACT_SFX: Record<string, SfxDef> = {
     max: 2,
     lvl: -6,
     fn: (c) => {
-      smack(c, { f: rr(c, 1700, 2100), q: 3, dur: 0.012, vol: 0.25, drop: 0.85 });
-      thump(c, { f0: 420, f1: 260, dur: 0.035, vol: 0.2 });
+      const k = 0.7 + 0.6 * W(c);
+      smack(c, { f: rr(c, 1700, 2100), q: 3, dur: 0.012, vol: 0.25 * k, drop: 0.85 });
+      thump(c, { f0: 420, f1: 260, dur: 0.035, vol: 0.2 * k });
     },
   },
   'hit.rock': hitDef((c, w) => {

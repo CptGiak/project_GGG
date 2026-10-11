@@ -71,7 +71,7 @@ export class SeraKit extends BaseKit {
       this.finaleT = 1.05;
       this.startAction(f, 'ult', 1.4);
       f.anim.play('ult', { fadeIn: 0.06 });
-      m.audio.play('ult', f.pos, 1);
+      m.audio.play('sera.ult', f.pos);
       m.broadcastAction(f, { a: 'ult', p: [this.finale.x, this.finale.y, this.finale.z] });
       return;
     }
@@ -113,7 +113,7 @@ export class SeraKit extends BaseKit {
       this.focus = null;
       this.focusT = 0;
       f.anim.play('aim', { hold: true, fadeIn: 0.06 });
-      m.audio.play('beam', f.pos, 0.8);
+      m.audio.play('sera.beamStart', f.pos);
       m.broadcastAction(f, { a: 'res', n: 1 });
       return;
     }
@@ -137,7 +137,7 @@ export class SeraKit extends BaseKit {
     const dir = point.clone().sub(from).normalize();
     m.projectiles.spawn({ owner: f, kind: 'orb', pos: from, vel: dir.clone().multiplyScalar(62), radius: 0.26, life: 2.2, slot: 'atk', part: 'orb', color: f.champ.colors[0], color2: f.champ.colors[1], homing: target ? { target, strength: 1.7 } : undefined, kb: 2 });
     m.vfx.muzzle(from, dir, f.champ.colors[0]);
-    m.audio.play('orb', from, 0.8);
+    m.audio.play('sera.orb', from, 1, f);
     m.broadcastAction(f, { a: 'orb', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z], t: target?.id });
   }
 
@@ -158,7 +158,7 @@ export class SeraKit extends BaseKit {
     const [c0, c1] = f.champ.colors;
     m.projectiles.spawn({
       owner: f, kind: 'note', pos: from, vel, radius: 0.4, life: 1.6, gravity: NOTE_G, explode: NOTE_R, coreRadius: NOTE_CORE, corePart: 'core',
-      slot: 'sig', part: 'note', kb: 9, slow: 0.6, color: c0, color2: c1, scale: 2.2, visualOnly,
+      slot: 'sig', part: 'note', kb: 9, slow: 0.6, color: c0, color2: c1, scale: 2.2, visualOnly, boom: 'sera.noteBurst',
       onBurst: (p) => {
         // the note bursts into a ring of stars, the core flashes white
         m.vfx.ring(p.clone().setY(p.y + 0.1), UP, 0xffffff, 0.3, NOTE_CORE * 1.4, 0.3);
@@ -167,12 +167,11 @@ export class SeraKit extends BaseKit {
           const a = (i / 18) * Math.PI * 2;
           m.vfx.add.emit({ pos: p.clone().setY(p.y + 0.4), vel: new THREE.Vector3(Math.cos(a) * 9, 3 + Math.random() * 4, Math.sin(a) * 9), life: 0.55, size: 0.2, size1: 0.03, color: i % 2 ? c0 : c1, shape: Shape.star, drag: 2.5 });
         }
-        m.audio.play('note', p, 0.8);
       },
     });
     m.vfx.muzzle(from, vel.clone().normalize(), c0);
     m.vfx.ring(from, UP, c1, 0.2, 1.2, 0.3);
-    m.audio.play('lob', from, 0.9);
+    m.audio.play('sera.lob', from, 1, f);
   }
 
   /** draws the beam this frame; deals a tick if `tick` */
@@ -221,15 +220,16 @@ export class SeraKit extends BaseKit {
           this.focusT = 0;
         }
         this.focusAt = m.time;
-        if (!wasMax && this.ramp >= 1) m.audio.play('chord', from, 0.8);
+        if (!wasMax && this.ramp >= 1) m.audio.play('sera.beamMax', from, 1, f);
       }
       const full = this.data.abilities.sec.damage.tick;
       for (const { o, at } of hits) {
         const r = o === this.focus ? this.ramp : 0;
         m.reportHit(f, o, { slot: 'sec', part: 'tick', at, slow: 0.5 + 0.4 * r, blockable: true, scale: (TICK_MIN + (full - TICK_MIN) * r) / full });
       }
-      m.audio.play('beam', from, 0.35 + 0.3 * this.ramp);
     }
+    // the sung beam, one grain per call rate-limited by its gap (local, bot and remote copies)
+    m.audio.play('sera.beam', from, 0.35 + 0.3 * this.ramp, f);
     return to;
   }
 
@@ -278,8 +278,7 @@ export class SeraKit extends BaseKit {
     m.vfx.beam(p.clone().setY(p.y + 80), p, 0xffffff, 2.0, 0.45);
     m.vfx.shockwave(p, 8, c0);
     m.vfx.explosion(p.clone().setY(p.y + 1), 5, c0, c1);
-    m.audio.play('slam', p, 1.2);
-    m.audio.play('explosion', p, 1);
+    m.audio.play('sera.pillar', p, 1, f);
     m.shake(0.7, p);
     if (authority) {
       this.aoe(f, m, p.clone().setY(p.y + 1), 5.2, 'ult', 'pillar', { kb: 6, kbUp: 18, stun: 0.5, falloff: true });
@@ -302,7 +301,7 @@ export class SeraKit extends BaseKit {
       const a = (i / 24) * Math.PI * 2;
       m.vfx.add.emit({ pos: c.clone(), vel: new THREE.Vector3(Math.cos(a) * 16, 1, Math.sin(a) * 16), life: 0.5, size: 0.14, color: i % 2 ? c0 : c1, shape: Shape.star, drag: 2 });
     }
-    m.audio.play('wave', c, 1);
+    m.audio.play('sera.wave', c, 1, f);
     m.shake(0.25, c);
     if (authority) this.aoe(f, m, f.chest(new THREE.Vector3()), 9, 'abi', 'wave', { kb: 14, kbUp: 6, slow: 1.5 });
   }
@@ -326,12 +325,13 @@ export class SeraKit extends BaseKit {
         const target = e.t ? m.fighters.find((x) => x.id === e.t) ?? null : null;
         m.projectiles.spawn({ owner: f, kind: 'orb', pos: p, vel: d.multiplyScalar(62), radius: 0.26, life: 2.2, slot: 'atk', part: 'orb', color: f.champ.colors[0], color2: f.champ.colors[1], homing: target ? { target, strength: 1.7 } : undefined, visualOnly: true });
         f.anim.play('cast', { fadeIn: 0.03 });
-        m.audio.play('orb', p, 0.8);
+        m.audio.play('sera.orb', p, 1, f);
         this.aimHold = 0.5;
         break;
       }
       case 'res':
         this.remoteChannel = !!e.n;
+        if (e.n) m.audio.play('sera.beamStart', f.pos);
         if (e.n) f.anim.play('aim', { hold: true });
         else f.anim.action.stop(0.15);
         break;
@@ -346,7 +346,7 @@ export class SeraKit extends BaseKit {
         break;
       case 'ult':
         f.anim.play('ult');
-        m.audio.play('ult', f.pos, 1);
+        m.audio.play('sera.ult', f.pos);
         if (e.p) {
           this.finale = new THREE.Vector3(...e.p);
           this.finaleT = 1.05;

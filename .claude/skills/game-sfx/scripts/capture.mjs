@@ -67,11 +67,14 @@ await page.evaluate((secs) => {
   }, 20);
   window.__log = [];
   const orig = a.play.bind(a);
-  a.play = (n, pos, vol = 1, src) => {
+  // every argument goes through (`arg` carries impact weights, charge levels...); the log keeps
+  // the source's champion (a fighter object would not serialise)
+  a.play = (n, pos, vol = 1, src, arg) => {
     const lp = a.listenerPos;
     const d = pos ? Math.round(pos.distanceTo(lp) * 10) / 10 : -1;
-    window.__log.push([Math.round((ctx.currentTime - window.__t0) * 1000) / 1000, n, d, Math.round(vol * 100) / 100, src ?? null]);
-    return orig(n, pos, vol, src);
+    const who = src && typeof src === 'object' ? src.champId : (src ?? null);
+    window.__log.push([Math.round((ctx.currentTime - window.__t0) * 1000) / 1000, n, d, Math.round(vol * 100) / 100, who]);
+    return orig(n, pos, vol, src, arg);
   };
 }, secs);
 const t0 = Date.now();

@@ -1,6 +1,7 @@
 /**
  * Consistency check for the SFX catalogue (run: npx tsx tools/audio/check_sfx.ts):
- *  - every sound name the game code plays exists in the catalogue (unknown names are silent);
+ *  - every sound name the game code plays exists in the catalogue (unknown names are silent): the
+ *    arguments of audio.play / afterimage / boom / sfx, and any 'champion.sound' literal;
  *  - every champion damage part has an impact in IMPACTS, and every IMPACTS key is a real part;
  *  - catalogue entries nothing plays (dead sounds);
  *  - every entry has a category and a trim (tools/audio/mix_trims.mjs).
@@ -29,12 +30,17 @@ walk(path.join(root, 'src'));
 const used = new Map<string, string>();
 const callName = /(?:audio\.play\(|\bsfx\(|afterimage\([^)]*,\s*|boom:\s*)([^,)]*)/g;
 const lit = /(?<![=!]==\s*)'([a-z][\w.]*)'/g;
+// kit sounds ('nova.swing') also travel through lookup tables (animation clip -> sound): any such
+// literal counts, and one naming a champion's sound that does not exist is reported
+const kitName = new RegExp(`'((?:${Object.keys(CHAMPIONS).join('|')})\\.[a-zA-Z]\\w*)'`, 'g');
 for (const f of files) {
   const lines = fs.readFileSync(f, 'utf8').split('\n');
   lines.forEach((line, i) => {
+    const at = `${path.relative(root, f)}:${i + 1}`;
     for (const call of line.matchAll(callName)) {
-      for (const m of call[1].matchAll(lit)) if (!used.has(m[1])) used.set(m[1], `${path.relative(root, f)}:${i + 1}`);
+      for (const m of call[1].matchAll(lit)) if (!used.has(m[1])) used.set(m[1], at);
     }
+    for (const m of line.matchAll(kitName)) if (!used.has(m[1])) used.set(m[1], at);
   });
 }
 let bad = 0;

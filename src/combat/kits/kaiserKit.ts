@@ -210,7 +210,7 @@ export class KaiserKit extends BaseKit {
     m.vfx.ring(start.clone().setY(start.y + 0.05), UP, c0, 0.4, 2.4, 0.4);
     m.vfx.ring(start.clone().setY(start.y + 0.08), UP, 0xffffff, 0.3, 1.5, 0.3);
     this.sparks(m, start, dir, c0, c1, 10);
-    m.audio.play('kaiser.chord', start);
+    m.audio.play('kaiser.chord', start, 1, f);
     m.shake(0.45, start);
     m.hitStop(0.05);
     // the wave front runs out over ~0.16 s; the tip lights up the sweet spot
@@ -234,7 +234,7 @@ export class KaiserKit extends BaseKit {
           this.sparks(m, p, dir, c1, 0xffffff, 16);
           m.vfx.ring(p.clone().setY(p.y + 0.9), dir, 0xffffff, 0.6, 2.8, 0.3);
           m.vfx.ring(p.clone().setY(p.y + 0.05), UP, 0xffffff, 0.4, 3, 0.4);
-          m.audio.play('kaiser.chordTip', p);
+          m.audio.play('kaiser.chordTip', p, 1, f);
         }
       });
     }
@@ -375,7 +375,7 @@ export class KaiserKit extends BaseKit {
             m.vfx.shockwave(c, 11, f.champ.colors[0]);
             m.vfx.shockwave(c, 7, f.champ.colors[1]);
             m.vfx.explosion(c.clone().setY(c.y + 0.5), 4, f.champ.colors[0], f.champ.colors[1]);
-            m.audio.play('kaiser.ultSlam', c);
+            m.audio.play('kaiser.ultSlam', c, 1, f);
             m.shake(0.9, c);
             m.hitStop(0.1);
             this.aoe(f, m, c, 9, 'ult', 'slam', { kb: 12, kbUp: 15, stun: 0.6, falloff: true });
@@ -423,7 +423,7 @@ export class KaiserKit extends BaseKit {
       forwardOf(this.faceYaw ?? f.facing, _v);
       const c = f.pos.clone().addScaledVector(_v, 2.2);
       m.vfx.shockwave(c, 4, f.champ.colors[0]);
-      m.audio.play('kaiser.shock', c);
+      m.audio.play('kaiser.shock', c, 1, f);
       m.shake(0.3, c);
       this.aoe(f, m, c, 3.2, 'atk', 'shock', { kb: 6, kbUp: 7 });
     }

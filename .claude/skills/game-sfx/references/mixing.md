@@ -83,9 +83,17 @@ confirm-category sounds that come from another fighter (their perfect timing is 
   is the quietest (own sounds always get in). Plus `max` per sound (oldest stolen).
 - **Rate limits**: identical sounds from one source merge within 25 ms; `gap` on a definition
   sets the minimum time between plays from one source (channels, buzz grains, ticks); impacts
-  have their own `gap` per ability (Rex's shots 0.1 s, Sera's beam ticks 0.22 s, bee stings
-  0.25 s, honey puddle 0.5 s) and one impact per victim per 40 ms (passives and bursts landing
-  with the hit).
+  have their own `gap` per ability (Rex's shots 0.2 s, so every other bullet of a 7/s stream
+  lands an impact; Sera's beam ticks 0.3 s; bee stings 0.25 s; bat storm 0.45 s; honey puddle
+  0.95 s) and one impact per victim per 40 ms, the heavier one winning. A passive or proc that
+  lands in the same frame as the hit gets a lighter weight than the hit so only one impact plays
+  (Locke's stake, Qiyana's Royal Privilege), and carries its own cue instead (`qiyana.royal`).
+- **Who makes a sound**: `play(name, pos, vol, src)` with the fighter as `src` when the sound is
+  not at the fighter (a pillar at the target point, a projectile bursting, a blink's arrival).
+  Without it the engine assumes the nearest fighter within 2.5 m, which credits a pillar landing
+  on you to you: your own-sound treatment, no enemy threat layer, the wrong champion's flavour.
+  A champion id as `src` only sets the flavour (impacts sound like the attacker's weapon).
+  Confirm and UI sounds from another fighter are dropped (a bot's "nope" is not yours to hear).
 
 ## 5. Hits: one impact + one confirm, in the ability's material
 
@@ -93,9 +101,10 @@ confirm-category sounds that come from another fighter (their perfect timing is 
 `audio.confirm(...)` once for the local attacker. Nothing else plays on a hit.
 
 - **World impact** (`impacts.ts`, 3D at the victim): the material comes from the ability
-  (`IMPACTS[champion]["slot.part"]`: blade, greatsword, ringblade, claw, stake, nail, blunt,
-  bullet, slug, beam, sonic, shock, aoe, bite, bat, honey, sting, rock, water, grass, holy, and a
-  separate `hit.block`). Weight `w` (0..1) from the ability, the damage and crit/counter sizes the
+  (`IMPACTS[champion]["slot.part"]`: blade, holo, greatsword, ringblade, claw, stake, nail,
+  blunt, bullet, slug, sonic, shock, aoe, bite, bat, honey, sting, rock, water, grass, holy, and
+  a separate `hit.block`). When the ability's own sound already is the blast (an ultimate
+  landing, a wall bursting), its bodies take `aoe`: a thud each, not a second explosion. Weight `w` (0..1) from the ability, the damage and crit/counter sizes the
   body and the tail; crits add a metallic accent instead of a second sound.
 - **Confirm** (2D, local attacker): a soft mallet tock on the current chord that climbs with the
   combo; crit = two tones ending on a bell; counter = a rising arpeggio; block = a muted tuk;
@@ -131,6 +140,11 @@ confirm-category sounds that come from another fighter (their perfect timing is 
 
 ## 7. Noise and fatigue rules for synthesized SFX
 
+- Attacks up to 8 ms rise linearly on the SFX graph (`Graph.softAttack`). An exponential ramp
+  from silence is inaudible for three quarters of its length and then jumps: a 2 ms attack acts
+  like 0.2 ms, a click reaching into 2-5 kHz on every sine body. Measured on the same sounds:
+  `hurt` -14 dB less 2-5 kHz, footsteps -7 dB, confirms and UI -5 to -8 dB above 5 kHz, loudness
+  within 1 dB. The music keeps its own envelopes (it was tuned with them).
 - Noise is pink or brown and band-limited; white noise only as the 1-2 ms edge of a click, never
   a body or a tail. Sustained energy above ~6 kHz is hiss.
 - The 2-5 kHz band (ear's peak sensitivity) is for short definition, not bodies: sounds heard
@@ -159,12 +173,32 @@ python3 .claude/skills/game-sfx/scripts/mixstats.py /tmp/a/match         # the w
 ## 9. Sources
 
 - Sony Interactive Entertainment, Audio Standards Working Group, ASWG-R001 loudness
-  recommendation (-24 LKFS +-2 LU home, -18 portable, -1 dBTP).
+  recommendation: -24 LKFS +-2 LU for home consoles, -18 LKFS for portable systems, -1 dBTP;
+  its survey found 52 games averaging -17.8 LUFS against -23.1 for films
+  (https://en.wikipedia.org/wiki/Audio_normalization,
+  https://media.gdcvault.com/gdc2013/slides/824764Garry_Taylor_Loudness_and_how.pdf,
+  https://youlean.co/loudness-standards-full-comparison-table/).
 - ITU-R BS.1770-4 (K-weighting, gating) and EBU R128 / Tech 3341 (momentary 400 ms, short-term 3 s).
 - Rob Bridgett, "Game Audio Mixing" (snapshots, ducking, priority, the mix as a design tool).
 - Scott Lawlor & Tomas Neumann, GDC 2016, "Overwatch: The Elusive Goal - Play by Sound"
-  (importance-based mixing, voice culling, enemy over friendly).
+  (pillars: a clear mix, pinpoint accuracy, gameplay information; a dynamic priority on the
+  greatest threats instead of plain HDR; enemy and friendly sounds treated differently)
+  (https://www.audiokinetic.com/en/blog/overwatch-game-audio-using-wwise-1/,
+  https://pcgamesn.com/overwatch/overwatch-devs-on-creating-a-game-you-can-play-by-sound-and-announcing-dolby-atmos-support).
 - DICE / Frostbite HDR audio (loudness window driven by the loudest sounds).
-- Riot Games audio dev blogs on League of Legends and Valorant (gameplay clarity, hierarchy,
-  noise reduction, distance curves).
-- Dr. Lex, "Programming Volume Controls" (exponential / dB-scaled volume curves).
+- Riot Games, "Ask VALORANT" (2020): footsteps are mixed to be heard rather than to portray
+  distance (a flat attenuation curve) so ability noise never masks an approaching enemy, the
+  game is mixed in stereo, and the mix should never push players to raise their volume
+  (https://tracker.gg/valorant/articles/riot-responds-to-complaints-over-footstep-audio-in-valorant).
+- Music under SFX by default: developers commonly ship the music 10-20 % under the effects so
+  the effects are not drowned (https://babel.speldesign.uu.se/?p=1998); players who meet all
+  sliders at 100 % turn the music down first
+  (https://www.neogaf.com/threads/sound-settings-preferences.910724/).
+- Volume sliders in dB: map the slider exponentially (constant dB per step) with true silence at
+  the bottom (https://music.arts.uci.edu/dobrian/webaudio/tutorials/JavaScript/volumefaderdbjs.html);
+  a pure dB scale never reaches zero, hence a linear tail near the bottom
+  (https://hydrogenaudio.org/index.php/topic,86414.0.html,
+  https://forums.cherryaudio.com/viewtopic.php?p=14509). Dr. Lex, "Programming Volume
+  Controls", is the classic write-up of the same mapping. The game uses 40 dB rather than a
+  hi-fi 50-60 dB range because only the top 20-30 dB of a game mix is ever useful: 50 % lands
+  at -20 dB instead of an almost silent -30.

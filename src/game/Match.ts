@@ -354,7 +354,7 @@ export class Match implements MatchContext {
       this.addUlt(def, COMBAT.dodgeUlt, 'DODGE');
     }
     this.vfx.dodgeFlash(at, def.champ.colors[0], def.champ.colors[1]);
-    this.audio.play('dodge', at, 1);
+    this.audio.play('dodge', at, 1, def);
     if (def === this.local) {
       this.hud?.banner('PERFECT DODGE', 'dodge');
       if (this.opts.mode === 'practice') this.hitStop(0.12);
@@ -589,7 +589,7 @@ export class Match implements MatchContext {
     const at = defender.chest(new THREE.Vector3());
     this.vfx.blockSpark(at, _v.subVectors(attacker.pos, defender.pos).normalize());
     this.vfx.ring(at, _v, 0xffffff, 0.3, 3, 0.3);
-    this.audio.play('parry', at, 1);
+    this.audio.play('parry', at, 1, defender);
     this.hitStop(0.15);
     if (defender === this.local || attacker === this.local) {
       this.hud?.banner(defender === this.local && rewarded ? 'PARRY! · RIPOSTA' : 'PARRY!', 'parry');

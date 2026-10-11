@@ -89,7 +89,7 @@ export class RexKit extends BaseKit {
       this.ultShots = 12;
       this.ultT = 0.15;
       this.ultTargets = m.fighters.filter((o) => o !== f && o.alive && (o.team === 0 || o.team !== f.team) && o.pos.distanceTo(f.pos) < this.data.abilities.ult.range);
-      m.audio.play('ult', f.pos, 1);
+      m.audio.play('rex.ult', f.pos);
       this.ultStartFx(f, m);
       m.broadcastAction(f, { a: 'ult' });
       return;
@@ -101,7 +101,7 @@ export class RexKit extends BaseKit {
       f.anim.play('single', { fadeIn: 0.04 });
       this.aimHold = 0.6;
       f.ctrl.aim = 1;
-      m.audio.play('charge', f.pos, 0.35);
+      m.audio.play('rex.load', f.pos);
       return;
     }
     // grenade
@@ -121,7 +121,7 @@ export class RexKit extends BaseKit {
       this.chargeFx = this.perfectWindow ? 1 : this.chargeT > CHARGE_SEC + OVER_AFTER ? 2 : 0;
       // the perfect window opens: an audible cue (Gears of War active reload) and a visible snap
       if (before < CHARGE_SEC && this.chargeT >= CHARGE_SEC) {
-        m.audio.play('perfectTick', f.pos, 1);
+        m.audio.play('rex.chargeFull', f.pos);
         perfectSnap(m, this.muzzle(f, _v));
         f.anim.kick({ pitch: -0.8, back: -0.01, body: 0.3 });
       }
@@ -135,7 +135,7 @@ export class RexKit extends BaseKit {
       this.chargeT = 0;
       this.chargeFx = 0;
       f.anim.play('charge', { hold: true, fadeIn: 0.08 });
-      m.audio.play('charge', f.pos, 0.8);
+      m.audio.play('rex.charge', f.pos);
       this.chargeStartFx(f, m);
       m.broadcastAction(f, { a: 'charge', n: 1 });
       return;
@@ -181,7 +181,7 @@ export class RexKit extends BaseKit {
   /** one Beat Shot's muzzle, sound, weapon detail and recoil (local and remote copies) */
   private shotFx(f: Fighter, m: MatchContext, from: THREE.Vector3, dir: THREE.Vector3): void {
     beatShotMuzzle(m, from, dir, this.bloom, Beat.kick > 0.6);
-    m.audio.play('shot', from, 0.85);
+    m.audio.play('rex.shot', from, 1, undefined, { on: Beat.kick > 0.6 });
     f.visual.cue?.('shot');
     this.shotKick(f);
     // own small shots never shake the screen: a sub-degree view kick only
@@ -215,7 +215,7 @@ export class RexKit extends BaseKit {
   /** the slug's cast (local and remote copies); the rifle's kick comes with the clip's 'fire' event */
   private slugFx(f: Fighter, m: MatchContext, from: THREE.Vector3, dir: THREE.Vector3): void {
     slugCast(m, from, dir);
-    m.audio.play('slug', from, 1);
+    m.audio.play('rex.slug', from, 1, f);
     f.visual.cue?.('slug');
     // heavy shot: a view kick, a 3-degree FOV punch in (focus), a little self trauma
     m.cameraKick(f, 1.6, 0, this.kickSide * 0.6, -3);
@@ -265,7 +265,6 @@ export class RexKit extends BaseKit {
     const to = wallHit ? wallHit.point.clone() : point.clone();
     const fxK = perfect ? 1.4 : k;
     this.beamFx(f, m, from, to, fxK, over, !!wallHit);
-    if (perfect) m.audio.play('chord', from, 1);
     if (m.isAuthority(f)) {
       const radius = perfect ? 0.35 : 0.2;
       const scale = perfect ? 1 : (0.3 + 0.7 * k) * (1 - (1 - OVER_MIN) * over);
@@ -291,7 +290,7 @@ export class RexKit extends BaseKit {
   private beamFx(f: Fighter, m: MatchContext, from: THREE.Vector3, to: THREE.Vector3, k: number, over = 0, wall = true): void {
     const perfect = k > 1.2;
     beamFx(m, from, to, Math.min(k, 1), perfect, over, wall);
-    m.audio.play('chargeShot', from, 1);
+    m.audio.play('rex.release', from, 1, undefined, { k, over });
     f.visual.cue?.('beam', k);
     const kk = Math.min(k, 1.4);
     f.anim.kick({ pitch: 9 + 8 * kk, back: 0.07 + 0.05 * kk, roll: 2, body: 1, freq: 2.9, zeta: 0.62, rise: 0.035, hang: 0.085 });
@@ -311,6 +310,7 @@ export class RexKit extends BaseKit {
     const state = t >= CHARGE_SEC && t <= CHARGE_SEC + PERFECT_SEC ? 1 : t > CHARGE_SEC + OVER_AFTER ? 2 : 0;
     f.visual.cue?.('charge', k);
     f.visual.cue?.('chargeState', state);
+    m.audio.play('rex.chargeHold', f.pos, 1, undefined, { k, s: state });
     chargeTick(m, this.muzzle(f, _c1), t, k, state, dt);
     if (this.planted >= 0) m.vfx.decals.move(this.planted, f.pos);
     // strain: the weapon trembles harder as the charge builds; dead still in the perfect window;
@@ -344,7 +344,7 @@ export class RexKit extends BaseKit {
     vel.add(f.vel.clone().multiplyScalar(0.5));
     m.projectiles.spawn({ owner: f, kind: 'grenade', pos: from, vel, radius: 0.22, life: BOMB_FUSE, gravity: 22, bounce: 2, explode: BOMB_RADIUS, kb: 14, slot: 'abi', part: 'blast', color: f.champ.colors[0], color2: f.champ.colors[1], ...this.bombVisuals(f, m) });
     bombRelease(m, f.visual.rig.byName.handL.getWorldPosition(_c2));
-    m.audio.play('swing', from, 0.6);
+    m.audio.play('rex.throw', from, 1, f);
     m.broadcastAction(f, { a: 'bomb', p: [from.x, from.y, from.z], d: [vel.x, vel.y, vel.z] });
   }
 
@@ -412,7 +412,7 @@ export class RexKit extends BaseKit {
 
   private noteLaunchFx(f: Fighter, m: MatchContext, from: THREE.Vector3, i: number): void {
     noteLaunch(m, from, i % 2 === 0);
-    m.audio.play('note', from, 0.8);
+    m.audio.play(i === 11 ? 'rex.drop' : 'rex.note', from, 1, undefined, { i });
     f.visual.cue?.('note');
     this.kickSide = -this.kickSide;
     f.anim.kick({ pitch: 2.2, back: 0.02, roll: this.kickSide * 1.2, body: 0.4 });
@@ -456,6 +456,7 @@ export class RexKit extends BaseKit {
       case 'charge':
         if (e.n) {
           f.anim.play('charge', { hold: true });
+          m.audio.play('rex.charge', f.pos);
           this.remoteChargeT = 0;
           this.chargeStartFx(f, m);
         } else {
@@ -479,7 +480,6 @@ export class RexKit extends BaseKit {
           const n = e.n ?? 1;
           this.beamFx(f, m, p, new THREE.Vector3(...e.d), n < 0 ? 1 : n, n < 0 ? -n - 1 : 0);
         }
-        if ((e.n ?? 0) > 1.2) m.audio.play('chord', p, 1);
         f.anim.play('release');
         this.aimHold = 0.5;
         break;
@@ -487,10 +487,11 @@ export class RexKit extends BaseKit {
         f.anim.play('throw', { offset: 0.1 });
         m.projectiles.spawn({ owner: f, kind: 'grenade', pos: p, vel: new THREE.Vector3(...(e.d ?? [0, 0, 1])), radius: 0.22, life: BOMB_FUSE, gravity: 22, bounce: 2, explode: BOMB_RADIUS, slot: 'abi', part: 'blast', color: f.champ.colors[0], color2: f.champ.colors[1], visualOnly: true, ...this.bombVisuals(f, m) });
         bombRelease(m, p);
+        m.audio.play('rex.throw', p, 1, f);
         break;
       case 'ult':
         f.anim.play('ult', { hold: true });
-        m.audio.play('ult', f.pos, 1);
+        m.audio.play('rex.ult', f.pos);
         this.ultStartFx(f, m);
         this.act = 'ultRemote';
         this.actT = 0;

@@ -73,7 +73,7 @@ export class QiyanaKit extends BaseKit {
       if (this.act) this.endAction(f);
       this.startAction(f, 'ult', 0.95, f.aimYaw);
       f.anim.play('ult', { fadeIn: 0.05 });
-      m.audio.play('ult', f.pos, 1);
+      m.audio.play('qiyana.ult', f.pos);
       if (f.stealth > 0) f.reveal = 0.6;
       return;
     }
@@ -192,7 +192,7 @@ export class QiyanaKit extends BaseKit {
     if (el === 'rock') for (let i = 0; i < 10; i++) m.vfx.alpha.emit({ pos: from.clone().addScaledVector(dir, Math.random() * len).setY(from.y - 1), vel: new THREE.Vector3((Math.random() - 0.5) * 3, 4 + Math.random() * 4, (Math.random() - 0.5) * 3), life: 0.7, size: 0.35, color: 0x8a6a48, shape: Shape.shard, gravity: 18 });
     if (el === 'water') m.vfx.ring(to, dir, c, 0.3, 2.2, 0.35);
     if (el === 'grass') for (let i = 0; i < 14; i++) m.vfx.add.emit({ pos: from.clone().addScaledVector(dir, Math.random() * len), vel: new THREE.Vector3((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), life: 0.8, size: 0.16, color: c, shape: Shape.star, drag: 2 });
-    m.audio.play(el ? 'wave' : 'swingHeavy', from, 0.9);
+    m.audio.play(el === 'rock' ? 'qiyana.edgeRock' : el === 'water' ? 'qiyana.edgeWater' : el === 'grass' ? 'qiyana.edgeGrass' : 'qiyana.edge', from, 1, f);
   }
 
   /** Grass: invisible for a moment, with a burst of speed */
@@ -201,6 +201,7 @@ export class QiyanaKit extends BaseKit {
     f.stealthRadius = 0;
     f.reveal = 0;
     this.boost = 1.6;
+    m.audio.play('qiyana.veil', f.pos);
     m.broadcastAction(f, { a: 'veil', n: time });
   }
 
@@ -216,7 +217,7 @@ export class QiyanaKit extends BaseKit {
     this.dashLen = 0;
     this.startAction(f, 'terra', TERRA.dist / TERRA.speed + 0.1, Math.atan2(this.dashDir.x, this.dashDir.z));
     f.anim.play('terra', { fadeIn: 0.02 });
-    m.audio.play('dash', f.pos, 1);
+    m.audio.play('qiyana.terra', f.pos);
     m.vfx.dashLines(f, this.dashDir);
   }
 
@@ -248,7 +249,7 @@ export class QiyanaKit extends BaseKit {
       const a = (i / 16) * Math.PI * 2;
       m.vfx.add.emit({ pos: at.clone(), vel: new THREE.Vector3(Math.cos(a) * 5, 1 + Math.random() * 2, Math.sin(a) * 5), life: 0.5, size: 0.2, size1: 0.02, color: c, shape: el === 'grass' ? Shape.star : el === 'water' ? Shape.glow : Shape.shard, drag: 3 });
     }
-    m.audio.play('wave', at, 0.6);
+    m.audio.play(el === 'rock' ? 'qiyana.claimRock' : el === 'water' ? 'qiyana.claimWater' : 'qiyana.claimGrass', at, 1, f);
   }
 
   // ---- Audacity --------------------------------------------------------------------------------------------
@@ -260,7 +261,7 @@ export class QiyanaKit extends BaseKit {
     this.hitActive = { slot: 'abi', part: 'e', range: 2.0, arc: 180, height: 2.6, kb: 6, kbUp: 4, stun: 0.25 };
     this.setTrail(f, true);
     if (f.stealth > 0) f.reveal = 0.6;
-    m.audio.play('dash', f.pos, 1);
+    m.audio.play('qiyana.audacity', f.pos);
     m.broadcastAction(f, { a: 'aud', t: t.id });
   }
 
@@ -272,7 +273,7 @@ export class QiyanaKit extends BaseKit {
     // wave front
     for (let d = 1.5; d < ULT.range; d += 1.6) slashArc(m, origin.clone().addScaledVector(flat, d), flat, 1.2 + d * Math.tan(THREE.MathUtils.degToRad(ULT.half)), f.champ.colors[0], f.champ.colors[1]);
     m.vfx.ring(origin, flat, f.champ.colors[1], 0.5, 6, 0.4);
-    m.audio.play('wave', origin, 1.2);
+    m.audio.play('qiyana.wave', origin, 1, f);
     m.shake(0.5, origin);
     // terrain: walls inside the cone explode
     const bursts: THREE.Vector3[] = [];
@@ -288,7 +289,8 @@ export class QiyanaKit extends BaseKit {
       m.vfx.explosion(b, ULT.burst * 0.8, f.champ.colors[1], f.champ.colors[0]);
       m.vfx.shockwave(b.clone().setY(b.y - 0.8), ULT.burst, f.champ.colors[1]);
     }
-    m.audio.play('explosion', bursts[0], 1);
+    // one burst sound for the wave (same-frame plays from the world merge): arg.n sizes it
+    m.audio.play('qiyana.burst', bursts[0], 1, undefined, { n: bursts.length });
     if (!m.isAuthority(f)) return;
     for (const { o } of enemiesInCone(f, m, origin, flat, ULT.range, ULT.half, 5)) {
       const kb = _v.subVectors(o.pos, f.pos).setY(0).normalize().multiplyScalar(14).clone();
@@ -313,6 +315,8 @@ export class QiyanaKit extends BaseKit {
   private royal(f: Fighter, t: Fighter, m: MatchContext): void {
     if ((this.privilege.get(t.id) ?? -1) > m.time) return;
     this.privilege.set(t.id, m.time + 12);
+    // the attacker's own chime (confirm: dropped when Qiyana is not the local player)
+    m.audio.play('qiyana.royal', f.pos);
     const at = t.head(new THREE.Vector3());
     m.reportHit(f, t, { slot: 'atk', part: 'royal', at, blockable: false });
     for (let i = 0; i < 10; i++) {
@@ -383,7 +387,10 @@ export class QiyanaKit extends BaseKit {
     if (!this.act) return;
     if (ev === 'swing') {
       this.setTrail(f, true);
-      m.audio.play('swing', f.pos, 0.8);
+      // by clip so remote puppets pick the same sound; Edge of Ixtal and the ult carry their own
+      const clip = f.anim.action.name;
+      if (clip === 'c1' || clip === 'c2' || clip === 'air') m.audio.play('qiyana.swing', f.pos);
+      else if (clip === 'audacity') m.audio.play('qiyana.audacitySlash', f.pos);
     } else if (ev === 'hitOn') {
       if (this.act !== 'c1' && this.act !== 'c2' && this.act !== 'air') return;
       this.hitActive = { slot: 'atk', part: this.act, range: 2.9, arc: 75, kb: 3, kbUp: this.act === 'air' ? 9 : 1, stun: 0.1 };
@@ -432,10 +439,12 @@ export class QiyanaKit extends BaseKit {
         f.stealth = e.n ?? 2.5;
         f.stealthRadius = 0;
         f.reveal = 0;
+        m.audio.play('qiyana.veil', f.pos);
         break;
       case 'aud':
         f.anim.play('audacity', { fadeIn: 0.02 });
         this.setTrail(f, true);
+        m.audio.play('qiyana.audacity', f.pos);
         this.act = 'remote';
         this.actT = 0;
         this.actDur = 0.6;

@@ -114,7 +114,7 @@ export function afterimage(f: Fighter, m: MatchContext, from: THREE.Vector3, to:
   m.vfx.ring(from, dir, c0, 0.3, 1.6, 0.3);
   m.vfx.ring(to, dir, c1, 1.6, 0.2, 0.3);
   m.vfx.beam(from, to, c0, 0.08, 0.2);
-  if (sound) m.audio.play(sound, to);
+  if (sound) m.audio.play(sound, to, 1, f);
 }
 
 /**

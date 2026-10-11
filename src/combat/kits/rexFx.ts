@@ -479,7 +479,7 @@ export function bombBurst(m: MatchContext, pos: THREE.Vector3, radius: number): 
     _v.set(Math.cos(an), rnd(0.1, 0.3), Math.sin(an)).multiplyScalar(rnd(4, 6));
     fx.alpha.emit({ pos: _w.copy(p).setY(base + 0.3), vel: _v, life: rnd(0.6, 0.9), size: 0.3, size1: 0.8, color: 0xa898b0, shape: Shape.puff, drag: 3, alpha: 0.6 });
   }
-  m.audio.play('explosion', p, 0.9);
+  m.audio.play('rex.bomb', p);
   m.shake(0.35, p);
 }
 

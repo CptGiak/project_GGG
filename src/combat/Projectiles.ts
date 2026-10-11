@@ -360,7 +360,7 @@ export class Projectiles {
             const vn = p.vel.dot(wh.normal);
             p.vel.addScaledVector(wh.normal, -1.6 * vn).multiplyScalar(0.6);
             p.pos.copy(wh.point).addScaledVector(wh.normal, p.radius + 0.02);
-            m.audio.play('bounce', p.pos, 0.6);
+            m.audio.play('bounce', p.pos, 0.6, p.owner);
             p.fx?.bounce?.(wh.point, wh.normal);
             hitFighter = null;
           } else {
@@ -431,7 +431,7 @@ export class Projectiles {
     const r = p.explode ?? 3;
     if (p.blast !== false) {
       m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
-      m.audio.play(p.boom ?? 'explosion', p.pos, 0.9, p.owner.champId);
+      m.audio.play(p.boom ?? 'explosion', p.pos, 0.9, p.owner);
       m.shake(0.25, p.pos);
     }
     p.onBurst?.(p.pos.clone());

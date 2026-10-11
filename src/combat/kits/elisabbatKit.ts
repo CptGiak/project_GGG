@@ -222,8 +222,7 @@ export class ElisabbatKit extends BaseKit {
     f.hooks.forEach((h) => {
       if (h.state !== 'idle') h.state = 'retract';
     });
-    m.audio.play('dash', f.pos, 0.8);
-    m.audio.play('hiss', f.pos, 0.7);
+    m.audio.play('elisabbat.lunge', f.pos);
     m.broadcastAction(f, { a: 'lunge', t: t?.id });
   }
 
@@ -253,7 +252,7 @@ export class ElisabbatKit extends BaseKit {
       this.prey = null;
       this.endAction(f);
       f.vel.multiplyScalar(0.3);
-      m.audio.play('block', f.pos, 0.5);
+      m.audio.play('elisabbat.snap', f.pos);
       return;
     }
     this.startAction(f, 'bite', DUR.bite, Math.atan2(this.preyDir.x, this.preyDir.z));
@@ -273,7 +272,7 @@ export class ElisabbatKit extends BaseKit {
     this.biteDealt = this.data.abilities.sig.damage.bite * (info.crit ? 1.5 : 1);
     this.feast = this.marks.consume(t.id, m.time);
     this.bloodBurst(m, at, 1);
-    m.audio.play('bite', at, 1);
+    m.audio.play('elisabbat.drink', f.pos);
     m.shake(0.2, at);
   }
 
@@ -290,7 +289,7 @@ export class ElisabbatKit extends BaseKit {
     if (this.biteDealt > 0) {
       this.queueHeal(f, m, this.biteDealt * BITE.vamp);
       m.vfx.ring(f.chest(new THREE.Vector3()), UP, CRIMSON, 0.2, 1.6, 0.4);
-      m.audio.play('drink', f.pos, 0.9);
+      m.audio.play('elisabbat.heal', f.pos);
     }
     this.biteDealt = 0;
     this.feast = 0;
@@ -384,7 +383,7 @@ export class ElisabbatKit extends BaseKit {
       m.projectiles.spawn({ owner: f, kind: 'bat', pos: c.clone(), vel: d.multiplyScalar(7 + Math.random() * 4), radius: 0.05, life: 0.45 + Math.random() * 0.2, slot: 'sec', part: 'none', color: VIOLET, color2: CRIMSON, visualOnly: true, pierce: true, scale: 0.7 });
     }
     m.vfx.ring(c, UP, VIOLET, 0.2, 1.4, 0.3);
-    m.audio.play('batPoof', c, 1);
+    m.audio.play(this.morphed ? 'elisabbat.batIn' : 'elisabbat.batOut', c, 1, f);
   }
 
   /** free flight toward where she aims (W/S along the camera, A/D sideways, SPACE up) */
@@ -420,7 +419,6 @@ export class ElisabbatKit extends BaseKit {
     if (this.act) this.endAction(f);
     this.startAction(f, 'swarm', DUR.swarm, f.aimYaw);
     f.anim.play('swarm', { fadeIn: 0.03, mask: f.grounded ? undefined : MASK_UPPER });
-    m.audio.play('bats', f.pos, 0.9);
   }
 
   private releaseSwarm(f: Fighter, m: MatchContext): void {
@@ -430,6 +428,7 @@ export class ElisabbatKit extends BaseKit {
     const dir = point.clone().sub(from).normalize();
     const target = fighter ?? this.findTarget(f, m, SWARM.range, 22);
     this.spawnSwarm(f, m, from, dir, target, false);
+    m.audio.play('elisabbat.swarm', f.pos);
     m.broadcastAction(f, { a: 'swarm', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z], t: target?.id });
   }
 
@@ -483,8 +482,7 @@ export class ElisabbatKit extends BaseKit {
     const c = f.pos.clone().setY(f.pos.y + 1.2);
     m.vfx.shockwave(f.pos.clone().setY(f.pos.y + 0.1), STORM.radius, VIOLET);
     m.vfx.ring(c, UP, CRIMSON, 0.4, STORM.radius, 0.6);
-    m.audio.play('ult', c, 1);
-    m.audio.play('storm', c, 1);
+    m.audio.play('elisabbat.ult', f.pos);
     m.shake(0.3, c);
   }
 
@@ -522,8 +520,7 @@ export class ElisabbatKit extends BaseKit {
     const c = f.pos.clone().setY(f.pos.y + 1);
     m.vfx.explosion(c, 2.6, VIOLET, CRIMSON);
     m.vfx.shockwave(f.pos.clone().setY(f.pos.y + 0.1), STORM.radius, CRIMSON);
-    m.audio.play('explosion', c, 0.9);
-    m.audio.play('bats', c, 1);
+    m.audio.play('elisabbat.finale', c, 1, f);
     for (const o of m.fighters) {
       if (!foe(f, o)) continue;
       const oc = o.chest(new THREE.Vector3());
@@ -686,8 +683,7 @@ export class ElisabbatKit extends BaseKit {
     if (!this.act) return;
     if (ev === 'swing') {
       this.setTrail(f, true);
-      m.audio.play(this.act === 'c3' ? 'swingHeavy' : 'swing', f.pos, 0.8);
-      m.audio.play('claw', f.pos, 0.6);
+      m.audio.play(this.act === 'c3' || this.act === 'remoteSpin' ? 'elisabbat.clawX' : 'elisabbat.claw', f.pos);
     } else if (ev === 'hitOn') {
       if (this.act !== 'c1' && this.act !== 'c2' && this.act !== 'c3' && this.act !== 'air') return;
       const c3 = this.act === 'c3';
@@ -754,6 +750,7 @@ export class ElisabbatKit extends BaseKit {
       this.batTrail -= dt;
       if (this.batTrail <= 0 && f.alive) {
         this.batTrail = 0.03;
+        m.audio.play('elisabbat.wings', f.pos);
         m.vfx.add.emit({ pos: f.pos.clone().setY(f.pos.y + 1.0).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.3)), vel: f.vel.clone().multiplyScalar(-0.1), life: 0.4, size: 0.09, size1: 0.01, color: Math.random() < 0.5 ? VIOLET : CRIMSON, shape: Shape.star, alpha: 0.8 });
       }
     }
@@ -786,6 +783,7 @@ export class ElisabbatKit extends BaseKit {
     this.stormRing -= dt;
     if (this.stormRing <= 0) {
       this.stormRing = 0.3;
+      m.audio.play('elisabbat.storm', f.pos);
       m.vfx.ring(f.pos.clone().setY(f.pos.y + 0.08), UP, VIOLET, STORM.radius - 0.3, STORM.radius, 0.4);
     }
   }
@@ -809,8 +807,7 @@ export class ElisabbatKit extends BaseKit {
       case 'lunge':
         f.anim.play('lunge', { fadeIn: 0.04, hold: true });
         this.setTrail(f, true);
-        m.audio.play('dash', f.pos, 0.8);
-        m.audio.play('hiss', f.pos, 0.7);
+        m.audio.play('elisabbat.lunge', f.pos);
         this.act = 'remote';
         this.actT = 0;
         this.actDur = BITE.lunge + 0.1;
@@ -822,7 +819,7 @@ export class ElisabbatKit extends BaseKit {
         this.actT = 0;
         this.actDur = DUR.bite;
         if (this.prey) this.bloodBurst(m, this.neck(this.prey, new THREE.Vector3()), 1);
-        m.audio.play('bite', f.pos, 1);
+        m.audio.play('elisabbat.drink', f.pos);
         break;
       case 'bat':
         this.act = null;
@@ -837,7 +834,7 @@ export class ElisabbatKit extends BaseKit {
       case 'swarm':
         f.anim.play('swarm', { fadeIn: 0.03, offset: 0.15 });
         if (e.p && e.d) this.spawnSwarm(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), find(e.t), true);
-        m.audio.play('bats', f.pos, 0.9);
+        m.audio.play('elisabbat.swarm', f.pos);
         break;
       case 'ult':
         f.anim.play('ult', { fadeIn: 0.08, hold: true });

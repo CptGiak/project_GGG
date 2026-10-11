@@ -189,6 +189,7 @@ export async function sfxDry(o: { names?: string[]; repeat?: number; arena?: str
   const sr = 48000;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * sr), sr);
   const g = new Graph(ctx);
+  g.softAttack = true;
   const harmony = { root: 2, tones: [0, 3, 7], tonic: 2, scale: [0, 2, 3, 5, 7, 9, 10] };
   const marks: Array<[string, number, number]> = [];
   let t = 0.25;
@@ -237,6 +238,7 @@ export async function sfxSheet(o: { names?: string[]; gap?: number; arena?: stri
   const sr = 48000;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * sr), sr);
   const g = new Graph(ctx);
+  g.softAttack = true;
   const master = g.gain(1);
   const lim = ctx.createDynamicsCompressor();
   lim.threshold.value = -2;
@@ -285,6 +287,7 @@ export async function scenario(o: { events: Array<[number, string, number?, stri
   const seconds = o.seconds ?? Math.max(...o.events.map((e) => e[0])) + 2;
   const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sr), sr);
   const g = new Graph(ctx);
+  g.softAttack = true;
   const master = g.gain(sliderGain(DEFAULT_VOLUMES.master));
   const lim = ctx.createDynamicsCompressor();
   lim.threshold.value = -2;
