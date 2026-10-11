@@ -49,12 +49,20 @@ dietro.
 ![cappotto](cappotto_prima_dopo.jpg)
 ![corpo](corpo_prima_dopo.jpg)
 
+Poi il personaggio è stato rimontato con le parti nuove, riggato e animato con lo stesso
+idle. Qui sotto c'è lo stesso fotogramma, prima in primo piano e poi intero.
+
+![busto](busto_prima_dopo.jpg)
+![eroe](eroe_prima_dopo.jpg)
+
 ## Com'è andata, onestamente
 
 - **In argilla il salto è netto.** Il volto passa da "plastica liscia" a una faccia vissuta,
   con età e struttura attorno agli occhi.
 - **Nel colore il salto si attenua,** perché barba, baffi e cappello coprono metà della
-  pelle. Anche il cappotto migliora meno: cambia soprattutto l'orlo e la gonna.
+  pelle. Il cappotto migliora meno: cambiano soprattutto l'orlo e la gonna. Nel personaggio
+  intero il volto è piccolo e si nota più il cappotto. Resta un difetto vecchio
+  dell'animazione: in questo fotogramma la valigetta non sta davvero nella mano.
 - **I primi tentativi hanno insegnato due cose, ora scritte nella skill:**
   - una piega più stretta di circa 3 lati di triangolo "strappa" la mesh: serve il relax
     dopo ogni piega;
