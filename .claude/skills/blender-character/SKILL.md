@@ -46,6 +46,9 @@ PY=/root/blender-venv/bin/python               # run every script with this
     contact sheets with silhouette rows, GIFs.
   - `rig.py`: armature from a joint table, weights per part, world-axis posing, aim,
     two-bone IK, keys with easing presets, spring follow-through, motion trails.
+  - `sculpt.py`: the "hand". Blender's sculpt brushes reimplemented in numpy (crease, clay
+    strips, trim, pinch, inflate, smooth, relax, grab...), strokes drawn on orthographic grid
+    renders and ray-cast onto the mesh, a replayable stroke list, painting of sculpted meshes.
 - `scripts/new_character.py` is the starting template. Copy it next to your work (outside
   the skill folder) and fill it in. It already has the landmarks table, the part and `LOOKS`
   tables, the review sheet with a silhouette row, a `.blend` for the rig stage, and the
@@ -121,6 +124,19 @@ the time here.
   the ears tilt back, and the mouth is either designed (lips, corners, philtrum) or covered.
 **Gate:** at thumbnail size the face reads the intended emotion.
 
+### 4b. The hand pass (brush sculpting on the mesh)
+What the SDF cannot give, a sculptor's hand does: planes, the creases of age, skin rolls,
+cloth folds. Read [references/sculpt.md](references/sculpt.md) and copy
+`examples/chess_master_sculpt.py` (face) or `examples/chess_master_folds.py` (coat):
+- `--stage base`: mesh the part once (head 0.65 mm), render grid views with landmarks, and
+  the same views with hair, beard and hats in flat colour to see which skin stays visible.
+- Write strokes as polylines in the grid's millimetres on a named view, big to small: planes
+  (`trim`, `clay_strips`), then creases (`wrinkle()`: crease, relax, roll, soften, polish),
+  then polish. The list is replayed from the base mesh on every run.
+- Paint with `K.mesh_sdf()` and add `K.cavity()` for the fine creases.
+**Gate:** the 3/4 clay close-up shows planes and creases that read from 2 m away, with no
+jagged lines (relax them) and no punctured thin parts (ears, lids).
+
 ### 5. Paint (painterly vertex colour)
 Per part, a `Look` ([references/materials.md](references/materials.md)): base colour, colour
 zones (skin: red nose, cheeks and ears, yellow forehead, cool jaw), AO with a warm tint,
@@ -195,6 +211,9 @@ nudging numbers.
   weights.
 - **`pkill -f <script>` inside a shell command** also matches the shell running it and kills
   your own command. Kill by PID.
+- **Creases narrower than 3 edges** tear into jagged lines. Size brush radii to the mesh
+  (head 0.65 mm voxels: crease radius ≥ 1.6 mm; coat 2.8 mm voxels: ≥ 8 mm) and relax after
+  every crease. Thin plates (ears) puncture if pushed deeper than they are thick.
 - **Mesh density.** Marching cubes gives 0.3 to 1 M triangles per part. That is fine for
   renders, but decimate (collapse, ratio 0.3 to 0.4 keeps vertex colours) before rigging or
   frame-by-frame animation renders.
@@ -228,4 +247,5 @@ nudging numbers.
 | [references/materials.md](references/materials.md) | painterly `Look` settings, palettes, skin zones, metals/glass, baking for engines |
 | [references/rig-animation.md](references/rig-animation.md) | rig from landmarks, weights, deformation tests, animation timing tables and recipes |
 | [references/critique.md](references/critique.md) | per-stage rubric and symptom → cause → fix table |
+| [references/sculpt.md](references/sculpt.md) | the hand pass: brush formulas, drawing strokes on grid views, wrinkle and fold recipes, pitfalls |
 | [references/hybrid.md](references/hybrid.md) | limits of code-only modelling and the hybrid route (concept → image-to-3D → cleanup → rig → animation) |

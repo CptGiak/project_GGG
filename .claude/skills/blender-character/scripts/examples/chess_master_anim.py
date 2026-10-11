@@ -283,14 +283,16 @@ def main():
     ap.add_argument('--blend', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--decimate', type=float, default=0.35)
+    ap.add_argument('--keep', default='', help='comma list of parts not to decimate (e.g. a sculpted skin)')
     ap.add_argument('--gif', action='store_true')
     ap.add_argument('--samples', type=int, default=24)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     bpy.ops.wm.open_mainfile(filepath=a.blend)
     objs = [o for o in bpy.data.objects if o.type == 'MESH']
+    keep = {k for k in a.keep.split(',') if k}
     for ob in objs:   # lighter meshes for rigging and frame renders
-        if len(ob.data.polygons) > 60000:
+        if len(ob.data.polygons) > 60000 and ob.name not in keep:
             md = ob.modifiers.new('dec', 'DECIMATE')
             md.ratio = a.decimate
             bpy.context.view_layer.objects.active = ob
