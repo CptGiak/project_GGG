@@ -28,6 +28,13 @@ const MODEL_PATHS: Record<string, string> = {
   qiyana: 'models/lol/qiyana.glb',
   locke: 'models/lol/locke.glb',
 };
+/**
+ * models tried only on request, with ?<id>=glb in the URL: the sculpted Rex
+ * (tools/blender/build_rex.py) stays opt-in while the procedural one is the game's default
+ */
+const OPT_IN_PATHS: Record<string, string> = {
+  rex: 'models/rex.glb',
+};
 const cache = new Map<string, GLTF>();
 
 /** static builds: every model as base64 in one models.json (hosts that do not serve .glb files) */
@@ -68,8 +75,10 @@ export async function preloadChampionModels(params?: URLSearchParams, timeoutMs 
   }
   const base = import.meta.env.BASE_URL ?? '/';
   const packed = await packedModels(base);
+  const paths = { ...MODEL_PATHS };
+  for (const [id, path] of Object.entries(OPT_IN_PATHS)) if (params?.get(id) === 'glb') paths[id] = path;
   await Promise.all(
-    Object.entries(MODEL_PATHS).map(async ([id, path]) => {
+    Object.entries(paths).map(async ([id, path]) => {
       try {
         const data = packed?.[path];
         const gltf = await Promise.race([

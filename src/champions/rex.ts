@@ -213,7 +213,7 @@ export function buildRex(): ChampionVisual {
   });
 }
 
-function rexAnims(): ChampionAnimSet {
+export function rexAnims(): ChampionAnimSet {
   const W = (p: [number, number, number], d: [number, number, number], u: [number, number, number] = [0, 1, 0]): WeaponSpec => ({ p, d, u });
   const legs: PoseSpec = {
     hips: [0, -0.03, 0],
