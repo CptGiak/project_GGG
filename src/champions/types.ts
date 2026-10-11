@@ -44,6 +44,16 @@ export interface ChampionVisual {
   offhandGrip: THREE.Object3D | null;
   /** muzzle / projectile spawn point */
   muzzle: THREE.Object3D | null;
+  /**
+   * Where the stock meets the shoulder, along the main weapon's barrel axis (weapon-local z, m):
+   * recoil kicks hinge there. Default -0.3.
+   */
+  stockZ?: number;
+  /**
+   * Kit -> model cues for prop / weapon detail animation that is not a bone pose: a shot pumps
+   * the speaker rings, a charge spins the drum ('shot', 'charge' with a 0..1 level, ...).
+   */
+  cue?(id: string, value?: number): void;
   /** every toon material of the model (hit flash, dissolve) */
   materials: THREE.Material[];
   /** called every frame for champion-specific idle effects (weapon glow, floating rings...) */

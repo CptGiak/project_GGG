@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CollisionWorld } from '../world/Collision';
 import type { Fighter } from './Fighter';
+import { Kick } from '../fighter/Springs';
 
 const _target = new THREE.Vector3();
 const _desired = new THREE.Vector3();
@@ -29,6 +30,12 @@ export class CameraRig {
   private dist = 4.3;
   private initialized = false;
   private shakeT = 0;
+  /** view kick (recoil): springs on the rendered pitch / yaw / roll only, the aim is untouched */
+  private kickP = new Kick(5, 0.55);
+  private kickY = new Kick(5, 0.5);
+  private kickR = new Kick(4, 0.45);
+  /** FOV punch (degrees, spring back) */
+  private punch = new Kick(3.5, 0.6);
   /** death / spectate orbit */
   orbit = false;
 
@@ -39,6 +46,21 @@ export class CameraRig {
 
   addTrauma(t: number): void {
     this.trauma = Math.min(1, this.trauma + t);
+  }
+
+  /**
+   * Recoil kick of the view (degrees at the peak): climbs and settles back on the crosshair. Cosmetic:
+   * yaw / pitch (the aim) never change, so the shot lands where the player pointed.
+   */
+  kick(pitchDeg: number, yawDeg = 0, rollDeg = 0): void {
+    if (pitchDeg) this.kickP.hit(pitchDeg * THREE.MathUtils.DEG2RAD);
+    if (yawDeg) this.kickY.hit(yawDeg * THREE.MathUtils.DEG2RAD);
+    if (rollDeg) this.kickR.hit(rollDeg * THREE.MathUtils.DEG2RAD);
+  }
+
+  /** brief FOV change (degrees, + widens: blasts; - narrows: focus) that springs back */
+  punchFov(deg: number): void {
+    this.punch.hit(deg);
   }
 
   rotate(dx: number, dy: number, sensitivity: number, invertY: boolean): void {
@@ -98,10 +120,14 @@ export class CameraRig {
     const sy = (noise(this.shakeT * 29 + 7) * 0.5) * shake;
     const sr = (noise(this.shakeT * 23 + 13) * 0.08) * shake;
 
+    const kp = this.kickP.update(dt);
+    const ky = this.kickY.update(dt);
+    const kr = this.kickR.update(dt);
+    const fov = this.fov + this.punch.update(dt);
     this.camera.position.copy(_desired);
-    this.camera.rotation.set(this.pitch + sy * 0.12, this.yaw + Math.PI + sx * 0.12, sr, 'YXZ');
-    if (Math.abs(this.camera.fov - this.fov) > 0.01) {
-      this.camera.fov = this.fov;
+    this.camera.rotation.set(this.pitch + sy * 0.12 + kp, this.yaw + Math.PI + sx * 0.12 + ky, sr + kr, 'YXZ');
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
     }
   }

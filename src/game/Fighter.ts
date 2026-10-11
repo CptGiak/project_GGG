@@ -1048,6 +1048,9 @@ export class Fighter {
     st.lookYaw = THREE.MathUtils.radToDeg(wrapAngle(this.aimYaw - this.facing));
     st.lookPitch = THREE.MathUtils.radToDeg(-this.aimPitch);
     st.aim = damp(st.aim, this.ctrl.aim, 12, dt);
+    // free to vibe: standing still, nothing to do
+    const free = this.alive && this.grounded && hspeed < 0.6 && this.stun <= 0 && !this.anim.action.active && st.aim < 0.1 && this.ctrl.aim === 0;
+    st.groove = damp(st.groove, free ? 1 : 0, free ? 1.5 : 10, dt);
     // strafing: local movement relative to facing
     if (faceAim && this.grounded && hspeed > 0.5) {
       rightOf(this.facing, _r);
