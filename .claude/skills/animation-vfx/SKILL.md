@@ -77,10 +77,13 @@ reference for the domain you are touching before you author; the tables there ar
 - Direction reads on a paused frame (bright sharp head, soft dim tail). Stepped look (20–30 fps) for
   flicker/noise, 60 fps transforms.
 - Own view: watch every ability through the `game` camera too. Seen from behind, a shot's layers pile
-  up on the crosshair: wide segments fade end-on by themselves (`Segments`); dim cast glows, face-on
-  rings and the glow on the target with `alongView()` and fan impact sparks across the view with
-  `sprayDir()` (`src/vfx/view.ts`). The target must be readable again ≤ 3 f after the impact frame.
-  Side views keep the full effect; incoming shots stay visible threats.
+  up on the crosshair: wide segments fade end-on by themselves (`Segments`); dim cast glows and
+  rings that face along the shot (ripples, rings riding a beam) with `alongView()`, shrink the
+  impact for the shooter and the target with `lineView()`, fan sparks across the view with
+  `sprayDir()` (`src/vfx/view.ts`). The hitstop freezes effects too, so the impact frame must read
+  frozen. The target must be readable again ≤ 3 f after the impact frame; side views keep the full
+  effect and incoming shots stay visible threats. When a blob won't go away, A/B it: switch off the
+  hit flash, particles, segments, rings and model cues in turn (`lab.eval`).
 - Budgets: ≤40 VFX draw calls, ≤3 screens of transparent coverage (≤6 for <300 ms), ≤3000 live
   particles, zero per-frame allocations, shaders precompiled, no runtime light count changes.
   Prefer the instanced pools (`vfx.seg`, `vfx.decals`, particles: one draw call each) over new meshes.

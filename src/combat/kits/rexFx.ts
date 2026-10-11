@@ -121,8 +121,15 @@ export function rexHit(m: MatchContext, tier: RexTier, at: THREE.Vector3, dir: T
   const sg = s * (1 - 0.4 * line);
   fx.add.emit({ pos: at, life: 0.05, size: 0.5 * so, size1: 0.6 * so, color: line > 0.5 ? COL.wg4 : crit ? COL.wg6 : COL.wg5, shape: Shape.star6, rot: Math.random() * Math.PI });
   fx.add.emit({ pos: at, life: 0.2 - 0.08 * line, size: 0.35 * sg, size1: 0.8 * sg, color: crit ? COL.g2 : COL.v2, shape: Shape.glow, alpha: 0.75 * (1 - 0.7 * line) });
-  fx.ring(at, dir, crit ? COL.g12 : COL.v09, 0.15, 1.1 * s, 0.25);
-  if (crit) fx.after(1 / 30, () => fx.ring(at, dir, COL.wg3, 0.1, 0.75, 0.2));
+  // the rings face back along the shot: discs over the target (shooter) or over the screen (target)
+  fx.ring(at, dir, (crit ? COL.g12 : COL.v09).clone().multiplyScalar(1 - 0.6 * line), 0.15, 1.1 * s, 0.25);
+  if (crit) {
+    // (at / dir are the caller's temps: copy them for the delayed ring)
+    const p = at.clone();
+    const d = dir.clone();
+    const wc = COL.wg3.clone().multiplyScalar(1 - 0.75 * line);
+    fx.after(1 / 30, () => fx.ring(p, d, wc, 0.1, 0.75, 0.2));
+  }
   const n = Math.round((crit ? 26 : 17) * (1 - 0.45 * line));
   for (let i = 0; i < n; i++) {
     sprayDir(_u, dir, 0.8, line);
@@ -235,6 +242,9 @@ export function slugFx(m: MatchContext, origin: THREE.Vector3, onRefund: () => v
   const o = origin.clone();
   let travelled = 0;
   let nextRipple = 1.5;
+  // ripples face the way the slug flies: seen from behind (the shooter) they stack into a disc on
+  // the crosshair, so that viewer gets them faint
+  let rippleC: THREE.Color | null = null;
   return {
     tick(pos, prev, vel) {
       const sp = vel.length();
@@ -256,7 +266,8 @@ export function slugFx(m: MatchContext, origin: THREE.Vector3, onRefund: () => v
       }
       while (travelled >= nextRipple) {
         _w.copy(pos).addScaledVector(_v, nextRipple - travelled);
-        m.vfx.ring(_w, _v, COL.v06, 0.15, 0.45, 0.2);
+        rippleC ??= COL.v06.clone().multiplyScalar(1 - 0.85 * alongView(m.camPos, o, _v));
+        m.vfx.ring(_w, _v, rippleC, 0.15, 0.45, 0.2);
         nextRipple += 4.5;
       }
     },
@@ -277,9 +288,9 @@ export function slugFx(m: MatchContext, origin: THREE.Vector3, onRefund: () => v
   };
 }
 
-/** refund tell: a gold ring contracting around the rifle */
+/** refund tell: a gold ring contracting around the rifle (around the crosshair from behind: dimmer there) */
 export function refundTell(m: MatchContext, muzzle: THREE.Vector3, dir: THREE.Vector3): void {
-  m.vfx.ring(muzzle, dir, COL.g08, 0.45, 0.15, 0.2);
+  m.vfx.ring(muzzle, dir, COL.g08.clone().multiplyScalar(1 - 0.4 * alongView(m.camPos, muzzle, dir)), 0.45, 0.15, 0.2);
 }
 
 // =============================================================================================
@@ -339,18 +350,22 @@ export function beamFx(m: MatchContext, from: THREE.Vector3, to: THREE.Vector3, 
   _a.copy(from).addScaledVector(dir, throat);
   seg(m, from, _a, { w: hitW * 0.3, w1: hitW, core, edge: body, ink: 0.3, noise: 0.3, life, style: Seg.beam });
   seg(m, _a, to, { w: hitW, core, edge: body, ink: 0.35, noise: over > 0 ? 1 : 0.5, life, style: Seg.beam });
-  // caps (the shooter looks down the beam: the target's glow stays dim and short for them)
+  // caps: the shooter looks down the beam (muzzle cap small for them); the impact cap sits on the
+  // line of fire for the shooter AND the target (its own chest in front of the lens): dim for both
   const own = alongView(m.camPos, from, dir);
+  const lt = lineView(m.camPos, to, dir);
   const mf = 1 - 0.6 * own;
   fx.add.emit({ pos: from, life: 0.05, size: 0.3 * mf, size1: 0.34 * mf, color: perfect && own < 0.5 ? COL.wg4 : COL.wg3, shape: Shape.star6, rot: Math.random() * Math.PI });
-  fx.add.emit({ pos: to, life: 0.05, size: 0.3, size1: 0.36, color: COL.wg3, shape: Shape.star, rot: Math.random() * Math.PI });
-  fx.add.emit({ pos: to, life: 0.25 - 0.1 * own, size: 0.25, size1: 0.6, color: perfect ? COL.g12 : COL.v12, shape: Shape.glow, alpha: 0.6 * (1 - 0.6 * own) });
+  fx.add.emit({ pos: to, life: 0.05, size: 0.3 * (1 - 0.5 * lt), size1: 0.36 * (1 - 0.5 * lt), color: COL.wg3, shape: Shape.star, rot: Math.random() * Math.PI });
+  fx.add.emit({ pos: to, life: 0.25 - 0.1 * lt, size: 0.25, size1: 0.6 * (1 - 0.4 * lt), color: perfect ? COL.g12 : COL.v12, shape: Shape.glow, alpha: 0.6 * (1 - 0.7 * lt) });
   if (wall) fx.ring(to, _u.copy(dir).negate(), COL.g12, 0.1, 0.8, 0.3);
   // rings riding the energy (every 6 m, cap 12) and sparks (one per 1.5 m, cap 40)
   const nRings = Math.min(12, Math.floor(len / 6));
+  const rv = COL.v06.clone().multiplyScalar(1 - 0.85 * own);
+  const rg = COL.g06.clone().multiplyScalar(1 - 0.85 * own);
   for (let i = 1; i <= nRings; i++) {
     const dist = i * 6;
-    fx.after(dist / 400, () => fx.ring(_w.copy(p0).addScaledVector(d0, dist), d0, i % 2 ? COL.v06 : COL.g06, 0.15, 0.6 + k * 0.2, 0.3));
+    fx.after(dist / 400, () => fx.ring(_w.copy(p0).addScaledVector(d0, dist), d0, i % 2 ? rv : rg, 0.15, 0.6 + k * 0.2, 0.3));
   }
   if (perfect) {
     const pc = COL.wg3.clone().multiplyScalar(1 - 0.85 * own);

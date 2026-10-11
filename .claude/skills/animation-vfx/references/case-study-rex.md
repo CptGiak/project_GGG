@@ -84,7 +84,7 @@ heaviest kick (only 30 % of the shove slides along the barrel; the torso carries
 | drawstrings thrashing / frozen far from the origin (`sm_report`) | a chain's anchor aliased a module temp | own vector; `SubstepClock`; collider time alignment; root-containing sphere shrink |
 | props pinned on their cones while running (`sm_report`) | spring sub-steps used the end-of-frame pivot; absolute velocity bled at the cone | per-sub-step pivot; relative bleed; radial velocity dropped; `linearInertia` 0.4 |
 | drawstrings 45 % too long for frames after an instant stop; a 54° flick after every blink; 650-1200 % stretch on other champions' chains after a 5 m blink (`sm_report` stop10 / tele5) | four constraint iterations can't recover a strand thrown at 4 m/s; teleports re-laid the strand straight along its rest direction (relative chains) or didn't count a 5 m blink as one (6 m threshold) | follow-the-leader cap at 8 % after the iterations; teleports (> 2.5 m in a frame, every chain) carry the strand: shape and motion kept, turned with the anchor |
-| a white ball hid the target for ~200 ms after a Lead Single or a beam, **only through the game camera** (side captures looked great) | seen from behind, the slug's head and ribbons and the beam collapse onto the crosshair; the cone rings, cast glow and impact glow sit on the same line | `Segments` end-on fade (to 20 % running away from the viewer, 50 % toward; width-weighted so thin tracers stay); `alongView()` dims cast / face-on rings / target glow 60-85 % for that viewer; `sprayDir()` fans the impact sparks across the view; the lab points `m.camPos` at its camera |
+| a white ball hid the target for ~200 ms after a Lead Single or a beam, **only through the game camera** (side captures looked great) | seen from behind, the slug's head and ribbons and the beam collapse onto the crosshair; the bass ripples (a ring every 4.5 m, facing the flight) stack into a disc; the crit impact rings face the shooter and are born small and thick (a white disc at tier 3 × 2); the cone rings, cast glow and impact sit on the same line; on a beam the rifle's own speaker rings pumped to 1.7× and white-hot 2.5 m from the lens; the 60 ms hitstop freezes all of it (found by A/B captures switching off the hit flash, particles, segments, rings and model cues in turn) | `Segments` end-on fade (to 20 % running away from the viewer, 50 % toward; width-weighted so thin tracers stay); `alongView()` dims cast glows and rings facing along the shot 60-85 % for the shooter; `lineView()` shrinks and dims the impact (star, glow, rings) for the shooter and the target; `sprayDir()` fans the sparks across the view; beam pump 1.6× and white-hot only above 85 % heat; the lab points `m.camPos` at its camera |
 
 ## 5. Secondary motion
 
@@ -142,3 +142,8 @@ Kit VFX (`rexFx.ts`), all through `bloomColor` tiers:
   but not built.
 - Sheets (Elisabbat's skirt and hair, GLB bone chains) still damp in world space.
 - Kaiser's ult clips ask the arms for 15-30 cm more than their length (anim_report weapon miss).
+- The ult's announce column (everyone's warning) also fills REX's own view for ~0.3 s; an
+  owner-only variant needs the match to say whose camera is rendering (`m.local` is not enough
+  under the lab cameras).
+- The model's weapon detail (ring pumps, heat) cannot see the camera: its own-view brightness is
+  tuned globally.

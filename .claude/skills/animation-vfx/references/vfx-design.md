@@ -147,11 +147,15 @@ the flavour layers (True Damage Senna team-colours her ult's trail centres [S41]
 **Own-effects dimming (GGG):** your own flavour layers at 60–80 % opacity; enemy projectiles at 100 %
 with the threat rim. Through a third-person camera a shot runs *away* from you along the line of
 sight, so everything it draws piles up on the crosshair: a 0.7 m beam or a 0.5 m slug ribbon
-collapses into a white ball over the target, and impact sparks spraying back at the shooter bloom
-into another (REX's first pass hid the target for ~200 ms). Fade wide pieces seen end-on (the
-engine's `Segments` does it: 20 % from behind, 50 % for an incoming shot), dim the cast glow, face-on
-rings and the glow on the target by 60-85 % for that viewer (`alongView`), fan the sparks across the
-view (`sprayDir`), keep the 2-3 f impact frame crisp: the target is readable again ≤ 3 f after it.
+collapses into a white ball over the target, rings that face along the shot (ripples every few
+metres, rings riding a beam) become concentric circles that stack into a disc, and impact sparks
+spraying back at the shooter bloom into another (REX's first pass hid the target for ~200 ms; the
+hitstop held it longer). Fade wide pieces seen end-on (the
+engine's `Segments` does it: 20 % from behind, 50 % for an incoming shot), dim the cast glow and the
+rings facing along the shot by 60-85 % for the shooter (`alongView`), shrink and dim the impact for
+the shooter and the target (`lineView`: rings facing back along the shot are discs for both), fan
+the sparks across the view (`sprayDir`), keep the 2-3 f impact frame crisp: the target is readable
+again ≤ 3 f after it.
 The same shot seen from the side keeps everything (Unreal's "owner no see" variants, Overwatch's
 first-person effect versions).
 

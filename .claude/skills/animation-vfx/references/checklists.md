@@ -53,9 +53,10 @@ gameplay camera as well as the lab cameras.
 - [ ] One impact system per hit (the kit's `fx.hit` / `ownsHitFx`, not also the stock spark).
 - [ ] Friend vs foe reads from rim and shape (threat colours for enemy telegraphs), not hue alone.
 - [ ] Your own effects never cover the crosshair (film each ability with the `game` camera: the
-      target readable again ≤ 3 f after the impact frame; wide segments fade end-on, cast / face-on
-      rings / target glow dimmed by `alongView`); the `target` camera still shows the incoming
-      effect at full strength; projectiles ≥ 4 px wide at 20-40 m.
+      target readable again ≤ 3 f after the impact frame, hitstop included; wide segments fade
+      end-on, cast glows and rings facing along the shot dimmed by `alongView`, the impact by
+      `lineView`); a camera behind the target still shows the incoming shot as a clear threat
+      without whiting out; projectiles ≥ 4 px wide at 20-40 m.
 - [ ] Every effect also runs on remote copies (start events re-create timers; state in `n`).
 - [ ] Weapon-attached billboards are excluded from the ult weapon hologram (`userData.noGhost`).
 

@@ -336,7 +336,8 @@ export function buildRex(): ChampionVisual {
         break;
       }
       case 'beam':
-        for (let i = 0; i < 3; i++) ringDelay[i].push(time + i * 0.02, 2.2 * Math.max(0.6, value));
+        // (a 2.2x pump turned the rings into a white blob right in front of the shooter's camera)
+        for (let i = 0; i < 3; i++) ringDelay[i].push(time + i * 0.02, 1.6 * Math.max(0.6, value));
         heat = Math.min(1.4, heat + 0.6 * value);
         eqKick = 1.5;
         break;
@@ -376,7 +377,7 @@ export function buildRex(): ChampionVisual {
     heat = Math.max(0, heat - dt * 0.7);
     const hk = Math.min(1, heat);
     ringMat.color.copy(ringBase).lerp(ringHot, Math.min(1, hk * 1.4));
-    if (hk > 0.7) ringMat.color.lerp(ringWhite, (hk - 0.7) / 0.3);
+    if (hk > 0.85) ringMat.color.lerp(ringWhite, (hk - 0.85) / 0.15);
     ringMat.color.multiplyScalar(1 + 0.6 * charge + (chargeState === 1 ? 0.8 : 0));
     // equalizer: louder with the music, jumps with every shot, maxed by a charge
     eqKick = Math.max(0, eqKick - dt * 3);
