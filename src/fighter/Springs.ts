@@ -84,14 +84,25 @@ export class SecondOrder {
 }
 
 /**
- * Damped oscillator around 0 for impulse-driven channels (recoil, flinches, camera kicks): an
- * impulse sets the velocity, the spring throws the value out and brings it back with a little
- * overshoot. Peak lands at ~atan(wd / (zeta w)) / wd seconds after the kick.
+ * Damped oscillator around 0 for impulse-driven channels (recoil, flinches, camera kicks).
+ *
+ * - `hit(peak)`: an impulse sets the velocity, the spring throws the value out and brings it back
+ *   with a little undershoot. Peak lands at ~atan(wd / (zeta w)) / wd seconds after the kick
+ *   (~1.6 f at 6.5 Hz, zeta 0.55): light shots.
+ * - `hit(peak, rise, hang)`: the heavy-shot envelope. The value rises to +peak in `rise` seconds
+ *   (outExpo), holds it for `hang` seconds drifting back 10% (a moving hold), then the spring
+ *   returns it from rest, so the return eases in, removes most of it in ~1/(2 freq) s and settles
+ *   with a small undershoot (zeta 0.6 -> ~9%, 0.7 -> ~5%).
  */
 export class Kick {
   x = 0;
   v = 0;
   private w: number;
+  private goal = 0;
+  private riseLeft = 0;
+  private riseK = 0;
+  private hangLeft = 0;
+  private hangDrift = 0;
   constructor(
     public freq: number,
     public zeta: number,
@@ -103,8 +114,22 @@ export class Kick {
     this.zeta = zeta;
     this.w = 2 * Math.PI * freq;
   }
-  /** add velocity so the peak displacement is roughly `peak` */
-  hit(peak: number): void {
+  hit(peak: number, rise = 0, hang = 0): void {
+    if (rise > 0 || hang > 0) {
+      // a new envelope stacks on whatever is still ringing
+      this.goal = (this.riseLeft > 0 ? this.goal : this.x) + peak;
+      this.riseLeft = Math.max(rise, 1 / 240);
+      this.riseK = 4 / this.riseLeft;
+      this.hangLeft = hang;
+      this.hangDrift = hang > 0 ? 0.1 / hang : 0;
+      this.v = 0;
+      return;
+    }
+    if (this.riseLeft > 0) {
+      this.goal += peak;
+      return;
+    }
+    this.hangLeft = 0;
     // for a velocity impulse the first peak is v0/w * exp(-zeta*phi/sqrt(1-z^2)) with phi = atan(sqrt(1-z^2)/z)
     const z = Math.min(this.zeta, 0.95);
     const s = Math.sqrt(1 - z * z);
@@ -117,15 +142,94 @@ export class Kick {
     let left = Math.min(dt, 0.1);
     while (left > 1e-6) {
       const s = Math.min(h, left);
-      this.v += (-this.w * this.w * this.x - 2 * this.zeta * this.w * this.v) * s;
-      this.x += this.v * s;
+      if (this.riseLeft > 0) {
+        this.x += (this.goal - this.x) * (1 - Math.exp(-this.riseK * s));
+        this.riseLeft -= s;
+        this.v = 0;
+      } else if (this.hangLeft > 0) {
+        this.v = -this.x * this.hangDrift;
+        this.x += this.v * s;
+        this.hangLeft -= s;
+      } else {
+        this.v += (-this.w * this.w * this.x - 2 * this.zeta * this.w * this.v) * s;
+        this.x += this.v * s;
+      }
       left -= s;
     }
-    if (Math.abs(this.x) < 1e-5 && Math.abs(this.v) < 1e-4) this.x = this.v = 0;
+    if (this.riseLeft <= 0 && this.hangLeft <= 0 && Math.abs(this.x) < 1e-5 && Math.abs(this.v) < 1e-4) this.x = this.v = 0;
     return this.x;
+  }
+  /** true while the value is still moving or displaced */
+  get active(): boolean {
+    return this.x !== 0 || this.v !== 0 || this.riseLeft > 0;
   }
   reset(): void {
     this.x = this.v = 0;
+    this.riseLeft = this.hangLeft = 0;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sub-step clock: time-correct anchor samples for fixed-rate secondary motion
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Fixed sub-steps (90-120 Hz) inside variable frames, sampling a moving anchor at the exact time of
+ * each sub-step. Frames that run no sub-step keep accumulating (no motion is lost), the anchor's
+ * velocity is measured over the real time it covered, and `carry()` gives the offset that puts the
+ * rendered points back on the anchor (the sim lags the frame by the leftover time). Identical
+ * results from 30 to 144 fps. Own vectors only (never module temps).
+ */
+export class SubstepClock {
+  acc = 0;
+  span = 0;
+  private owed0 = 0;
+  private init = false;
+  readonly prev = new THREE.Vector3();
+  readonly now = new THREE.Vector3();
+  readonly vel = new THREE.Vector3();
+  readonly velPrev = new THREE.Vector3();
+  readonly lastSub = new THREE.Vector3();
+
+  reset(a: THREE.Vector3): void {
+    this.prev.copy(a);
+    this.now.copy(a);
+    this.lastSub.copy(a);
+    this.vel.set(0, 0, 0);
+    this.velPrev.set(0, 0, 0);
+    this.acc = this.span = 0;
+    this.init = true;
+  }
+
+  /** sub-steps to run this frame (0: nothing to do, the time carries over) */
+  begin(dt: number, a: THREE.Vector3, h: number, maxSteps: number): number {
+    if (!this.init) this.reset(a);
+    this.span += dt;
+    this.acc = Math.min(this.acc + dt, h * maxSteps);
+    const n = Math.floor(this.acc / h);
+    if (n === 0) return 0;
+    this.now.copy(a);
+    this.velPrev.copy(this.vel);
+    this.vel.subVectors(this.now, this.prev).divideScalar(Math.max(this.span, 1e-5));
+    this.owed0 = this.acc - this.span;
+    return n;
+  }
+
+  /** the anchor at the end of sub-step k (k - 1 = its start) */
+  at(k: number, h: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.lerpVectors(this.prev, this.now, THREE.MathUtils.clamp((k * h - this.owed0) / Math.max(this.span, 1e-5), -1, 1));
+  }
+
+  finish(n: number, h: number): void {
+    this.at(n, h, this.lastSub);
+    this.acc -= n * h;
+    this.prev.copy(this.now);
+    this.span = 0;
+  }
+
+  /** offset to add to rendered points: the anchor now minus where the sim's last sub-step had it */
+  carry(aNow: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+    return out.subVectors(aNow, this.lastSub);
   }
 }
 
@@ -147,23 +251,31 @@ export interface SpringBoneOptions {
   zeta?: number;
   /** gravity multiplier (1 hangs, 0 holds the authored shape) */
   gravity?: number;
-  /** absolute air drag 0..1 (trails behind when the body moves fast) */
+  /** air drag (1/s) on the world velocity minus wind, clamped to 12 m/s: a mild trail at speed */
   drag?: number;
   /** cone limit around the rest direction (degrees) */
   maxAngle?: number;
-  /** how much of the body's own (inertial) acceleration the accessory feels, 0..1 */
+  /** extra damping toward the parent's motion (1 = none; prefer tuning zeta) */
   inertia?: number;
+  /**
+   * Share of the body's velocity changes the accessory feels (0 = carried rigidly ... 1 = a free
+   * world pendulum). Fighters fall at 26 m/s^2 against the springs' 9.8: at 1 hanging props float
+   * up on every jump; 0.4 keeps them hanging (and still swinging on stops and turns).
+   */
+  linearInertia?: number;
 }
 
 const _pw = new THREE.Vector3();
 const _rest = new THREE.Vector3();
-const _rv = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _rd = new THREE.Vector3();
 const _ax = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _qp = new THREE.Quaternion();
 const _qi = new THREE.Quaternion();
+const _dv = new THREE.Vector3();
+const _sp = new THREE.Vector3();
+const _r0 = new THREE.Vector3();
 
 /**
  * A one-link pendulum in world space: the accessory's centre of mass lags behind the pivot's
@@ -176,22 +288,30 @@ export class SpringBone implements ClothLike {
   private tip = new THREE.Vector3();
   private vel = new THREE.Vector3();
   private prevPivot = new THREE.Vector3();
-  private prevRestTip = new THREE.Vector3();
   private restQ: THREE.Quaternion;
+  /** the swung local rotation shown last frame (re-applied on frames that run no sub-step) */
+  private shownQ = new THREE.Quaternion();
   private initialized = false;
-  private acc = 0;
+  private readonly pivClock = new SubstepClock();
+  private readonly restClock = new SubstepClock();
   private o: Required<SpringBoneOptions>;
 
   constructor(opts: SpringBoneOptions) {
-    this.o = { freq: 4, zeta: 0.35, gravity: 0.6, drag: 0.02, maxAngle: 60, inertia: 1, ...opts, restDir: opts.restDir.clone().normalize() };
+    this.o = { freq: 4, zeta: 0.35, gravity: 0.6, drag: 0.5, maxAngle: 60, inertia: 1, linearInertia: 0.4, ...opts, restDir: opts.restDir.clone().normalize() };
     this.restQ = opts.pivot.quaternion.clone();
+    this.shownQ.copy(this.restQ);
+  }
+
+  /** a velocity impulse on the accessory (m/s), e.g. a hit or a weapon kick */
+  kick(v: THREE.Vector3): void {
+    this.vel.add(v);
   }
 
   reset(): void {
     this.initialized = false;
   }
 
-  update(dt: number, wind?: THREE.Vector3): void {
+  update(dt: number, _wind?: THREE.Vector3): void {
     const o = this.o;
     const pivot = o.pivot;
     // rest frame this frame: the authored rotation under the (already posed) parent bone
@@ -201,36 +321,53 @@ export class SpringBone implements ClothLike {
     pivot.getWorldQuaternion(_q);
     _rd.copy(o.restDir).applyQuaternion(_q);
     _rest.copy(_pw).addScaledVector(_rd, o.length);
-    if (!this.initialized || _pw.distanceToSquared(this.prevPivot) > 4) {
+    // teleports, respawns, blinks (a dash covers at most ~1.6 m in a 20 fps frame)
+    if (!this.initialized || _pw.distanceToSquared(this.prevPivot) > 2.5 * 2.5) {
       this.tip.copy(_rest);
       this.vel.set(0, 0, 0);
       this.prevPivot.copy(_pw);
-      this.prevRestTip.copy(_rest);
+      this.pivClock.reset(_pw);
+      this.restClock.reset(_rest);
+      this.shownQ.copy(this.restQ);
       this.initialized = true;
       return;
     }
-    const step = 1 / 120;
-    this.acc = Math.min(this.acc + dt, step * 6);
+    this.prevPivot.copy(_pw);
+    const H = 1 / 120;
+    const n = this.pivClock.begin(dt, _pw, H, 6);
+    this.restClock.begin(dt, _rest, H, 6);
+    if (n === 0) {
+      pivot.quaternion.copy(this.shownQ);
+      pivot.updateMatrixWorld(true);
+      return;
+    }
     const w = 2 * Math.PI * o.freq;
     const maxA = THREE.MathUtils.degToRad(o.maxAngle);
-    // the rest point's velocity this frame: damping is relative to it, so riding along at a
-    // constant speed does not drag the accessory, only accelerations (and gravity / air) do
-    _rv.subVectors(_rest, this.prevRestTip).divideScalar(Math.max(dt, 1e-4));
-    while (this.acc >= step) {
-      this.acc -= step;
-      const ax = -w * w * (this.tip.x - _rest.x) - 2 * o.zeta * w * (this.vel.x - _rv.x);
-      const ay = -w * w * (this.tip.y - _rest.y) - 2 * o.zeta * w * (this.vel.y - _rv.y) - 9.8 * o.gravity;
-      const az = -w * w * (this.tip.z - _rest.z) - 2 * o.zeta * w * (this.vel.z - _rv.z);
-      this.vel.x += ax * step;
-      this.vel.y += ay * step;
-      this.vel.z += az * step;
-      if (wind) this.vel.addScaledVector(wind, step * 0.15);
-      if (o.drag > 0) this.vel.multiplyScalar(1 - o.drag);
-      // partial inertia: a stiff part rides with the body more than a free pendulum would
-      if (o.inertia < 1) this.vel.lerp(_rv, (1 - o.inertia) * 0.5);
-      this.tip.addScaledVector(this.vel, step);
+    // the rest point's velocity: damping is relative to it, so riding along at a constant speed
+    // costs nothing; only accelerations, gravity and the air move the accessory
+    const rv = this.restClock.vel;
+    // partial linear inertia: the accessory feels only a share of the body's velocity change
+    _ax.subVectors(rv, this.restClock.velPrev);
+    _dv.copy(_ax).multiplyScalar(o.linearInertia).clampLength(0, 25 * this.restClock.span);
+    this.vel.add(_ax.sub(_dv));
+    for (let k = 1; k <= n; k++) {
+      this.pivClock.at(k, H, _sp);
+      this.restClock.at(k - 1, H, _r0);
+      const ax = -w * w * (this.tip.x - _r0.x) - 2 * o.zeta * w * (this.vel.x - rv.x);
+      const ay = -w * w * (this.tip.y - _r0.y) - 2 * o.zeta * w * (this.vel.y - rv.y) - 9.8 * o.gravity;
+      const az = -w * w * (this.tip.z - _r0.z) - 2 * o.zeta * w * (this.vel.z - rv.z);
+      this.vel.x += ax * H;
+      this.vel.y += ay * H;
+      this.vel.z += az * H;
+      if (o.drag > 0) {
+        // air drag on the world velocity (no arena wind), clamped
+        _ax.copy(this.vel).clampLength(0, 12);
+        this.vel.addScaledVector(_ax, -o.drag * H);
+      }
+      if (o.inertia < 1) this.vel.lerp(rv, (1 - o.inertia) * 0.5);
+      this.tip.addScaledVector(this.vel, H);
       // rigid link + cone limit around the rest direction
-      _dir.subVectors(this.tip, _pw);
+      _dir.subVectors(this.tip, _sp);
       const len = _dir.length() || 1e-6;
       _dir.divideScalar(len);
       const ang = Math.acos(THREE.MathUtils.clamp(_dir.dot(_rd), -1, 1));
@@ -239,20 +376,24 @@ export class SpringBone implements ClothLike {
         if (_ax.lengthSq() < 1e-10) _ax.set(1, 0, 0);
         _ax.normalize();
         _dir.copy(_rd).applyAxisAngle(_ax, maxA);
-        // bleed energy on the cone wall so it does not stick there
-        this.vel.multiplyScalar(0.6);
+        // bleed the motion relative to the body on the cone wall (not the body's own speed)
+        this.vel.sub(rv).multiplyScalar(0.6).add(rv);
       }
-      this.tip.copy(_pw).addScaledVector(_dir, o.length);
+      this.tip.copy(_sp).addScaledVector(_dir, o.length);
+      // the link is rigid: drop the radial part of the relative velocity
+      _ax.subVectors(this.vel, rv);
+      this.vel.addScaledVector(_dir, -_ax.dot(_dir));
     }
-    this.prevPivot.copy(_pw);
-    this.prevRestTip.copy(_rest);
+    this.pivClock.finish(n, H);
+    this.restClock.finish(n, H);
     // swing: rotate the pivot so its rest direction points at the simulated tip
-    _dir.subVectors(this.tip, _pw).normalize();
+    _dir.subVectors(this.tip, _sp).normalize();
     _q.setFromUnitVectors(_rd, _dir);
     pivot.parent!.getWorldQuaternion(_qp);
     _qi.copy(_qp).invert();
     // local = parent^-1 * swing * parent * rest
     pivot.quaternion.copy(_qi).multiply(_q).multiply(_qp).multiply(this.restQ);
+    this.shownQ.copy(pivot.quaternion);
     pivot.updateMatrixWorld(true);
   }
 }

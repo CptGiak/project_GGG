@@ -1,4 +1,4 @@
-import { blendPose, type Clip, MASK_ARMS, MASK_FULL, type Mask, Pose } from './Animator';
+import { blendPose, type Clip, Ease, MASK_ARMS, MASK_FULL, type Mask, Pose } from './Animator';
 import { BONE_INDEX } from './Rig';
 
 /**
@@ -19,6 +19,26 @@ export interface ChampionAnimSet {
   armSwing: [number, number];
   /** head-nod-to-the-beat amount while free (0 none ... 1 full groove) */
   groove?: number;
+  /**
+   * Inertialized action starts (half-life in s, ~0.05-0.1): a played clip shows its pose at once
+   * and the jump decays like a critically damped spring, instead of a linear cross-fade.
+   */
+  inertial?: number;
+  /** locomotion tuning: metres per run cycle (2 steps) at full speed, run bob (m), leg swing scale */
+  stride?: number;
+  runBob?: number;
+  legSwing?: number;
+  /**
+   * Relaxed idle after a few calm seconds (weapon on the shoulder...), reached through `relaxVia`
+   * so a two-handed weapon swings around the body instead of cutting through the head.
+   */
+  relaxed?: Pose;
+  relaxVia?: Pose;
+  /** 0 = the plain breathing idle, 1 = weight shifts, asymmetric breathing, slow sway */
+  idleLife?: number;
+  /** landing crouch depth multiplier and recovery time (s) */
+  landDepth?: number;
+  landRecover?: number;
   /** off-hand IK weight in locomotion (two-handed weapons) */
   offhandLoco: number;
   /** extra forward lean while running, degrees */
@@ -47,15 +67,18 @@ export interface LocoState {
   aim: number;
   /** 0..1: free to vibe to the music (idle, grounded, no action) */
   groove: number;
+  /** 0..1: blend toward the relaxed idle (calm for a while) */
+  relax: number;
 }
 
 export function newLocoState(): LocoState {
-  return { time: 0, runPhase: 0, runIntensity: 0, vy: 0, wRun: 0, wAir: 0, wFly: 0, swing: 0, wDash: 0, wLand: 0, strafe: 0, back: 0, lookPitch: 0, lookYaw: 0, aim: 0, groove: 0 };
+  return { time: 0, runPhase: 0, runIntensity: 0, vy: 0, wRun: 0, wAir: 0, wFly: 0, swing: 0, wDash: 0, wLand: 0, strafe: 0, back: 0, lookPitch: 0, lookYaw: 0, aim: 0, groove: 0, relax: 0 };
 }
 
 const tmpA = new Pose();
 const tmpB = new Pose();
 const tmpC = new Pose();
+const tmpIdle = new Pose();
 
 export class Locomotion {
   constructor(readonly set: ChampionAnimSet) {}
@@ -85,7 +108,7 @@ export class Locomotion {
     }
     // ---- landing crouch (additive) -------------------------------------------------------
     if (st.wLand > 0.001) {
-      const w = st.wLand;
+      const w = st.wLand * (set.landDepth ?? 1);
       out.hips.y -= 0.16 * w;
       out.addEuler('thighL', -55, 0, 0, w).addEuler('thighR', -50, 0, 0, w);
       out.addEuler('shinL', 95, 0, 0, w).addEuler('shinR', 90, 0, 0, w);
@@ -97,8 +120,34 @@ export class Locomotion {
   }
 
   idle(st: LocoState, out: Pose): void {
-    out.copy(this.set.idle);
+    const set = this.set;
+    out.copy(set.idle);
+    // relaxed idle, through the via pose on the way
+    if (set.relaxed && st.relax > 0.001) {
+      const r = st.relax;
+      if (set.relaxVia && r < 0.5) blendPose(out, out, set.relaxVia, Ease.smooth(r * 2));
+      else if (set.relaxVia) {
+        blendPose(tmpIdle, set.relaxVia, set.relaxed, Ease.smooth((r - 0.5) * 2));
+        out.copy(tmpIdle);
+      } else blendPose(out, out, set.relaxed, Ease.smooth(r));
+    }
     const t = st.time;
+    const life = set.idleLife ?? 0;
+    if (life > 0) {
+      // weight shift every ~7.5 s: pelvis rolls toward the loaded leg, the chest counters
+      const ws = Math.sin((t * 2 * Math.PI) / 7.5);
+      out.hips.x += 0.015 * ws * life;
+      out.addEuler('hips', 0, 0, 1.5 * ws * life);
+      out.addEuler('chest', 0, 0, -1 * ws * life);
+      out.addEuler('thighL', 0, 0, -1.2 * ws * life).addEuler('thighR', 0, 0, -1.2 * ws * life);
+      // breathing is not symmetric: the shoulders lift a beat apart
+      const br2 = Math.sin((t * 2 * Math.PI) / 3.4);
+      const br3 = Math.sin((t * 2 * Math.PI) / 3.4 - 0.9);
+      out.preEuler('shoulderL', 0, 0, 1.2 * br2 * life);
+      out.preEuler('shoulderR', 0, 0, -0.8 * br3 * life);
+      // slow, incommensurate head drift (never twins with the body)
+      out.addEuler('head', 1.2 * Math.sin(t * 0.37 * 2 * Math.PI) * life, 2 * Math.sin(t * 0.23 * 2 * Math.PI + 1) * life, 0);
+    }
     const br = Math.sin(t * 2.1);
     out.addEuler('chest', br * 1.6, 0, 0);
     out.addEuler('neck', -br * 1.0, 0, 0);
@@ -116,7 +165,7 @@ export class Locomotion {
     const cs = Math.cos(ph);
     out.identity();
     // legs
-    const A = 30 + 26 * s;
+    const A = (30 + 26 * s) * (set.legSwing ?? 1);
     const lean = 8 * s;
     const swingL = Math.max(0, cs);
     const swingR = Math.max(0, -cs);
@@ -131,8 +180,19 @@ export class Locomotion {
     out.setEuler('footL', -thL * 0.35 - knL * 0.25 + 12, 0, 0);
     out.setEuler('footR', -thR * 0.35 - knR * 0.25 + 12, 0, 0);
     // torso
-    const bob = 0.035 * s;
-    out.hips.set(0, -0.03 * s - bob + bob * Math.cos(ph * 2), 0);
+    if (set.runBob !== undefined) {
+      // heavy footfalls: the body drops fast right after each contact (30% of the step) and rises
+      // slowly to the flight apex (u = step phase, 0 a few frames after the foot strikes)
+      const bob = set.runBob * s;
+      const u = (((ph - Math.PI / 2 - 0.25) / Math.PI) % 1 + 1) % 1;
+      const d = u < 0.3 ? 1 - (1 - u / 0.3) * (1 - u / 0.3) : 1 - Ease.inOut((u - 0.3) / 0.7);
+      out.hips.set(0, -0.03 * s - bob * d, 0);
+      // eyes level: the head counters 40% of the bob
+      out.addEuler('head', -6 * d * s, 0, 0);
+    } else {
+      const bob = 0.035 * s;
+      out.hips.set(0, -0.03 * s - bob + bob * Math.cos(ph * 2), 0);
+    }
     out.setEuler('hips', 4 * s, -9 * s * sn, 0);
     out.setEuler('spine', 7 + 9 * s + set.runLean, 5 * s * sn, 0);
     out.setEuler('chest', 4 * s, 9 * s * sn, -2 * s * sn);
@@ -243,6 +303,8 @@ export class ActionLayer {
   private stopping = false;
   /** events fired since last poll */
   readonly events: string[] = [];
+  /** kicks carried by the events fired since the last poll (consumed by the animator) */
+  readonly kicks: NonNullable<import('./Animator').ClipEvent['kick']>[] = [];
 
   play(clip: Clip, opts: PlayOpts = {}): void {
     this.clip = clip;
@@ -282,8 +344,10 @@ export class ActionLayer {
     // events
     if (c.opts.events) {
       for (const e of c.opts.events) {
-        if (e.t > prevT && e.t <= this.time) this.events.push(e.id);
-        else if (prevT === 0 && e.t === 0 && this.time > 0) this.events.push(e.id);
+        const fire = (e.t > prevT && e.t <= this.time) || (prevT === 0 && e.t === 0 && this.time > 0);
+        if (!fire) continue;
+        this.events.push(e.id);
+        if (e.kick) this.kicks.push(e.kick);
       }
     }
     const fadeIn = this.opts.fadeIn ?? c.opts.fadeIn ?? 0.06;

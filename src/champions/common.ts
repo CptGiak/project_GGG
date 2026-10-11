@@ -26,6 +26,7 @@ export function assembleVisual(args: {
   /** blinking eye mesh (face.ts) */
   eyes?: THREE.Object3D | null;
   stockZ?: number;
+  gripElbow?: ChampionVisual['gripElbow'];
   cue?: ChampionVisual['cue'];
 }): ChampionVisual {
   const { rig } = args;
@@ -94,6 +95,7 @@ export function assembleVisual(args: {
     tick: blink ? (dt, t, e) => { baseTick(dt, t, e); blink(dt); } : baseTick,
     anims: args.anims,
     stockZ: args.stockZ,
+    gripElbow: args.gripElbow,
     cue: args.cue,
   };
 }

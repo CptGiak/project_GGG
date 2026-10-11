@@ -235,6 +235,8 @@ export interface SpikeSpec {
   /** tip bend offset in head space */
   bend: V3;
   flat?: number;
+  /** spring pivot (child of the head with identity rotation) the spike hangs on */
+  pivot?: THREE.Object3D;
 }
 
 /** Hair cap + spikes. Spikes grow out from the skull along their direction. */
@@ -267,7 +269,9 @@ export function addSpikyHair(b: ModelBuilder, head: THREE.Object3D, mat: string,
     g.computeVertexNormals();
     const base = c.clone().addScaledVector(dir, r * 0.9);
     g.translate(base.x, base.y, base.z);
-    b.add(head, g, mat, 0.8);
+    // a spike on a spring pivot (child of the head, no rotation) is built relative to it
+    if (sp.pivot) g.translate(-sp.pivot.position.x, -sp.pivot.position.y, -sp.pivot.position.z);
+    b.add(sp.pivot ?? head, g, mat, 0.8);
   }
 }
 

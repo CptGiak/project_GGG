@@ -239,6 +239,13 @@ class Lab {
         origUpdate(dt, f, world);
         if (L.cam) L.cam.place();
       };
+      // effects that face or test the viewer (m.camPos: own-view dimming, camera-facing rings) see
+      // the lab camera too, so a side view shows what other players see
+      const origVfx = m.vfx.update.bind(m.vfx);
+      m.vfx.update = (dt) => {
+        if (L.cam) m.camPos.copy(L.cam.cam.position);
+        origVfx(dt);
+      };
     }, !!this.opt['keep-ui']);
     await this.advance(3);
   }
@@ -314,6 +321,7 @@ class Lab {
       const dist = spec.dist ?? 7;
       const h = spec.height ?? 1.3;
       L.cam = {
+        cam,
         place() {
           const tgt = L.dummy ? L.dummy.pos : null;
           const fw = new T.Vector3();

@@ -581,13 +581,13 @@ class MusicPlayer {
     // kick
     const kickPat = battle ? [0, 3, 8, 10] : [0, 7, 10];
     if (kickPat.includes(s)) {
-      Beat.push(t, false);
+      Beat.push(t, false, s / 4);
       a.osc('sine', 150, 42, t, 0.32, o, 0.75);
       a.osc('square', 60, 40, t, 0.04, o, 0.1);
     }
     // snare / clap
     if (s === 4 || s === 12) {
-      Beat.push(t, true);
+      Beat.push(t, true, s / 4);
       a.noiseHit(t, 0.18, o, 0.35, 'bandpass', 1800, 1200, 0.8);
       a.osc('triangle', 220, 160, t, 0.08, o, 0.25);
       if (battle) a.noiseHit(t + 0.012, 0.12, o, 0.2, 'highpass', 2500, 2500);

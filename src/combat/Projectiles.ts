@@ -47,6 +47,26 @@ export interface ProjectileSpec {
   corePart?: string;
   /** extra visuals when it explodes (local and remote copies alike) */
   onBurst?: (pos: THREE.Vector3) => void;
+  /** champion VFX hooks (visual only, local and remote copies alike) */
+  fx?: ProjectileFx;
+  /** draw the stock mesh for `kind` (default true; false when fx.tick draws the projectile) */
+  mesh?: boolean;
+  /** the stock glow sparks behind it (default true) */
+  sparks?: boolean;
+}
+
+/** visual hooks: everything is called with scratch vectors, copy what you keep */
+export interface ProjectileFx {
+  /** every frame after it moved (prev -> pos this frame) */
+  tick?(pos: THREE.Vector3, prev: THREE.Vector3, vel: THREE.Vector3, age: number): void;
+  /** bounced off the world */
+  bounce?(pos: THREE.Vector3, normal: THREE.Vector3): void;
+  /** hit a fighter (return true to replace the stock hit spark) */
+  hit?(at: THREE.Vector3, dir: THREE.Vector3, crit: boolean): boolean;
+  /** hit the world without exploding (return true to replace the stock spark) */
+  wall?(at: THREE.Vector3, normal: THREE.Vector3): boolean;
+  /** life ran out in the air (no explosion) */
+  expire?(pos: THREE.Vector3): void;
 }
 
 interface Proj extends ProjectileSpec {
@@ -132,7 +152,7 @@ export class Projectiles {
     const obj = this.take(s.kind, s.color, s.color2 ?? s.color);
     obj.position.copy(s.pos);
     obj.scale.setScalar(s.scale ?? 1);
-    obj.visible = true;
+    obj.visible = s.mesh !== false;
     this.list.push({ ...s, pos: s.pos.clone(), vel: s.vel.clone(), origin: s.pos.clone(), obj, age: 0, hitIds: s.sharedHits ?? new Set(), dead: false, bounces: 0 });
   }
 
@@ -282,6 +302,7 @@ export class Projectiles {
       p.age += dt;
       if (p.age >= p.life) {
         if (p.explode) this.detonate(p, m);
+        else p.fx?.expire?.(p.pos);
         p.dead = true;
         continue;
       }
@@ -338,11 +359,12 @@ export class Projectiles {
             p.vel.addScaledVector(wh.normal, -1.6 * vn).multiplyScalar(0.6);
             p.pos.copy(wh.point).addScaledVector(wh.normal, p.radius + 0.02);
             m.audio.play('hookHit', p.pos, 0.3);
+            p.fx?.bounce?.(wh.point, wh.normal);
             hitFighter = null;
           } else {
             p.pos.copy(wh.point);
             if (p.explode) this.detonate(p, m);
-            else m.vfx.hitSpark(wh.point, wh.normal, p.color, false);
+            else if (!p.fx?.wall?.(wh.point, wh.normal)) m.vfx.hitSpark(wh.point, wh.normal, p.color, false);
             p.dead = true;
           }
         }
@@ -366,12 +388,14 @@ export class Projectiles {
               m.reportHit(p.owner, f, { slot: p.slot, part: p.part, crit, kb, stun: p.stun, slow: p.slow, at: hitPoint, blockable: true, scale: p.falloff ? this.falloffScale(p) : undefined });
               p.onHit?.(f);
             }
-            m.vfx.hitSpark(hitPoint, _n.copy(p.vel).normalize().negate(), p.color, crit);
+            _n.copy(p.vel).normalize().negate();
+            if (!p.fx?.hit?.(hitPoint, _n, crit)) m.vfx.hitSpark(hitPoint, _n, p.color, crit);
             if (!p.pierce) p.dead = true;
           }
         }
       }
       if (!p.dead && !worldHit) p.pos.copy(to);
+      if (!p.dead) p.fx?.tick?.(p.pos, from, p.vel, p.age);
       // visuals
       p.obj.position.copy(p.pos);
       if (p.kind === 'bolt' || p.kind === 'note' || p.kind === 'blade' || p.kind === 'bat') {
@@ -388,7 +412,7 @@ export class Projectiles {
       });
       if (p.obj.userData.spin) p.obj.rotation.x += dt * 10;
       // trail sparks
-      if (p.kind !== 'grenade' && Math.random() < 0.8) {
+      if (p.kind !== 'grenade' && p.sparks !== false && Math.random() < 0.8) {
         m.vfx.add.emit({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.05), life: 0.2, size: p.kind === 'bolt' ? 0.12 : p.kind === 'bat' ? 0.07 : 0.16, size1: 0.02, color: p.color2 ?? p.color, shape: Shape.glow, alpha: 0.8 });
       }
     }

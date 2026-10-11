@@ -108,6 +108,13 @@ export interface MatchContext {
   shake(amount: number, at?: THREE.Vector3): void;
   /** hit-stop / freeze frames */
   hitStop(seconds: number): void;
+  /** the fighter this client plays (or spectates): for viewer-dependent visuals (threat colours) */
+  readonly local: import('./Fighter').Fighter;
+  /**
+   * Cosmetic camera recoil for `f`'s own actions (degrees at the peak, FOV punch in degrees,
+   * negative = zoom in). Only applied when `f` is the viewed fighter; the aim is untouched.
+   */
+  cameraKick(f: import('./Fighter').Fighter, pitch: number, yaw?: number, roll?: number, fov?: number): void;
   /** objective area of the game mode (RIFLETTORE zone), for bots */
   objective?(): { c: [number, number, number]; r: number; h: number } | null;
 }
@@ -153,6 +160,8 @@ export interface Kit {
   /** yaw the body should face during an action (null = aim yaw) */
   faceYaw: number | null;
   /** advance visual-only state for remote puppets */
+  /** true when the kit draws this hit's impact itself (projectile fx.hit / its own tiers): no stock spark */
+  ownsHitFx?(info: HitInfo): boolean;
   tickRemote?(f: Fighter, dt: number, m: MatchContext): void;
   /** currently charging (0..1) for HUD / anims */
   charge: number;

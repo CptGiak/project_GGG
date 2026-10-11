@@ -80,6 +80,9 @@ export class Match implements MatchContext {
   readonly controller: LocalController;
   readonly bots: BotController[] = [];
   private hitStopT = 0;
+  /** real seconds before another hit-stop of the same or lower strength may start */
+  private hitStopCd = 0;
+  private lastHitStop = 0;
   private lastCount = 4;
   private damageFlash = 0;
   private flash = 0;
@@ -410,7 +413,18 @@ export class Match implements MatchContext {
   }
 
   hitStop(seconds: number): void {
+    // no chains: right after a stop only a stronger one may start (a multi-hit barrage would
+    // otherwise keep the whole game in slow motion)
+    if (this.hitStopCd > 0 && seconds <= this.lastHitStop) return;
     this.hitStopT = Math.max(this.hitStopT, seconds);
+    this.lastHitStop = seconds;
+    this.hitStopCd = seconds + 0.2;
+  }
+
+  cameraKick(f: Fighter, pitch: number, yaw = 0, roll = 0, fov = 0): void {
+    if (f !== this.local) return;
+    this.cam.kick(pitch, yaw, roll);
+    if (fov) this.cam.punchFov(fov);
   }
 
   // ===========================================================================================
@@ -443,7 +457,7 @@ export class Match implements MatchContext {
         if (mk >= 0.45) this.flash = Math.max(this.flash, 0.25 * mk);
       }
     }
-    if (predicted) {
+    if (predicted && !attacker.kit?.ownsHitFx?.(info)) {
       _v.subVectors(at, attacker.chest(_r)).normalize();
       this.vfx.hitSpark(at, _v, attacker.champ.colors[1], !!info.crit || info.slot === 'ult' || !!info.counter);
       if (mk > 0 && !blocked) this.vfx.momentumBurst(at, attacker.vel, attacker.champ.colors[0], mk);
@@ -454,7 +468,11 @@ export class Match implements MatchContext {
     if (!target.alive) return;
     const real = Math.min(amount, target.hp);
     target.hp = Math.max(0, target.hp - amount);
+    // white hit flash: full at most ~3 times a second, rapid hits in between flash dimly (photosensitivity)
+    const recentFlash = this.time - target.flashAt < 0.33;
     target.hitFlash = 0.12;
+    target.flashK = recentFlash ? 0.35 : 1;
+    if (!recentFlash) target.flashAt = this.time;
     target.lastAttackerId = attacker?.id ?? null;
     const at = info.at ?? target.chest(new THREE.Vector3());
     if (attacker && attacker !== target) {
@@ -648,6 +666,7 @@ export class Match implements MatchContext {
     }
     // hit-stop slows the simulation, not the camera
     let simDt = dt;
+    this.hitStopCd = Math.max(0, this.hitStopCd - dt);
     if (this.hitStopT > 0) {
       this.hitStopT -= dt;
       simDt = dt * 0.06;
