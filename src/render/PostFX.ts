@@ -77,14 +77,14 @@ export const PersonaFXShader = {
         vec2 px = uv * uResolution / 6.0;
         vec2 cell = fract( px ) - 0.5;
         float dotR = ( 1.0 - smoothstep( 0.0, 0.35, l ) ) * 0.45;
-        float d = smoothstep( dotR, dotR - 0.08, length( cell ) );
+        float d = 1.0 - smoothstep( dotR - 0.08, dotR, length( cell ) );
         col = mix( col, col * 0.55, d * uHalftone );
       }
 
       // anime speed lines: every line lives on its own clock and fades in and out while it streaks
       // inwards (no synchronised strobing)
       if ( uSpeed > 0.01 ) {
-        float a = atan( c.y, c.x ) / 6.2831853 + 0.5;
+        float a = atan( c.y, c.x + ( r < 1e-5 ? 1e-5 : 0.0 ) ) / 6.2831853 + 0.5;   // atan(0, 0) is undefined
         float n = 170.0;
         float cell = floor( a * n );
         float t = uTime * 5.0 + hash( cell * 0.731 ) * 7.0;
@@ -102,12 +102,48 @@ export const PersonaFXShader = {
       }
 
       // vignette
-      col *= mix( 1.0, smoothstep( 1.05, 0.3, r ), uVignette );
+      // (smoothstep with edge0 > edge1 is undefined in GLSL: written the defined way round)
+      col *= mix( 1.0, 1.0 - smoothstep( 0.3, 1.05, r ), uVignette );
       // damage vignette
       col = mix( col, vec3( 0.95, 0.04, 0.12 ), uDamage * smoothstep( 0.25, 0.95, r ) * 0.75 );
       // flash
       col = mix( col, vec3( 1.0 ), uFlash );
       gl_FragColor = vec4( col, 1.0 );
+    }
+  `,
+};
+
+/**
+ * First pass after the scene render: any NaN / Inf pixel becomes 0 and colours are kept within
+ * a sane HDR range before the bloom. A single non-finite pixel (a shader edge case that some
+ * GPUs turn into NaN) would otherwise be smeared by the bloom's blur and mip chain into black
+ * rectangles, only on those GPUs.
+ */
+export const SanitizeShader = {
+  name: 'Sanitize',
+  uniforms: {
+    tDiffuse: { value: null as THREE.Texture | null },
+    uMax: { value: 64 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uMax;
+    varying vec2 vUv;
+    // isnan / isinf plus a range test that is false for NaN and for infinities, in case a driver
+    // compiles one of the two checks away
+    float finite( float x, float hi ) {
+      return ( isnan( x ) || isinf( x ) || !( x > -1e4 && x < 1e9 ) ) ? 0.0 : clamp( x, 0.0, hi );
+    }
+    void main() {
+      vec4 c = texture2D( tDiffuse, vUv );
+      gl_FragColor = vec4( finite( c.r, uMax ), finite( c.g, uMax ), finite( c.b, uMax ), finite( c.a, 1.0 ) );
     }
   `,
 };

@@ -276,7 +276,7 @@ ${AA_GLSL}`,
     float r = length( p );
     float rings = stripes( r / 12.0 + 0.0125, 0.025 ) * aaStep( 9.0, r );
     float sector = 6.2831853 * max( r, 1.0 ) / 8.0;
-    float a = atan( p.y, p.x ) / 6.2831853 * 8.0;
+    float a = atan( p.y, p.x + ( r < 1e-4 ? 1e-4 : 0.0 ) ) / 6.2831853 * 8.0;   // atan(0, 0) is undefined
     float wa = length( fwidth( p ) ) / sector;
     float d = 0.2 / sector;
     float spokes = stripesW( a + 0.5 * d, d, wa ) * aaStep( 12.0, r ) * ( 1.0 - aaStep( 78.0, r ) );
@@ -446,10 +446,11 @@ export function skyMaterial(opts: { top: THREE.ColorRepresentation; mid: THREE.C
         vec3 t1 = normalize( cross( uMoonDir, vec3( 0.0, 1.0, 0.0 ) ) );
         vec3 t2 = cross( t1, uMoonDir );
         vec2 q = vec2( dot( d, t1 ), dot( d, t2 ) ) / uMoonSize;
-        float mare = smoothstep( 0.42, 0.16, length( q - vec2( -0.28, 0.24 ) ) )
-          + 0.8 * smoothstep( 0.3, 0.08, length( q - vec2( 0.32, 0.3 ) ) )
-          + 0.9 * smoothstep( 0.36, 0.12, length( q - vec2( 0.1, -0.32 ) ) )
-          + 0.7 * smoothstep( 0.2, 0.04, length( q - vec2( -0.4, -0.36 ) ) );
+        // (smoothstep with edge0 > edge1 is undefined in GLSL: written the defined way round)
+        float mare = 1.0 - smoothstep( 0.16, 0.42, length( q - vec2( -0.28, 0.24 ) ) )
+          + 0.8 * ( 1.0 - smoothstep( 0.08, 0.3, length( q - vec2( 0.32, 0.3 ) ) ) )
+          + 0.9 * ( 1.0 - smoothstep( 0.12, 0.36, length( q - vec2( 0.1, -0.32 ) ) ) )
+          + 0.7 * ( 1.0 - smoothstep( 0.04, 0.2, length( q - vec2( -0.4, -0.36 ) ) ) );
         vec3 moonCol = uMoon * ( 1.0 - 0.14 * clamp( mare, 0.0, 1.0 ) ) * ( 0.93 + 0.07 * ( 1.0 - dot( q, q ) ) );
         col = mix( col, moonCol * 1.15, disc );
         col += uMoon * halo * ( 1.0 - disc );

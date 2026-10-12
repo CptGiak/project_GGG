@@ -26,7 +26,7 @@ varying vec2 vUv;
 uniform vec3 uColor;
 uniform float uIntensity;
 void main() {
-  float a = pow( vUv.y, 1.6 ) * 0.5 * uIntensity;
+  float a = pow( max( vUv.y, 0.0 ), 1.6 ) * 0.5 * uIntensity;
   float edge = sin( vUv.x * 3.14159 * 2.0 ) * 0.5 + 0.5;
   gl_FragColor = vec4( uColor * a * ( 0.6 + 0.4 * edge ), a );
 }

@@ -26,7 +26,8 @@ uniform float uIntensity;
 void main() {
   float age = vUv.x;
   float across = vUv.y;
-  float fade = pow( 1.0 - age, 1.4 );
+  // the interpolated age can land a hair above 1 at the tail: pow() of a negative number is NaN
+  float fade = pow( max( 1.0 - age, 0.0 ), 1.4 );
   float baseFade = smoothstep( 0.0, 0.35, across );
   float hot = smoothstep( 0.82, 1.0, across ) * ( 1.0 - age * 0.6 );
   float stripes = 0.78 + 0.22 * step( 0.5, fract( age * 16.0 - uTime * 6.0 ) );

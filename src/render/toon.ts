@@ -43,6 +43,13 @@ uniform float uBandOffset;
 
 float gToonLit = 0.0;
 
+// normalize() of a zero vector is NaN on many GPUs: one NaN pixel becomes a black block once the
+// bloom blurs it
+vec3 safeNormalize( vec3 v ) {
+  float l2 = dot( v, v );
+  return l2 > 1e-12 ? v * inversesqrt( l2 ) : vec3( 0.0, 0.0, 1.0 );
+}
+
 void RE_Direct_Toon( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in ToonMaterial material, inout ReflectedLight reflectedLight ) {
   float NdotL = dot( geometryNormal, directLight.direction );
   float sh = clamp( length( directLight.color ) / max( uLightRef, 1e-4 ), 0.0, 1.0 );
@@ -52,7 +59,7 @@ void RE_Direct_Toon( const in IncidentLight directLight, const in vec3 geometryP
   vec3 tone = mix( uShade * uShadeMat, uLit, lit );
   vec3 col = material.diffuseColor * tone;
   if ( uSpec > 0.0 ) {
-    vec3 H = normalize( directLight.direction + geometryViewDir );
+    vec3 H = safeNormalize( directLight.direction + geometryViewDir );
     float NdotH = max( dot( geometryNormal, H ), 0.0 );
     float sw = max( fwidth( NdotH ), 0.002 );
     col += smoothstep( uSpecSize - sw, uSpecSize + sw, NdotH ) * lit * uSpec * uLit;
@@ -69,7 +76,7 @@ void RE_IndirectDiffuse_Toon( const in vec3 irradiance, const in vec3 geometryPo
 
 const TOON_RIM = /* glsl */ `
 {
-  float ndv = 1.0 - clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );
+  float ndv = 1.0 - clamp( dot( normal, safeNormalize( vViewPosition ) ), 0.0, 1.0 );
   float rw = max( fwidth( ndv ), 0.002 );
   float rim = smoothstep( uRimCut - rw, uRimCut + rw, ndv ) * uRim;
   outgoingLight += uRimColor * rim * ( 1.0 - 0.65 * gToonLit ) * mix( vec3( 1.0 ), diffuseColor.rgb, 0.3 );
@@ -154,7 +161,7 @@ export function toon(opts: ToonOptions): ToonMaterial {
       .replace('#include <opaque_fragment>', TOON_RIM)
       .replace('void main() {', 'uniform vec3 uRimColor;\nuniform float uRim;\nuniform float uRimCut;\nuniform float uHairBand;\nvoid main() {');
   };
-  mat.customProgramCacheKey = () => 'ggg-toon-v2';
+  mat.customProgramCacheKey = () => 'ggg-toon-v3';
   return mat;
 }
 
@@ -178,7 +185,7 @@ export function gradientToon(opts: ToonOptions & { colorB: THREE.ColorRepresenta
       .replace('#include <common>', '#include <common>\nvarying float vT;\nuniform vec3 uColorB;\nuniform vec2 uGradRange;')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix( diffuseColor.rgb, uColorB, smoothstep( uGradRange.x, uGradRange.y, vT ) );');
   };
-  mat.customProgramCacheKey = () => 'ggg-toon-gradient-v2';
+  mat.customProgramCacheKey = () => 'ggg-toon-gradient-v3';
   return mat;
 }
 
@@ -208,9 +215,13 @@ uniform float uOutlineScale;
 attribute float aOutline;
 #include <common>
 #include <fog_pars_vertex>
+vec3 safeNormalize( vec3 v ) {
+  float l2 = dot( v, v );
+  return l2 > 1e-12 ? v * inversesqrt( l2 ) : vec3( 0.0, 0.0, 1.0 );
+}
 void main() {
   vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-  vec3 nView = normalize( normalMatrix * normal );
+  vec3 nView = safeNormalize( normalMatrix * normal );
   vec4 clip = projectionMatrix * mvPosition;
   vec2 nc = ( projectionMatrix * vec4( nView, 0.0 ) ).xy;
   float l = length( nc );
@@ -273,6 +284,10 @@ attribute float aOutline;
 #include <common>
 #include <skinning_pars_vertex>
 #include <fog_pars_vertex>
+vec3 safeNormalize( vec3 v ) {
+  float l2 = dot( v, v );
+  return l2 > 1e-12 ? v * inversesqrt( l2 ) : vec3( 0.0, 0.0, 1.0 );
+}
 void main() {
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
@@ -280,7 +295,7 @@ void main() {
   #include <begin_vertex>
   #include <skinning_vertex>
   vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
-  vec3 nView = normalize( normalMatrix * objectNormal );
+  vec3 nView = safeNormalize( normalMatrix * objectNormal );
   vec4 clip = projectionMatrix * mvPosition;
   vec2 nc = ( projectionMatrix * vec4( nView, 0.0 ) ).xy;
   float l = length( nc );
@@ -360,6 +375,10 @@ uniform float uTime;
 uniform float uGlitch;
 #include <common>
 #include <fog_pars_vertex>
+vec3 safeNormalize( vec3 v ) {
+  float l2 = dot( v, v );
+  return l2 > 1e-12 ? v * inversesqrt( l2 ) : vec3( 0.0, 0.0, 1.0 );
+}
 void main() {
   vec3 p = position;
   // horizontal glitch slices
@@ -369,8 +388,8 @@ void main() {
   vLocal = position;
   vUv = uv;
   vec4 mvPosition = modelViewMatrix * vec4( p, 1.0 );
-  vN = normalize( normalMatrix * normal );
-  vV = normalize( -mvPosition.xyz );
+  vN = safeNormalize( normalMatrix * normal );
+  vV = safeNormalize( -mvPosition.xyz );
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
 }
@@ -389,8 +408,13 @@ uniform float uScan;
 uniform float uAxis;
 #include <common>
 #include <fog_pars_fragment>
+vec3 safeNormalize( vec3 v ) {
+  float l2 = dot( v, v );
+  return l2 > 1e-12 ? v * inversesqrt( l2 ) : vec3( 0.0, 0.0, 1.0 );
+}
 void main() {
-  float fres = pow( 1.0 - abs( dot( normalize( vN ), normalize( vV ) ) ), 1.6 );
+  // |dot| of two unit vectors can come out a hair above 1: pow() of a negative number is NaN
+  float fres = pow( max( 1.0 - abs( dot( safeNormalize( vN ), safeNormalize( vV ) ) ), 0.0 ), 1.6 );
   float along = uAxis > 0.5 ? vLocal.z : vLocal.y;
   float scan = 0.65 + 0.35 * step( 0.5, fract( along * uScan - uTime * 2.2 ) );
   float band = smoothstep( 0.0, 1.0, fract( along * 1.3 - uTime * 0.9 ) );

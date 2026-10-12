@@ -18,7 +18,7 @@ uniform float uOpacity;
 varying vec2 vUv;
 void main() {
   // bright at the floor, fading up; rising bands and the beat pulse
-  float fade = pow(1.0 - vUv.y, 1.6);
+  float fade = pow(max(1.0 - vUv.y, 0.0), 1.6);
   float bands = 0.65 + 0.35 * step(0.5, fract(vUv.y * 6.0 - uTime * 0.9));
   float a = fade * bands * (0.55 + 0.45 * uPulse) * uOpacity;
   gl_FragColor = vec4(uColor * (1.4 + uPulse), a);

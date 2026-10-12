@@ -13,7 +13,9 @@ varying float vCam;
 void main() {
   vUv = uv;
   vec4 mv = modelViewMatrix * vec4( position, 1.0 );
-  vFacing = abs( dot( normalize( normalMatrix * normal ), normalize( -mv.xyz ) ) );
+  vec3 n = normalMatrix * normal;
+  vec3 v = -mv.xyz;
+  vFacing = abs( dot( n, v ) ) * inversesqrt( max( dot( n, n ) * dot( v, v ), 1e-12 ) );
   vCam = -mv.z;
   gl_Position = projectionMatrix * mv;
 }
@@ -26,7 +28,7 @@ uniform vec3 uColor;
 uniform float uIntensity;
 void main() {
   // bright at the lens, soft cone edges, fades out when the camera is inside the beam
-  float a = pow( vUv.y, 1.8 ) * vFacing * vFacing * smoothstep( 4.0, 22.0, vCam ) * uIntensity;
+  float a = pow( max( vUv.y, 0.0 ), 1.8 ) * vFacing * vFacing * smoothstep( 4.0, 22.0, vCam ) * uIntensity;
   gl_FragColor = vec4( uColor * a, a );
 }
 `;

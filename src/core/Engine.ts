@@ -5,7 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
-import { PersonaFXShader } from '../render/PostFX';
+import { PersonaFXShader, SanitizeShader } from '../render/PostFX';
 import { ToonEnv } from '../render/toon';
 
 export interface QualitySettings {
@@ -45,6 +45,8 @@ export class Engine {
     this.composer = new EffectComposer(this.renderer);
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
+    // NaN / Inf guard before the bloom (see SanitizeShader)
+    this.composer.addPass(new ShaderPass(SanitizeShader));
     // gentle bloom: the arenas keep their lights under the threshold, so mostly skills glow
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.42, 0.32, 1.45);
     this.composer.addPass(this.bloom);
