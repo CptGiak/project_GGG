@@ -42,12 +42,18 @@ esempio `http://localhost:5173/?rex=glb` per giocare o
 `?viewer&champ=rex&anims=idle,run,aim&rex=glb` per il viewer. Senza il parametro il gioco
 resta identico: il controllo pixel per pixel col modello procedurale dà differenza zero.
 
-È opzionale perché un'altra sessione (branch `claude/sharp-ritchie-a620h8`) sta facendo un
-passaggio completo sul Rex procedurale: molle su capelli, cuffie e cappuccio, rinculo del
-fucile, effetti. Il modello GLB ha il corpo rigido sulle ossa, quindi perderebbe quelle molle.
-L'arma di `rexGlb.ts` è inoltre la copia di quella procedurale di prima di quel lavoro. Per
-farlo diventare il Rex di default basta spostare `rex` da `OPT_IN_PATHS` a `MODEL_PATHS` in
-`src/champions/glbModels.ts`. Prima conviene unire i due lavori.
+Il fucile viene da `addHeadliner()` in `src/champions/rex.ts`, la stessa funzione del Rex
+procedurale. I Rex GLB hanno quindi lo stesso fucile e gli stessi effetti del passaggio completo
+su Rex (branch `claude/sharp-ritchie-a620h8`, unito qui):
+- gli anelli della canna pompano a ogni colpo e la canna si scalda dal viola all'oro;
+- il tamburo avanza di un colpo alla volta e gira veloce durante la carica;
+- l'equalizzatore salta coi colpi;
+- la sfera di carica alla bocca, con l'anello che si chiude su di essa a carica piena.
+
+Mancano invece le molle su capelli, cuffie e cappuccio del Rex procedurale: il modello GLB ha il
+corpo rigido sulle ossa. Si possono aggiungere come catene (`ggg_chains`), come la coda di Nova.
+Per farlo diventare il Rex di default basta spostare `rex` da `OPT_IN_PATHS` a `MODEL_PATHS` in
+`src/champions/glbModels.ts`.
 
 ## Rex da Meshy (`?rex=meshy`)
 
@@ -57,7 +63,20 @@ attiva con `?rex=meshy`. Lo scheletro è trovato dalla forma, i pesi sono automa
 40.000 (`tools/meshy/README.md`). Usa la stessa arma, le stesse animazioni e gli stessi socket di
 questa versione (`src/champions/rexGlb.ts`).
 
+Le braccia del modello Meshy sono più corte: 0,42 m dalla spalla al polso, contro 0,56 m del Rex
+procedurale. Per questo il calcio del fucile si accorcia in proporzione (`stockZFor`): 0,28 m
+invece di 0,37. Col calcio intero la mano destra restava 6 cm prima dell'impugnatura e il calcio
+a 6 cm dal suo appoggio sulla spalla. Anche le pose col fucile in spalla sono calcolate sulle proporzioni del
+modello (`rexAnims(spec)`). Misure coi controlli di `tools/anim_report.ts`, su un Rig con le
+proporzioni del modello:
+- mano destra sull'impugnatura e mano sinistra sul tamburo in idle, mira, colpi, carica, lancio,
+  corsa e taunt;
+- calcio sulla spalla entro 1,6 cm;
+- solo nella ult, col fucile puntato al cielo, la mano destra resta 1,5 cm corta per un momento.
+
 ![Rex e Nova da Meshy](../meshy/meshy_rex_nova.jpg)
+
+![il fucile sul Rex da Meshy](../meshy/rex_meshy_fucile.jpg)
 
 ## Anteprima con lo shader toon
 

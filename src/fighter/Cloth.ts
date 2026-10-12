@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { outlineMaterial } from '../render/toon';
+import { SubstepClock } from './Springs';
 
 /**
  * Verlet chains for secondary motion: coat tails, scarves, ponytails, ribbons.
@@ -41,11 +42,26 @@ export interface ChainOptions {
   radial?: number;
   /** subdivide rendering with Catmull-Rom between sim points */
   smooth?: number;
+  /**
+   * Damp velocity relative to the anchor instead of the world: riding along at 30 m/s no longer
+   * streams the chain flat, only accelerations, gravity and the air do. The anchor is also
+   * interpolated across sub-steps (no first-sub-step yank).
+   */
+  relative?: boolean;
+  /** air drag (1/s) on the world velocity, clamped to `maxAir` m/s (relative mode) */
+  airDrag?: number;
+  maxAir?: number;
+  /**
+   * Relative mode: share of the anchor's velocity changes the strand feels (0 carried rigidly ...
+   * 1 world physics). 0.4 keeps strands hanging through the fighters' 26 m/s^2 falls.
+   */
+  linearInertia?: number;
 }
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
 const _rest = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -66,6 +82,7 @@ export class ClothChain {
   private initialized = false;
   private acc = 0;
   private lastAnchor = new THREE.Vector3();
+  private readonly lastAnchorQ = new THREE.Quaternion();
   private upRef = new THREE.Vector3(0, 1, 0);
   constructor(readonly o: ChainOptions, readonly colliders: BodySphere[] = []) {
     this.segLen = o.length / o.segments;
@@ -140,24 +157,69 @@ export class ClothChain {
 
   update(dt: number, wind?: THREE.Vector3): void {
     const o = this.o;
-    const a = this.anchorWorld(_v);
-    if (!this.initialized || a.distanceToSquared(this.lastAnchor) > 36) {
+    // (its own vector: simulate() uses the module temps)
+    const a = this.anchorWorld(this.anchorNow);
+    // teleports, respawns, blinks (a dash covers at most ~1.6 m in a 20 fps frame)
+    const jump = 2.5 * 2.5;
+    o.anchor.getWorldQuaternion(_q);
+    if (!this.initialized) {
       this.restDirWorld(_rest);
       for (let i = 0; i <= o.segments; i++) {
         this.p[i].copy(a).addScaledVector(_rest, i * this.segLen);
         this.prev[i].copy(this.p[i]);
       }
       this.initialized = true;
+      this.lastAnchor.copy(a);
+      this.clock.reset(a);
+    } else if (a.distanceToSquared(this.lastAnchor) > jump) {
+      // carry the strand along, shape and motion kept and turned with the anchor: no flick
+      _q2.copy(this.lastAnchorQ).invert().premultiply(_q);
+      _ref.copy(this.p[0]);
+      for (let i = 0; i <= o.segments; i++) {
+        this.p[i].sub(_ref).applyQuaternion(_q2).add(a);
+        this.prev[i].sub(_ref).applyQuaternion(_q2).add(a);
+      }
+      this.lastAnchor.copy(a);
+      this.clock.reset(a);
     }
-    this.lastAnchor.copy(a);
+    this.lastAnchorQ.copy(_q);
     const step = 1 / 90;
+    if (o.relative) {
+      // time-correct anchor samples per sub-step; frames without a sub-step carry their time over
+      const n = this.clock.begin(dt, a, step, 4);
+      if (n > 0) {
+        this.anchorVel.copy(this.clock.vel);
+        // partial linear inertia: the strand feels only a share of the anchor's velocity change
+        _w.subVectors(this.clock.vel, this.clock.velPrev);
+        _b.copy(_w).multiplyScalar(o.linearInertia ?? 0.4).clampLength(0, 25 * this.clock.span);
+        _w.sub(_b).multiplyScalar(step);
+        for (let i = 1; i <= o.segments; i++) this.p[i].add(_w);
+        for (let k = 1; k <= n; k++) {
+          this.clock.at(k, step, this.subAnchor);
+          this.simulate(step);
+        }
+        this.clock.finish(n, step);
+      }
+      this.lastAnchor.copy(a);
+      // draw the strand where the anchor is now (the sim lags the frame by the leftover time)
+      this.rebuild(this.clock.carry(a, this.carryOff));
+      return;
+    }
     this.acc = Math.min(this.acc + dt, step * 4);
-    while (this.acc >= step) {
+    const n = Math.floor(this.acc / step);
+    for (let k = 1; k <= n; k++) {
       this.acc -= step;
       this.simulate(step, wind);
     }
+    this.lastAnchor.copy(a);
     this.rebuild();
   }
+
+  private readonly anchorNow = new THREE.Vector3();
+  private readonly anchorVel = new THREE.Vector3();
+  private readonly subAnchor = new THREE.Vector3();
+  private readonly carryOff = new THREE.Vector3();
+  private readonly clock = new SubstepClock();
 
   private simulate(h: number, wind?: THREE.Vector3): void {
     const o = this.o;
@@ -167,19 +229,41 @@ export class ClothChain {
     const stiff = o.stiffness ?? 0.08;
     const fall = o.stiffFalloff ?? 0.6;
     const drag = o.drag ?? 0;
-    const anchor = this.anchorWorld(_w);
+    const anchor = o.relative ? _w.copy(this.subAnchor) : this.anchorWorld(_w);
     this.restDirWorld(_rest);
     this.p[0].copy(anchor);
     this.prev[0].copy(anchor);
-    for (let i = 1; i <= n; i++) {
-      const p = this.p[i];
-      const pr = this.prev[i];
-      _v.subVectors(p, pr).multiplyScalar(damping);
-      if (drag > 0) _v.multiplyScalar(1 - drag);
-      pr.copy(p);
-      p.add(_v);
-      p.y -= g;
-      if (wind) p.addScaledVector(wind, h * h);
+    if (o.relative) {
+      const va = this.anchorVel;
+      const k = o.airDrag ?? 0.6;
+      const maxAir = o.maxAir ?? 12;
+      for (let i = 1; i <= n; i++) {
+        const p = this.p[i];
+        const pr = this.prev[i];
+        // carried motion = the anchor's + the particle's own (damped) relative motion
+        _v.subVectors(p, pr);
+        _n.copy(va).multiplyScalar(h);
+        _v.sub(_n).multiplyScalar(damping).add(_n);
+        // air drag on the world velocity (no arena wind: the fighter's own motion is the airflow), clamped
+        _b.copy(_v).divideScalar(h);
+        _b.clampLength(0, maxAir);
+        _v.addScaledVector(_b, -k * h * h);
+        if (drag > 0) _v.multiplyScalar(1 - drag);
+        pr.copy(p);
+        p.add(_v);
+        p.y -= g;
+      }
+    } else {
+      for (let i = 1; i <= n; i++) {
+        const p = this.p[i];
+        const pr = this.prev[i];
+        _v.subVectors(p, pr).multiplyScalar(damping);
+        if (drag > 0) _v.multiplyScalar(1 - drag);
+        pr.copy(p);
+        p.add(_v);
+        p.y -= g;
+        if (wind) p.addScaledVector(wind, h * h);
+      }
     }
     // shape keeping: pull toward rest shape built from the previous (already solved) point
     for (let i = 1; i <= n; i++) {
@@ -204,13 +288,25 @@ export class ClothChain {
           b.addScaledVector(_dir, -diff * 0.5);
         }
       }
-      // body collisions
+      // body collisions. Relative strands: a sphere that contains the strand's own root (a
+      // drawstring on the chest, a charm on the hips) would push the strand straight out of it, so
+      // it is shrunk to just inside the root and still stops the strand swinging into the body.
+      // (relative mode: the body spheres were sampled at the end of the frame; move them back with
+      // the anchor to this sub-step's time, or the lag between them depends on the frame rate)
+      const root = this.p[0];
+      if (o.relative) _fwd.subVectors(this.subAnchor, this.anchorNow);
+      else _fwd.set(0, 0, 0);
       for (const c of this.colliders) {
+        _ref.addVectors(c.world, _fwd);
+        let r = c.radius;
+        if (o.relative) {
+          r = Math.min(r, root.distanceTo(_ref) - 0.005);
+          if (r < 0.02) continue;
+        }
         for (let i = 1; i <= n; i++) {
           const p = this.p[i];
-          _n.subVectors(p, c.world);
+          _n.subVectors(p, _ref);
           const d2 = _n.lengthSq();
-          const r = c.radius;
           if (d2 < r * r) {
             const d = Math.sqrt(d2) || 1e-6;
             p.addScaledVector(_n, (r - d) / d);
@@ -218,9 +314,18 @@ export class ClothChain {
         }
       }
     }
+    // inextensibility safety net (follow-the-leader, root to tip): an instant stop or start throws
+    // the strand further than four iterations recover (45 % stretch at 10 m/s); never over 8 %
+    const maxLen = this.segLen * 1.08;
+    for (let i = 1; i <= n; i++) {
+      _dir.subVectors(this.p[i], this.p[i - 1]);
+      const d = _dir.length();
+      if (d > maxLen) this.p[i].copy(this.p[i - 1]).addScaledVector(_dir, maxLen / d);
+    }
   }
 
-  private rebuild(): void {
+  /** @param carry offset added to every rendered point (relative mode: puts the root on the anchor) */
+  private rebuild(carry?: THREE.Vector3): void {
     const o = this.o;
     const smooth = o.smooth ?? 2;
     const pts = this.renderPts;
@@ -238,6 +343,7 @@ export class ClothChain {
       }
     }
     pts[k].copy(this.p[n]);
+    if (carry && carry.lengthSq() > 0) for (const pt of pts) pt.add(carry);
     const pos = this.geo.getAttribute('position') as THREE.BufferAttribute;
     const nor = this.geo.getAttribute('normal') as THREE.BufferAttribute;
     const pa = pos.array as Float32Array;

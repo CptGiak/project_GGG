@@ -13,7 +13,7 @@ class BeatClock {
   snare = 0;
   /** beats since start (continuous, free-running estimate) */
   beats = 0;
-  private queue: Array<{ t: number; snare: boolean }> = [];
+  private queue: Array<{ t: number; snare: boolean; at: number }> = [];
   private audioNow: (() => number) | null = null;
   private lastFired = -1e9;
   private freeT = 0;
@@ -25,13 +25,25 @@ class BeatClock {
     return Math.max(this.kick, this.snare * 0.85);
   }
 
+  /**
+   * A kick just landed at `at` beats into its bar (0, 0.75, 2.5 ...): pull the free-running beat
+   * count onto that grid position so beat-synced clips stay locked. Off-beat kicks align to their
+   * own fraction, never to the nearest whole beat.
+   */
+  private rephase(at = 0): void {
+    const frac = at - Math.floor(at);
+    const target = Math.round(this.beats - frac) + frac;
+    if (Math.abs(this.beats - target) < 0.3) this.beats = target;
+  }
+
   attachClock(now: () => number): void {
     this.audioNow = now;
   }
 
-  push(t: number, snare: boolean): void {
+  /** schedule a hit at AudioContext time t; `at` = its position in the bar, in beats */
+  push(t: number, snare: boolean, at = 0): void {
     if (this.queue.length > 64) this.queue.shift();
-    this.queue.push({ t, snare });
+    this.queue.push({ t, snare, at });
   }
 
   update(dt: number): void {
@@ -46,7 +58,10 @@ class BeatClock {
         if (e.t <= now) {
           if (now - e.t < 0.15) {
             if (e.snare) this.snare = 1;
-            else this.kick = 1;
+            else {
+              this.kick = 1;
+              this.rephase(e.at);
+            }
             this.lastFired = wall;
           }
           this.queue.splice(i, 1);
@@ -60,6 +75,7 @@ class BeatClock {
       if (b !== this.freeBeat) {
         this.freeBeat = b;
         this.kick = 1;
+        this.rephase();
         if (b % 2 === 1) this.snare = 1;
       }
     }

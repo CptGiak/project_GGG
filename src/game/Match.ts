@@ -80,11 +80,13 @@ export class Match implements MatchContext {
   readonly controller: LocalController;
   readonly bots: BotController[] = [];
   private hitStopT = 0;
+  /** real seconds before another hit-stop of the same or lower strength may start */
+  private hitStopCd = 0;
+  private lastHitStop = 0;
   private lastCount = 4;
   private damageFlash = 0;
   private flash = 0;
   /** last 2D hit-confirm sound (rapid fire is throttled) */
-  private confirmAt = -1;
   readonly medals = new Medals();
   /** how the latest blow on each fighter landed (medals for the killing blow) */
   private lastHit = new Map<string, LastHit>();
@@ -156,7 +158,7 @@ export class Match implements MatchContext {
     const cb = bl?.colorB ?? new THREE.Color(f.champ.colors[1]);
     this.ghosts.set(f, new WeaponGhosts(this.scene, [visual.weaponR, visual.weaponL], ca, cb));
     this.fighters.push(f);
-    this.audio.registerFighter(f.pos, champ, kind === 'local');
+    this.audio.registerFighter(f.pos, champ, kind === 'local', f.id);
     return f;
   }
 
@@ -352,7 +354,7 @@ export class Match implements MatchContext {
       this.addUlt(def, COMBAT.dodgeUlt, 'DODGE');
     }
     this.vfx.dodgeFlash(at, def.champ.colors[0], def.champ.colors[1]);
-    this.audio.play('dodge', at, 1);
+    this.audio.play('dodge', at, 1, def);
     if (def === this.local) {
       this.hud?.banner('PERFECT DODGE', 'dodge');
       if (this.opts.mode === 'practice') this.hitStop(0.12);
@@ -414,7 +416,18 @@ export class Match implements MatchContext {
   }
 
   hitStop(seconds: number): void {
+    // no chains: right after a stop only a stronger one may start (a multi-hit barrage would
+    // otherwise keep the whole game in slow motion)
+    if (this.hitStopCd > 0 && seconds <= this.lastHitStop) return;
     this.hitStopT = Math.max(this.hitStopT, seconds);
+    this.lastHitStop = seconds;
+    this.hitStopCd = seconds + 0.2;
+  }
+
+  cameraKick(f: Fighter, pitch: number, yaw = 0, roll = 0, fov = 0): void {
+    if (f !== this.local) return;
+    this.cam.kick(pitch, yaw, roll);
+    if (fov) this.cam.punchFov(fov);
   }
 
   // ===========================================================================================
@@ -428,12 +441,9 @@ export class Match implements MatchContext {
     const mk = momentumK(info.mo ?? 0);
     if (attacker === this.local) {
       this.hud?.hitMarker(blocked ? 'block' : info.counter ? 'counter' : mk > 0 ? 'mom' : info.crit ? 'crit' : 'hit');
-      // 2D confirm: the attacker always hears a hit land, however far away it is
-      if (!stream || this.time - this.confirmAt > 0.2) {
-        this.confirmAt = this.time;
-        this.audio.play(info.counter ? 'counter' : info.crit && !blocked ? 'dink' : 'tick', undefined, stream ? 0.35 : 0.8);
-      }
-      if (mk > 0 && !blocked) this.audio.play('slice', undefined, 0.5 + 0.5 * mk);
+      // 2D confirm: the attacker always hears a hit land, however far away it is (one per hit,
+      // in key; crits, counters and momentum change it instead of stacking more sounds)
+      this.audio.confirm(blocked ? 'block' : info.counter ? 'counter' : info.crit ? 'crit' : 'hit', { stream, momentum: blocked ? 0 : mk });
       // hit-stop grows with the play
       let hs = 0;
       if (info.slot === 'ult') hs = 0.12;
@@ -447,7 +457,7 @@ export class Match implements MatchContext {
         if (mk >= 0.45) this.flash = Math.max(this.flash, 0.25 * mk);
       }
     }
-    if (predicted) {
+    if (predicted && !attacker.kit?.ownsHitFx?.(info)) {
       _v.subVectors(at, attacker.chest(_r)).normalize();
       this.vfx.hitSpark(at, _v, attacker.champ.colors[1], !!info.crit || info.slot === 'ult' || !!info.counter);
       if (mk > 0 && !blocked) this.vfx.momentumBurst(at, attacker.vel, attacker.champ.colors[0], mk);
@@ -458,7 +468,11 @@ export class Match implements MatchContext {
     if (!target.alive) return;
     const real = Math.min(amount, target.hp);
     target.hp = Math.max(0, target.hp - amount);
+    // white hit flash: full at most ~3 times a second, rapid hits in between flash dimly (photosensitivity)
+    const recentFlash = this.time - target.flashAt < 0.33;
     target.hitFlash = 0.12;
+    target.flashK = recentFlash ? 0.35 : 1;
+    if (!recentFlash) target.flashAt = this.time;
     target.lastAttackerId = attacker?.id ?? null;
     const at = info.at ?? target.chest(new THREE.Vector3());
     if (attacker && attacker !== target) {
@@ -514,11 +528,21 @@ export class Match implements MatchContext {
     if (blocked) {
       _v.subVectors(at, target.chest(_r)).normalize();
       this.vfx.blockSpark(at, _v);
-      this.audio.play('block', at, 0.9, attacker?.champId);
-    } else {
-      this.audio.play(amount > 120 ? 'hitHeavy' : 'hit', at, 1, attacker?.champId);
-      if (info.crit) this.audio.play('crit', at, 0.8, attacker?.champId);
     }
+    // one world impact, in the material of the ability that landed it
+    this.audio.impact({
+      champ: attacker?.champId ?? null,
+      slot: info.slot,
+      part: info.part,
+      at,
+      amount,
+      crit: !!info.crit,
+      counter: !!info.counter,
+      blocked,
+      attackerId: attacker?.id,
+      victimId: target.id,
+      victimLocal: target === this.local,
+    });
     if (attacker && attacker !== this.local && target !== this.local) {
       _v.subVectors(at, attacker.chest(_r)).normalize();
       this.vfx.hitSpark(at, _v, attacker.champ.colors[1], !!info.crit);
@@ -565,7 +589,7 @@ export class Match implements MatchContext {
     const at = defender.chest(new THREE.Vector3());
     this.vfx.blockSpark(at, _v.subVectors(attacker.pos, defender.pos).normalize());
     this.vfx.ring(at, _v, 0xffffff, 0.3, 3, 0.3);
-    this.audio.play('parry', at, 1);
+    this.audio.play('parry', at, 1, defender);
     this.hitStop(0.15);
     if (defender === this.local || attacker === this.local) {
       this.hud?.banner(defender === this.local && rewarded ? 'PARRY! · RIPOSTA' : 'PARRY!', 'parry');
@@ -600,8 +624,7 @@ export class Match implements MatchContext {
         killer.kit?.onTakedown?.(killer, victim, this, true);
       }
       if (killer === this.local) {
-        this.audio.play('kill');
-        this.audio.play('killConfirm', undefined, 0.9);
+        this.audio.confirm('kill');
         this.hud?.hitMarker('kill');
         this.hud?.killCutIn(this.local, victim);
         if (rep.medals.length) {
@@ -653,6 +676,7 @@ export class Match implements MatchContext {
     }
     // hit-stop slows the simulation, not the camera
     let simDt = dt;
+    this.hitStopCd = Math.max(0, this.hitStopCd - dt);
     if (this.hitStopT > 0) {
       this.hitStopT -= dt;
       simDt = dt * 0.06;

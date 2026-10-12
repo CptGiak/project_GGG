@@ -29,7 +29,8 @@ function mergeWeapon(root: THREE.Object3D): THREE.BufferGeometry | null {
   let total = 0;
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh || mesh.name.endsWith('_outline')) return;
+    // (camera-facing billboards and other effect quads are not part of the weapon's shape)
+    if (!mesh.isMesh || mesh.name.endsWith('_outline') || mesh.userData.noGhost) return;
     const src = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
     const pa = src.getAttribute('position');
     const na = src.getAttribute('normal');

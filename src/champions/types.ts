@@ -50,6 +50,12 @@ export interface ChampionVisual {
    */
   stockZ?: number;
   /**
+   * Where the support elbow points while the left hand holds `offhandGrip`, in the WEAPON's frame
+   * (x = the weapon's left, y = its up, z = along the barrel). The pole then turns with the weapon
+   * (a rifle raised skyward keeps the elbow under it). Default: a fixed body-space pole.
+   */
+  gripElbow?: [number, number, number];
+  /**
    * Kit -> model cues for prop / weapon detail animation that is not a bone pose: a shot pumps
    * the speaker rings, a charge spins the drum ('shot', 'charge' with a 0..1 level, ...).
    */

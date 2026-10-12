@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { ParticlePool, Shape } from './Particles';
+import { Segments } from './Segments';
+import { Decals } from './Decals';
 import type { Fighter } from '../game/Fighter';
 
 const _v = new THREE.Vector3();
@@ -72,13 +74,19 @@ export class Effects {
   readonly add = new ParticlePool(2400, true);
   readonly alpha = new ParticlePool(1400, false);
   readonly group = new THREE.Group();
+  /** axial billboards: tracers, shader beams, ribbon trails, light columns, EQ bars (1 draw call) */
+  readonly seg = new Segments(640);
+  /** ground decals: telegraphs at the exact gameplay radius, ground rings, scorches (1 draw call) */
+  readonly decals = new Decals(64);
   private rings: Ring[] = [];
+  /** delayed one-shots (staggered rings, beam rings travelling with the energy) */
+  private timers: Array<{ t: number; fn: () => void }> = [];
   private beams: Beam[] = [];
 
   constructor() {
-    this.group.add(this.add.mesh, this.alpha.mesh);
+    this.group.add(this.add.mesh, this.alpha.mesh, this.seg.mesh, this.decals.mesh);
     const ringGeo = new THREE.PlaneGeometry(2, 2);
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 24; i++) {
       const mat = new THREE.ShaderMaterial({
         uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uColor: { value: new THREE.Color() }, uAlpha: { value: 1 }, uThick: { value: 0.2 } }]),
         vertexShader: RING_VERT,
@@ -111,6 +119,17 @@ export class Effects {
   update(dt: number): void {
     this.add.update(dt);
     this.alpha.update(dt);
+    this.seg.update(dt);
+    this.decals.update(dt);
+    for (let i = 0; i < this.timers.length; ) {
+      const tm = this.timers[i];
+      tm.t -= dt;
+      if (tm.t <= 0) {
+        this.timers[i] = this.timers[this.timers.length - 1];
+        this.timers.pop();
+        tm.fn();
+      } else i++;
+    }
     for (const r of this.rings) {
       if (!r.active) continue;
       r.t += dt;
@@ -145,6 +164,9 @@ export class Effects {
   clear(): void {
     this.add.clear();
     this.alpha.clear();
+    this.seg.clear();
+    this.decals.clear();
+    this.timers.length = 0;
     for (const r of this.rings) {
       r.active = false;
       r.mesh.visible = false;
@@ -158,6 +180,12 @@ export class Effects {
   // -------------------------------------------------------------------------------------------
   // primitives
   // -------------------------------------------------------------------------------------------
+
+  /** run `fn` after `delay` seconds of effect time (frame-staggered layers; capped at 128 pending) */
+  after(delay: number, fn: () => void): void {
+    if (delay <= 0) fn();
+    else if (this.timers.length < 128) this.timers.push({ t: delay, fn });
+  }
 
   ring(pos: THREE.Vector3, normal: THREE.Vector3, color: THREE.ColorRepresentation, r0: number, r1: number, life: number): void {
     const r = this.rings.find((x) => !x.active) ?? this.rings[0];

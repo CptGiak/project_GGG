@@ -65,6 +65,13 @@ function curve(name: string, make: () => Float32Array): Float32Array {
 export class Graph {
   readonly noise: Record<NoiseColor, AudioBuffer>;
   private waves = new Map<string, PeriodicWave>();
+  /**
+   * Short attacks (up to 8 ms) rise linearly. An exponential ramp from silence stays inaudible for
+   * most of its length and jumps in the last quarter: on a sine body that is a click reaching
+   * into the 2-5 kHz band, repeated on every hit. The SFX graph turns this on; the music keeps the
+   * envelopes it was tuned with.
+   */
+  softAttack = false;
 
   /** `noise`: reuse another graph's noise buffers (offline note renders) */
   constructor(readonly ctx: BaseAudioContext, noise?: Record<NoiseColor, AudioBuffer>) {
@@ -110,8 +117,13 @@ export class Graph {
 
   /** attack / hold / exponential decay on a gain param, ending silent at t + dur */
   envelope(p: AudioParam, t: number, vol: number, a: number, dur: number, hold = 0): void {
-    p.setValueAtTime(0.0001, t);
-    p.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + Math.max(a, 0.001));
+    if (this.softAttack && a <= 0.008) {
+      p.setValueAtTime(0, t);
+      p.linearRampToValueAtTime(Math.max(vol, 0.0002), t + Math.max(a, 0.001));
+    } else {
+      p.setValueAtTime(0.0001, t);
+      p.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + Math.max(a, 0.001));
+    }
     if (hold > 0) p.setValueAtTime(Math.max(vol, 0.0002), t + a + hold);
     p.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, a + hold + 0.01));
   }

@@ -487,18 +487,18 @@ export class MusicPlayer {
         if (d.ch === 'g') hit('kick', 0.5);
         else {
           hit('kick', d.ch === 'X' ? 1 : 0.86);
-          Beat.push(t, false);
+          Beat.push(t, false, s / 4);
         }
         break;
       case 's':
         switch (d.ch) {
           case 'x':
             hit('snare', 0.88, t - 0.003);
-            Beat.push(t, true);
+            Beat.push(t, true, s / 4);
             break;
           case 'X':
             hit('snareRim', 1, t - 0.003);
-            Beat.push(t, true);
+            Beat.push(t, true, s / 4);
             break;
           case 'g':
             if (Math.random() < 0.7) hit('ghost', 0.28 + Math.random() * 0.1);
@@ -506,7 +506,7 @@ export class MusicPlayer {
           case 'f':
             hit('ghost', 0.45, t - 0.022);
             hit('snare', 0.95);
-            Beat.push(t, true);
+            Beat.push(t, true, s / 4);
             break;
           case 'r':
             hit('snare', 0.55);
@@ -514,7 +514,7 @@ export class MusicPlayer {
             break;
           case 'c':
             hit('clap', 0.8);
-            Beat.push(t, true);
+            Beat.push(t, true, s / 4);
             break;
         }
         break;
@@ -571,7 +571,7 @@ export class MusicPlayer {
         else if (d.ch === 'k') hit('taiko', 0.85);
         else if (d.ch === 'K') {
           hit('taiko', 1);
-          Beat.push(t, false);
+          Beat.push(t, false, s / 4);
         }
         break;
       }

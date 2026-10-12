@@ -93,7 +93,7 @@ export class KaiserKit extends BaseKit {
       f.guardStart = m.time;
       f.anim.play('guard', { hold: true, fadeIn: 0.05 });
       m.broadcastAction(f, { a: 'guard', n: 1 });
-      m.audio.play('block', f.pos, 0.35);
+      m.audio.play('kaiser.guard', f.pos);
       return;
     }
 
@@ -143,8 +143,7 @@ export class KaiserKit extends BaseKit {
     else this.diveDir.copy(f.intent.aimDir).normalize();
     this.faceYaw = Math.atan2(this.diveDir.x, this.diveDir.z);
     this.setTrail(f, true);
-    m.audio.play('slice', f.pos, 1);
-    m.audio.play('dash', f.pos, 0.8);
+    m.audio.play('kaiser.riposte', f.pos);
     m.vfx.gasBurst(f.nozzleWorld(_v), f.champ.colors[1]);
     m.vfx.dashLines(f, this.diveDir);
     m.broadcastAction(f, { a: 'riposte', d: [this.diveDir.x, this.diveDir.y, this.diveDir.z] });
@@ -167,7 +166,7 @@ export class KaiserKit extends BaseKit {
       if (this.airHang) f.vel.y = Math.max(f.vel.y, 2);
       this.cd.atk = 0.62;
       this.setTrail(f, true);
-      m.audio.play('swingHeavy', f.pos, 0.9);
+      m.audio.play('kaiser.swingHeavy', f.pos);
       m.broadcastAction(f, { a: 'atkAir' });
       return;
     }
@@ -211,7 +210,7 @@ export class KaiserKit extends BaseKit {
     m.vfx.ring(start.clone().setY(start.y + 0.05), UP, c0, 0.4, 2.4, 0.4);
     m.vfx.ring(start.clone().setY(start.y + 0.08), UP, 0xffffff, 0.3, 1.5, 0.3);
     this.sparks(m, start, dir, c0, c1, 10);
-    m.audio.play('slam', start, 0.9);
+    m.audio.play('kaiser.chord', start, 1, f);
     m.shake(0.45, start);
     m.hitStop(0.05);
     // the wave front runs out over ~0.16 s; the tip lights up the sweet spot
@@ -235,7 +234,7 @@ export class KaiserKit extends BaseKit {
           this.sparks(m, p, dir, c1, 0xffffff, 16);
           m.vfx.ring(p.clone().setY(p.y + 0.9), dir, 0xffffff, 0.6, 2.8, 0.3);
           m.vfx.ring(p.clone().setY(p.y + 0.05), UP, 0xffffff, 0.4, 3, 0.4);
-          m.audio.play('explosion', p, 0.7);
+          m.audio.play('kaiser.chordTip', p, 1, f);
         }
       });
     }
@@ -275,8 +274,7 @@ export class KaiserKit extends BaseKit {
     this.diveDir.normalize();
     this.faceYaw = Math.atan2(this.diveDir.x, this.diveDir.z);
     this.setTrail(f, true);
-    m.audio.play('dash', f.pos, 1);
-    m.audio.play('swingHeavy', f.pos, 1);
+    m.audio.play('kaiser.dive', f.pos);
     m.vfx.gasBurst(f.nozzleWorld(_v), f.champ.colors[0]);
   }
 
@@ -287,7 +285,7 @@ export class KaiserKit extends BaseKit {
     f.vel.set(f.vel.x * 0.2, 17, f.vel.z * 0.2);
     f.grounded = false;
     f.hooks.forEach((h) => (h.state = h.state === 'attached' ? 'retract' : h.state));
-    m.audio.play('ult', f.pos, 1);
+    m.audio.play('kaiser.ultRise', f.pos);
     m.vfx.gasBurst(f.nozzleWorld(_v), f.champ.colors[0]);
     m.vfx.ring(f.pos.clone().setY(f.pos.y + 0.1), new THREE.Vector3(0, 1, 0), f.champ.colors[0], 0.5, 4, 0.5);
   }
@@ -377,7 +375,7 @@ export class KaiserKit extends BaseKit {
             m.vfx.shockwave(c, 11, f.champ.colors[0]);
             m.vfx.shockwave(c, 7, f.champ.colors[1]);
             m.vfx.explosion(c.clone().setY(c.y + 0.5), 4, f.champ.colors[0], f.champ.colors[1]);
-            m.audio.play('slam', c, 1.2);
+            m.audio.play('kaiser.ultSlam', c, 1, f);
             m.shake(0.9, c);
             m.hitStop(0.1);
             this.aoe(f, m, c, 9, 'ult', 'slam', { kb: 12, kbUp: 15, stun: 0.6, falloff: true });
@@ -400,7 +398,7 @@ export class KaiserKit extends BaseKit {
     const isAtk = this.act?.startsWith('atk');
     if (ev === 'swing') {
       this.setTrail(f, true);
-      m.audio.play(this.act === 'atk3' || this.act === 'chord' ? 'swingHeavy' : 'swing', f.pos, 0.9);
+      m.audio.play(this.act === 'atk3' || this.act === 'chord' ? 'kaiser.swingHeavy' : 'kaiser.swing', f.pos);
     } else if (ev === 'hitOn' && isAtk) {
       const parts: Record<string, string> = { atk1: 'c1', atk2: 'c2', atk3: 'c3', atkAir: 'air' };
       const part = parts[this.act!] ?? 'c1';
@@ -425,7 +423,7 @@ export class KaiserKit extends BaseKit {
       forwardOf(this.faceYaw ?? f.facing, _v);
       const c = f.pos.clone().addScaledVector(_v, 2.2);
       m.vfx.shockwave(c, 4, f.champ.colors[0]);
-      m.audio.play('slam', c, 0.7);
+      m.audio.play('kaiser.shock', c, 1, f);
       m.shake(0.3, c);
       this.aoe(f, m, c, 3.2, 'atk', 'shock', { kb: 6, kbUp: 7 });
     }
@@ -466,7 +464,7 @@ export class KaiserKit extends BaseKit {
         this.actT = 0;
         this.actDur = 0.6;
         this.setTrail(f, true);
-        m.audio.play('swingHeavy', f.pos, 1);
+        m.audio.play('kaiser.dive', f.pos);
         break;
       case 'riposte':
         f.anim.play('dive', { speed: 1.25 });
@@ -474,17 +472,17 @@ export class KaiserKit extends BaseKit {
         this.actT = 0;
         this.actDur = 0.5;
         this.setTrail(f, true);
-        m.audio.play('slice', f.pos, 1);
+        m.audio.play('kaiser.riposte', f.pos);
         if (e.d) m.vfx.dashLines(f, new THREE.Vector3(...e.d));
         break;
       case 'ult':
         f.anim.play('ultRise', { hold: true });
-        m.audio.play('ult', f.pos, 1);
+        m.audio.play('kaiser.ultRise', f.pos);
         break;
       case 'ultSlam':
         f.anim.play('ultSlam', { offset: 0.12 });
         m.vfx.shockwave(f.pos, 11, f.champ.colors[0]);
-        m.audio.play('slam', f.pos, 1.2);
+        m.audio.play('kaiser.ultSlam', f.pos);
         m.shake(0.6, f.pos);
         break;
       default:

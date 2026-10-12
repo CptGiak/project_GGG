@@ -217,7 +217,7 @@ export class PoohKit extends BaseKit {
     super.update(f, it, dt, m);
     if (this.letGoPending) {
       this.letGoPending = false;
-      m.audio.play('pop', f.pos, 0.6);
+      m.audio.play('pooh.pop', f.pos);
       m.broadcastAction(f, { a: 'bal', n: 0 });
     }
     if (this.throwT > 0) {
@@ -312,7 +312,7 @@ export class PoohKit extends BaseKit {
       onHit: (o) => this.coat(f, o, m, true),
       onBurst: (p) => this.splash(f, m, p, big),
     });
-    m.audio.play('lob', from, big ? 0.9 : 0.6);
+    m.audio.play('pooh.throw', from, 1, f, { big });
     if (big) m.vfx.ring(from, UP, HONEY_LIGHT, 0.2, 1, 0.25);
   }
 
@@ -330,7 +330,7 @@ export class PoohKit extends BaseKit {
       m.vfx.alpha.emit({ pos: p.clone().setY(p.y + 0.2), vel: new THREE.Vector3(Math.cos(a) * 5, 4 + Math.random() * 3, Math.sin(a) * 5), life: 0.7, size: 0.13, color: 0xc77a35, shape: Shape.shard, gravity: 20, spin: 9 });
     }
     m.vfx.ring(p.clone().setY(p.y + 0.12), UP, HONEY, 0.3, (big ? POT.bigR : POT.r) * 1.15, 0.35);
-    m.audio.play('splat', p, big ? 1 : 0.75);
+    m.audio.play('pooh.splat', p, 1, f, { big });
     const g = m.world.raycast(p.clone().setY(p.y + 0.4), DOWN, 6);
     if (g && g.normal.y > 0.55) this.addPuddle(g.point, g.normal, big ? PUDDLE.bigR : PUDDLE.r);
     void f;
@@ -376,7 +376,7 @@ export class PoohKit extends BaseKit {
       const a = Math.random() * Math.PI * 2;
       m.vfx.add.emit({ pos: pd.pos.clone().add(new THREE.Vector3(Math.cos(a) * pd.r * 0.6, 0.1, Math.sin(a) * pd.r * 0.6)), vel: new THREE.Vector3(-Math.cos(a) * 2, 2.5 + Math.random() * 2, -Math.sin(a) * 2), life: 0.5, size: 0.14, size1: 0.02, color: HONEY_LIGHT, shape: Shape.glow, drag: 2 });
     }
-    m.audio.play('slurp', pd.pos, 0.8);
+    m.audio.play('pooh.slurp', pd.pos);
   }
 
   private tickPuddles(f: Fighter, dt: number, m: MatchContext): void {
@@ -430,7 +430,7 @@ export class PoohKit extends BaseKit {
     this.dashing = false;
     this.bumped = false;
     f.anim.play('bump', { fadeIn: 0.03 });
-    m.audio.play('swingHeavy', f.pos, 0.7);
+    m.audio.play('pooh.bump', f.pos);
     m.broadcastAction(f, { a: 'bump', d: [this.dashDir.x, this.dashDir.y, this.dashDir.z] });
   }
 
@@ -446,7 +446,6 @@ export class PoohKit extends BaseKit {
       this.hitActive = { slot: 'sig', part: 'bump', range: 1.4, arc: 80, height: 2.4, kb: 17, kbUp: 8, stun: 0.5 };
       this.setTrail(f, true);
       m.vfx.dashLines(f, this.dashDir);
-      m.audio.play('dash', f.pos, 0.9);
     }
     if (!this.dashing) {
       f.ctrl.lockMove = 0.05;
@@ -496,7 +495,7 @@ export class PoohKit extends BaseKit {
       const a = (i / 10) * Math.PI * 2;
       m.vfx.add.emit({ pos: at.clone(), vel: new THREE.Vector3(Math.cos(a) * 5, 2 + Math.sin(a) * 3, Math.sin(a) * 5), life: 0.6, size: 0.24, size1: 0.06, color: i % 2 ? 0xfff27a : 0xffffff, shape: Shape.star, drag: 3, spin: 6 });
     }
-    m.audio.play('boing', at, 1);
+    m.audio.play('pooh.boing', at);
     m.shake(0.3, at);
   }
 
@@ -514,7 +513,7 @@ export class PoohKit extends BaseKit {
     this.balloon.visible = true;
     this.balloon.scale.setScalar(1);
     this.string.visible = true;
-    m.audio.play('boostStart', f.pos, 0.6);
+    m.audio.play('pooh.balloon', f.pos);
     m.broadcastAction(f, { a: 'bal', n: 1 });
   }
 
@@ -546,7 +545,7 @@ export class PoohKit extends BaseKit {
     if (clip === 'balloon' || clip === 'balloonThrow') f.anim.action.stop(0.2);
     this.releaseBalloon();
     if (m && fx) {
-      m.audio.play('pop', f.pos, 0.6);
+      m.audio.play('pooh.pop', f.pos);
       m.broadcastAction(f, { a: 'bal', n: 0 });
     } else this.letGoPending = true;
   }
@@ -618,7 +617,7 @@ export class PoohKit extends BaseKit {
       m.vfx.add.emit({ pos: at.clone(), vel: new THREE.Vector3(Math.cos(a) * 3.2, Math.sin(a) * 3.2, 0).applyAxisAngle(UP, f.facing), life: 0.45, size: 0.09, color: 0xfff27a, shape: Shape.streak, stretch: 3, drag: 4 });
     }
     m.vfx.ring(at, UP, 0xfff27a, 0.2, 0.9, 0.3);
-    m.audio.play('idea', at, 1);
+    m.audio.play('pooh.idea', at, 1, f);
   }
 
   private tickBulb(f: Fighter, dt: number): void {
@@ -642,8 +641,7 @@ export class PoohKit extends BaseKit {
     this.hiveT = HIVE.release;
     f.anim.play('ult', { fadeIn: 0.05 });
     f.visual.prop?.('hive', true);
-    m.audio.play('ult', f.pos, 1);
-    m.audio.play('buzz', f.pos, 0.7);
+    m.audio.play('pooh.ult', f.pos);
     m.broadcastAction(f, { a: 'ult' });
   }
 
@@ -663,7 +661,7 @@ export class PoohKit extends BaseKit {
       onHit: (o) => this.coat(f, o, m, true),
       onBurst: (p) => this.hiveBurst(f, m, p),
     });
-    m.audio.play('lob', from, 1);
+    m.audio.play('pooh.hive', from, 1, f);
   }
 
   private hiveBurst(f: Fighter, m: MatchContext, p: THREE.Vector3): void {
@@ -673,7 +671,7 @@ export class PoohKit extends BaseKit {
     }
     this.splash(f, m, p, true);
     m.vfx.shockwave(p, HIVE.r, 0xffd34a);
-    m.audio.play('buzz', p, 1.2);
+    m.audio.play('pooh.hiveBurst', p, 1, f);
     m.shake(0.4, p);
     const s = this.swarms.find((x) => !x.active) ?? this.swarms[0];
     s.active = true;
@@ -741,7 +739,7 @@ export class PoohKit extends BaseKit {
         s.buzzT -= dt;
         if (s.buzzT <= 0) {
           s.buzzT = 0.32;
-          m.audio.play('buzz', s.pos, 0.55);
+          m.audio.play('pooh.buzz', s.pos, 1, f);
         }
         if (Math.random() < dt * 10) m.vfx.add.emit({ pos: s.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.6)), vel: new THREE.Vector3(0, 0.5, 0), life: 0.4, size: 0.1, size1: 0.02, color: 0xffd34a, shape: Shape.glow, alpha: 0.7 });
       }
@@ -820,7 +818,7 @@ export class PoohKit extends BaseKit {
     if (ev !== 'tap' || f.anim.action.name !== 'think') return;
     // think, think, think: a soft tap and a few thought bubbles by his head
     const at = f.head(new THREE.Vector3());
-    m.audio.play('tap', at, 0.7);
+    m.audio.play('pooh.tap', f.pos);
     _v.set(-Math.cos(f.facing), 0, Math.sin(f.facing));
     for (let i = 0; i < 3; i++) m.vfx.add.emit({ pos: at.clone().addScaledVector(_v, 0.45).setY(at.y + 0.2 + i * 0.16), vel: new THREE.Vector3(0, 0.9, 0), life: 0.55, size: 0.05 + i * 0.03, size1: 0.02, color: 0xffffff, shape: Shape.ring, alpha: 0.9 });
   }
@@ -866,7 +864,7 @@ export class PoohKit extends BaseKit {
         if (e.d) m.vfx.dashLines(f, new THREE.Vector3(...e.d));
         this.setTrail(f, true);
         this.remoteTrailT = 0.4;
-        m.audio.play('dash', f.pos, 0.9);
+        m.audio.play('pooh.bump', f.pos);
         break;
       case 'boing':
         if (e.p) this.bumpFx(m, new THREE.Vector3(...e.p), new THREE.Vector3(...(e.d ?? [0, 0, 1])));
@@ -878,10 +876,11 @@ export class PoohKit extends BaseKit {
           this.freeT = 0;
           this.balloon.scale.setScalar(1);
           f.anim.play('balloon', { fadeIn: 0.15 });
+          m.audio.play('pooh.balloon', f.pos);
         } else {
           if (f.anim.action.name === 'balloon') f.anim.action.stop(0.2);
           this.releaseBalloon();
-          m.audio.play('pop', f.pos, 0.6);
+          m.audio.play('pooh.pop', f.pos);
         }
         break;
       case 'think':
@@ -894,7 +893,7 @@ export class PoohKit extends BaseKit {
         f.anim.play('ult', { fadeIn: 0.05 });
         f.visual.prop?.('hive', true);
         this.remoteHiveT = HIVE.release + 0.1;
-        m.audio.play('ult', f.pos, 1);
+        m.audio.play('pooh.ult', f.pos);
         break;
       case 'hive':
         f.visual.prop?.('hive', false);

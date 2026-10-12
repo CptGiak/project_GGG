@@ -110,7 +110,7 @@ export class LockeKit extends BaseKit {
       if (this.act) this.endAction(f);
       this.startAction(f, 'purgatory', DUR.purgatory, f.aimYaw);
       f.anim.play('purgatory', { fadeIn: 0.05 });
-      m.audio.play('ult', f.pos, 1);
+      m.audio.play('locke.ult', f.pos);
       return;
     }
     // ---- F: Ashen Pursuit -----------------------------------------------------------------------
@@ -200,7 +200,7 @@ export class LockeKit extends BaseKit {
     const { point } = this.aimPoint(f, m, NAILS.range + 4);
     const dir = point.sub(from).normalize();
     this.spawnNails(f, m, from, dir, false);
-    m.audio.play('swing', from, 0.9);
+    m.audio.play('locke.nails', f.pos);
     m.broadcastAction(f, { a: 'nails', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
   }
 
@@ -233,9 +233,11 @@ export class LockeKit extends BaseKit {
     const hit = m.world.raycast(from, dir, PURSUIT.dist + 0.8);
     const travel = hit ? Math.max(0, hit.distance - 0.8) : PURSUIT.dist;
     const to = from.clone().addScaledVector(dir, travel);
-    afterimage(f, m, from, to);
+    afterimage(f, m, from, to, false);
     this.ashes(f, m, from);
     f.pos.copy(to).setY(to.y - 1);
+    // played after the blink, at his own position, so it is his sound (not 10 m away)
+    m.audio.play('locke.pursuit', f.pos);
     f.vel.copy(dir).multiplyScalar(6);
     f.invuln = Math.max(f.invuln, 0.25);
     f.hooks.forEach((h) => {
@@ -263,7 +265,7 @@ export class LockeKit extends BaseKit {
     f.anim.play('lunge', { fadeIn: 0.02 });
     this.hitActive = { slot: 'atk', part: 'dash', range: 2.1, arc: 180, height: 2.6, kb: 6, kbUp: 3, stun: 0.2 };
     this.setTrail(f, true);
-    m.audio.play('dash', f.pos, 1);
+    m.audio.play('locke.lunge', f.pos);
     m.broadcastAction(f, { a: 'lunge', t: t.id });
   }
 
@@ -280,7 +282,7 @@ export class LockeKit extends BaseKit {
     const c = f.chest(new THREE.Vector3());
     m.vfx.ring(f.pos.clone().setY(f.pos.y + 0.1), UP, f.champ.colors[0], 0.3, 3, 0.45);
     m.vfx.ring(c, UP, f.champ.colors[1], 0.2, 1.8, 0.35);
-    m.audio.play('boostStart', c, 0.9);
+    m.audio.play('locke.ignite', f.pos);
   }
 
   private endIgnite(f: Fighter, m: MatchContext): void {
@@ -321,7 +323,7 @@ export class LockeKit extends BaseKit {
     this.relicMesh.visible = true;
     this.relicMesh.position.copy(from);
     this.relicMesh.scale.setScalar(1);
-    m.audio.play('swingHeavy', from, 1);
+    m.audio.play('locke.relicThrow', from, 1, f);
     void f;
   }
 
@@ -339,7 +341,7 @@ export class LockeKit extends BaseKit {
       const p = new THREE.Vector3(at.x + Math.cos(a) * d, at.y + 6 + Math.random() * 4, at.z + Math.sin(a) * d);
       m.vfx.add.emit({ pos: p, vel: new THREE.Vector3(0, -38, 0), life: 0.22 + Math.random() * 0.1, size: 0.09, color: i % 2 ? c0 : 0xffffff, shape: Shape.streak, stretch: 2.2 });
     }
-    m.audio.play('explosion', at, 1);
+    m.audio.play('locke.relicLand', at, 1, f);
     m.shake(0.4, at);
     if (!r.owner || !f.alive || !m.isAuthority(f)) return;
     const center = at.clone().setY(at.y + 1);
@@ -362,7 +364,7 @@ export class LockeKit extends BaseKit {
     m.vfx.ring(t.pos.clone().setY(t.pos.y + 0.08), UP, c0, 0.3, 2.4, 0.5);
     m.vfx.ring(c, UP, c1, 1.6, 0.2, 0.5);
     m.vfx.hitSpark(c, UP, c1, true);
-    m.audio.play('beam', c, 1);
+    m.audio.play('locke.seal', c, 1, f);
   }
 
   /** reliquary flight, zone, seals and pickup + Soul Ignition flames + nail stacks (all fighters) */
@@ -427,7 +429,7 @@ export class LockeKit extends BaseKit {
     if (r.owner && f.alive && f.pos.distanceTo(r.to) < PURG.pickup && age > 0.2) {
       f.ult = Math.min(1, f.ult + PURG.refund);
       m.vfx.ring(mesh.position.clone(), UP, f.champ.colors[1], 0.2, 2, 0.4);
-      m.audio.play('ultReady', mesh.position, 0.6);
+      m.audio.play('locke.relicPick', f.pos);
       m.broadcastAction(f, { a: 'pick' });
       this.dropRelic();
       return;
@@ -501,6 +503,7 @@ export class LockeKit extends BaseKit {
       m.vfx.add.emit({ pos: at.clone(), vel: d.multiplyScalar(7 + Math.random() * 5), life: 0.3, size: 0.1, color: i % 2 ? f.champ.colors[1] : 0xffffff, shape: Shape.streak, stretch: 1.6, drag: 3 });
     }
     m.vfx.ring(at, UP, f.champ.colors[1], 0.2, 1.2 + n * 0.3, 0.3);
+    m.audio.play('locke.nailBurst', at, 1, undefined, { n });
   }
 
   protected endAction(f: Fighter): void {
@@ -515,7 +518,10 @@ export class LockeKit extends BaseKit {
     if (!this.act) return;
     if (ev === 'swing') {
       this.setTrail(f, true);
-      m.audio.play(this.act === 'c4' || this.act === 'pursuit' ? 'swingHeavy' : 'swing', f.pos, 0.8);
+      // by clip so remote puppets pick the same sound; the pursuit cut and the lunge carry their own
+      const clip = f.anim.action.name;
+      if (clip === 'c4') m.audio.play('locke.swingHeavy', f.pos);
+      else if (clip === 'c1' || clip === 'c2' || clip === 'c3' || clip === 'air') m.audio.play('locke.swing', f.pos);
     } else if (ev === 'hitOn') {
       if (this.act === 'pursuit') {
         this.hitActive = { slot: 'abi', part: 'e', range: PURSUIT.radius, arc: 180, height: 2.6, kb: 7, kbUp: 3, stun: 0.25 };
@@ -579,11 +585,12 @@ export class LockeKit extends BaseKit {
       case 'nails':
         f.anim.play('nails', { fadeIn: 0.02, offset: 0.07, mask: MASK_UPPER });
         if (e.p && e.d) this.spawnNails(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), true);
+        m.audio.play('locke.nails', f.pos);
         break;
       case 'pursuit':
         if (e.p && e.d) {
           const from = new THREE.Vector3(...e.p);
-          afterimage(f, m, from, new THREE.Vector3(...e.d));
+          afterimage(f, m, from, new THREE.Vector3(...e.d), 'locke.pursuit');
           this.ashes(f, m, from);
         }
         f.anim.play('pursuit', { fadeIn: 0 });
@@ -594,7 +601,7 @@ export class LockeKit extends BaseKit {
       case 'lunge':
         f.anim.play('lunge', { fadeIn: 0.02 });
         this.setTrail(f, true);
-        m.audio.play('dash', f.pos, 1);
+        m.audio.play('locke.lunge', f.pos);
         this.act = 'remote';
         this.actT = 0;
         this.actDur = DUR.lunge;

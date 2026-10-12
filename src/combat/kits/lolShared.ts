@@ -95,8 +95,11 @@ export function enemiesInCone(f: Fighter, m: MatchContext, origin: THREE.Vector3
   return out;
 }
 
-/** blink / dash afterimage: coloured squares and streaks along the path, rings at both ends */
-export function afterimage(f: Fighter, m: MatchContext, from: THREE.Vector3, to: THREE.Vector3, sound = true): void {
+/**
+ * blink / dash afterimage: coloured squares and streaks along the path, rings at both ends;
+ * `sound` names the SFX played at the arrival (false: the caller plays its own)
+ */
+export function afterimage(f: Fighter, m: MatchContext, from: THREE.Vector3, to: THREE.Vector3, sound: string | false = 'teleport'): void {
   const n = 14;
   const [c0, c1] = f.champ.colors;
   const dir = to.clone().sub(from);
@@ -111,7 +114,7 @@ export function afterimage(f: Fighter, m: MatchContext, from: THREE.Vector3, to:
   m.vfx.ring(from, dir, c0, 0.3, 1.6, 0.3);
   m.vfx.ring(to, dir, c1, 1.6, 0.2, 0.3);
   m.vfx.beam(from, to, c0, 0.08, 0.2);
-  if (sound) m.audio.play('teleport', to, 1);
+  if (sound) m.audio.play(sound, to, 1, f);
 }
 
 /**

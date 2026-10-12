@@ -161,7 +161,7 @@ export class AkaliKit extends BaseKit {
     const yaw = this.faceYaw ?? f.facing;
     const dir = forwardOf(yaw, new THREE.Vector3());
     this.kunaiFx(f, m, origin, dir);
-    m.audio.play('swing', f.pos, 1);
+    m.audio.play('akali.kunai', f.pos);
     if (!m.isAuthority(f)) return;
     for (const { o, d } of enemiesInCone(f, m, origin, dir, FAN.range, FAN.half)) {
       const kb = _v.subVectors(o.pos, f.pos).setY(0).normalize().multiplyScalar(2.5).clone();
@@ -194,7 +194,7 @@ export class AkaliKit extends BaseKit {
     f.reveal = 0;
     m.vfx.ring(at.clone().setY(at.y + 0.08), UP, f.champ.colors[0], 0.6, SHROUD.radius, 0.5);
     m.vfx.ring(at.clone().setY(at.y + 0.08), UP, f.champ.colors[1], 0.4, SHROUD.radius * 0.8, 0.6);
-    m.audio.play('dash', at, 0.9);
+    m.audio.play('akali.shroud', at, 1, f);
   }
 
   /** Shuriken Flip: back flip, shuriken along the aim */
@@ -222,7 +222,7 @@ export class AkaliKit extends BaseKit {
         this.marks.add(t.id, m.time, 4);
       },
     });
-    m.audio.play('swing', from, 0.9);
+    m.audio.play('akali.shuriken', f.pos);
     // not 'flip': that event name is the movement flip, handled before the kit (OnlineSession)
     m.broadcastAction(f, { a: 'shuriken', p: [from.x, from.y, from.z], d: [dir.x, dir.y, dir.z] });
   }
@@ -238,7 +238,7 @@ export class AkaliKit extends BaseKit {
     this.hitActive = { slot: 'abi', part: 'flip2', range: 1.9, arc: 180, height: 2.6, kb: 5, kbUp: 3, stun: 0.15 };
     this.setTrail(f, true);
     if (f.stealth > 0) f.reveal = 0.6;
-    m.audio.play('dash', f.pos, 1);
+    m.audio.play('akali.flipDash', f.pos);
     m.broadcastAction(f, { a: 'flipDash', p: [from.x, from.y, from.z], t: t.id });
   }
 
@@ -261,7 +261,7 @@ export class AkaliKit extends BaseKit {
     const from = f.chest(new THREE.Vector3());
     const to = from.clone().addScaledVector(this.dashDir, DASH.exec);
     afterimage(f, m, from, to, false);
-    m.audio.play(n === 1 ? 'dash' : 'swingHeavy', f.pos, 1);
+    m.audio.play(n === 1 ? 'akali.exec1' : 'akali.exec2', f.pos);
     if (n === 2) m.shake(0.25, f.pos);
     m.broadcastAction(f, { a: 'exec', n, p: [from.x, from.y, from.z], d: [to.x, to.y, to.z] });
   }
@@ -333,6 +333,7 @@ export class AkaliKit extends BaseKit {
       if (this.marks.consume(t.id, m.time) > 0) {
         const at = t.chest(new THREE.Vector3());
         m.reportHit(f, t, { slot: 'atk', part: 'mark', at, blockable: false });
+        m.audio.play('akali.markPop', f.pos);
         m.vfx.ring(at, _v.subVectors(at, f.chest(_w)).normalize(), f.champ.colors[0], 0.2, 1.4, 0.3);
         m.vfx.hitSpark(at, _v, f.champ.colors[1], true);
       }
@@ -349,7 +350,9 @@ export class AkaliKit extends BaseKit {
     if (!this.act) return;
     if (ev === 'swing') {
       this.setTrail(f, true);
-      m.audio.play('swing', f.pos, 0.8);
+      // the kunai fan and the dashes play their own sound at their release
+      const s = ({ c1: 'akali.swing', c2: 'akali.swing', c3: 'akali.spin', air: 'akali.rise' } as Record<string, string>)[f.anim.action.name ?? ''];
+      if (s) m.audio.play(s, f.pos);
     } else if (ev === 'hitOn') {
       if (!['c1', 'c2', 'c3', 'air'].includes(this.act)) return;
       this.hitActive = {
@@ -406,6 +409,7 @@ export class AkaliKit extends BaseKit {
       case 'shuriken':
         f.anim.play('flip', { fadeIn: 0.02 });
         f.startFlip(2);
+        m.audio.play('akali.shuriken', f.pos);
         if (e.p && e.d) {
           const [c0, c1] = f.champ.colors;
           const from = new THREE.Vector3(...e.p);
@@ -416,6 +420,7 @@ export class AkaliKit extends BaseKit {
       case 'flipDash':
         f.anim.play('dash', { fadeIn: 0.02 });
         this.setTrail(f, true);
+        m.audio.play('akali.flipDash', f.pos);
         this.act = 'remoteDash';
         this.actT = 0;
         this.actDur = 0.4;
@@ -423,7 +428,7 @@ export class AkaliKit extends BaseKit {
       case 'exec':
         f.anim.play('exec', { fadeIn: 0.02 });
         if (e.p && e.d) afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d), false);
-        m.audio.play(e.n === 2 ? 'swingHeavy' : 'dash', f.pos, 1);
+        m.audio.play(e.n === 2 ? 'akali.exec2' : 'akali.exec1', f.pos);
         this.setTrail(f, true);
         this.act = 'remoteDash';
         this.actT = 0;
@@ -440,6 +445,7 @@ export class AkaliKit extends BaseKit {
     if (this.remoteFan > 0) {
       this.remoteFan -= dt;
       if (this.remoteFan <= 0) this.kunaiFx(f, m, f.chest(new THREE.Vector3()), forwardOf(f.facing, new THREE.Vector3()));
+      if (this.remoteFan <= 0) m.audio.play('akali.kunai', f.pos);
     }
     if (!this.act) return;
     this.actT += dt;

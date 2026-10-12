@@ -72,7 +72,7 @@ export function startViewer(params: URLSearchParams): void {
     if (!freeze) {
       for (const { a, spec } of animators) {
         if (spec.startsWith('run')) a.st.runPhase += dt * 9;
-        if (!a.action.active && !['idle', 'run', 'air', 'fly', 'dash'].includes(spec.split('@')[0])) applySpec(a, spec, false);
+        if (!a.action.active && !['idle', 'run', 'air', 'fly', 'dash', 'relax'].includes(spec.split('@')[0])) applySpec(a, spec, false);
         a.update(dt, false);
         for (const ev of a.action.events) a.v.onAnimEvent?.(ev);
         a.action.events.length = 0;
@@ -110,6 +110,12 @@ function applySpec(a: FighterAnimator, spec: string, freeze: boolean): void {
       return;
     case 'dash':
       st.wDash = 1;
+      return;
+    case 'relax':
+      // relaxed idle (+ groove), as after a few calm seconds in game
+      st.relax = 1;
+      st.groove = 1;
+      st.time = v ?? 0;
       return;
     default:
       a.play(name, freeze ? { speed: 0, hold: true, fadeIn: 0, offset: v ?? 0 } : { offset: 0 });

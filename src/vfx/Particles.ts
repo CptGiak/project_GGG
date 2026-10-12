@@ -2,9 +2,10 @@ import * as THREE from 'three';
 
 /**
  * Instanced billboard particles with procedural shapes. One pool per blending mode.
- * Shapes: 0 glow, 1 toon puff, 2 sparkle star, 3 streak (velocity aligned), 4 ring, 5 shard, 6 square
+ * Shapes: 0 glow, 1 toon puff, 2 sparkle star, 3 streak (velocity aligned), 4 ring, 5 shard, 6 square,
+ * 7 six-point star (heavy / critical flares), 8 eighth note (music VFX; rot 0 = upright)
  */
-export const Shape = { glow: 0, puff: 1, star: 2, streak: 3, ring: 4, shard: 5, square: 6 } as const;
+export const Shape = { glow: 0, puff: 1, star: 2, streak: 3, ring: 4, shard: 5, square: 6, star6: 7, note: 8 } as const;
 
 export interface ParticleSpec {
   pos: THREE.Vector3;
@@ -97,8 +98,27 @@ void main() {
   } else if ( vShape < 5.5 ) {
     // shard (triangle)
     a = step( abs( p.x ) * 1.7, 1.0 - ( p.y * 0.5 + 0.5 ) ) * step( -1.0, p.y );
-  } else {
+  } else if ( vShape < 6.5 ) {
     a = step( max( abs( p.x ), abs( p.y ) ), 0.8 );
+  } else if ( vShape < 7.5 ) {
+    // six-point star: three thin bars at 60 degrees + a hot core
+    float s6 = 0.0;
+    for ( int k = 0; k < 3; k++ ) {
+      float an = float( k ) * 1.0472;
+      vec2 q = vec2( cos( an ) * p.x + sin( an ) * p.y, -sin( an ) * p.x + cos( an ) * p.y );
+      s6 = max( s6, 1.0 - abs( q.y ) * 7.0 - abs( q.x ) * 1.05 );
+    }
+    a = clamp( s6, 0.0, 1.0 ) + pow( max( 0.0, 1.0 - r ), 4.0 );
+  } else {
+    // eighth note: tilted oval head, stem, tapering flag
+    vec2 h = p - vec2( -0.22, -0.5 );
+    vec2 hr = vec2( 0.94 * h.x + 0.34 * h.y, -0.34 * h.x + 0.94 * h.y );
+    float head = ( length( hr / vec2( 0.34, 0.24 ) ) - 1.0 ) * 0.24;
+    float stem = max( abs( p.x - 0.06 ) - 0.06, abs( p.y - 0.17 ) - 0.67 );
+    float fx = p.x - 0.12;
+    float flag = max( max( -fx, fx - 0.38 ), max( p.y - ( 0.84 - 1.4 * fx ), ( 0.54 - 0.62 * fx ) - p.y ) );
+    float dn = min( head, min( stem, flag ) );
+    a = 1.0 - smoothstep( -0.015, 0.03, dn );
   }
   a *= vColor.a;
   if ( a < 0.01 ) discard;

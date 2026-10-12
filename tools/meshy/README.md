@@ -164,7 +164,11 @@ e Nova, fatti nell'app web, sono quelli dell'immagine qui sopra.
 - **Pesi automatici.** Dove la manica arrotolata sta sul gomito, nelle pieghe forti i rotoli si
   compenetrano. Va rivisto sul modello vero.
 - **Niente molle.** Ciuffi, cappuccio e cuffie sono rigidi. Le catene (`ggg_chains`) si possono
-  aggiungere come per Kaiser.
+  aggiungere come per Kaiser e per la coda di Nova.
+- **Proporzioni diverse.** Lo scheletro misurato può avere braccia più corte o più lunghe del
+  modello procedurale. Il fucile di Rex segue il braccio: le pose in spalla sono calcolate sulle
+  proporzioni del modello e il calcio si accorcia o allunga in proporzione (`stockZFor` in
+  `src/champions/rex.ts`). Per un altro campione con un'arma da spalla serve la stessa cosa.
 - **A-pose marcata.** Quando si raddrizzano le braccia, la stoffa sotto l'ascella si stira in
   alette. Per questo la scheda chiede la T-pose.
 - **Rig di Meshy.** Se gli si passa il GLB riggato da Meshy, l'importatore ne usa la posa di

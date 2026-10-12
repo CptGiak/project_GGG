@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Beat } from '../core/Beat';
 import { COMBAT, MOVE, dashIFrames } from '../../shared/constants';
 import { CHAMPIONS, MATCH_RULES, type ChampionData, type ChampionId } from '../../shared/champions';
 import type { ChampionVisual } from '../champions/types';
@@ -95,6 +96,8 @@ export class Fighter {
   private wasAttached = false;
   /** continuous wall-run time (capped so you eventually slide off) */
   private wallRunTotal = 0;
+  /** seconds spent standing calm (relaxed idle after a while) */
+  private calmT = 0;
   /** velocity at the previous visual update (banking / lateral acceleration) */
   private visPrevVel = new THREE.Vector3();
   /** materials flashed white on hit */
@@ -141,6 +144,9 @@ export class Fighter {
   lastAttackerId: string | null = null;
   /** flash timer for hit feedback */
   hitFlash = 0;
+  /** strength of the current hit flash (dimmed for rapid hits) and when the last full one started */
+  flashK = 1;
+  flashAt = -9;
   /** weapon slash trails emitting */
   trailOn = false;
   /** invisibility seconds left (smoke shroud, grass veil); 0 = visible */
@@ -298,7 +304,8 @@ export class Fighter {
   startTaunt(): void {
     const c = this.visual.anims.clips.taunt;
     if (!c) return;
-    this.tauntT = c.duration;
+    // beat-authored clips are timed in beats (and start phased to the bar): convert to seconds
+    this.tauntT = c.opts.beats ? (c.duration - (Beat.beats % 1)) * (60 / Beat.bpm) : c.duration;
     this.anim.play('taunt', { fadeIn: 0.1 });
   }
 
@@ -709,7 +716,7 @@ export class Fighter {
               this.grounded = false;
             }
             m.vfx.hookImpact(hk.anchor, hk.normal, this.champ.colors[0]);
-            m.audio.play('hookHit', hk.anchor, 0.8);
+            m.audio.play('hookHit', hk.anchor, 0.8, this);
           } else {
             hk.state = 'retract';
           }
@@ -1035,7 +1042,9 @@ export class Fighter {
     st.wRun = damp(st.wRun, runT, wallRunning ? 25 : 12, dt);
     st.runIntensity = wallRunning ? 1.2 : THREE.MathUtils.clamp(hspeed / (MOVE.runSpeed * 1.0), 0, 1.25);
     const cycleSpeed = wallRunning ? Math.max(8, this.vel.y) : hspeed;
-    st.runPhase += dt * (cycleSpeed / 2.3) * Math.PI * 2 * (faceAim && this.isMovingBack() ? -1 : 1);
+    // one run cycle (two steps) per `stride` metres; heavy champions take longer strides
+    const stride = this.visual.anims.stride ?? 2.3;
+    st.runPhase += dt * (cycleSpeed / (wallRunning ? 2.3 : stride)) * Math.PI * 2 * (faceAim && this.isMovingBack() ? -1 : 1);
     st.wAir = damp(st.wAir, airborne && !flying && !wallRunning ? 1 : 0, 10, dt);
     st.wFly = damp(st.wFly, flying && !faceAim && !wallRunning ? 1 : 0, 6, dt);
     st.vy = this.vel.y;
@@ -1044,13 +1053,18 @@ export class Fighter {
       st.swing = damp(st.swing, THREE.MathUtils.clamp(0.25 + vyN * 1.4, 0, 1), 4, dt);
     } else st.swing = damp(st.swing, 0, 3, dt);
     st.wDash = damp(st.wDash, this.dashTime > 0 ? 1 : 0, this.dashTime > 0 ? 30 : 8, dt);
-    st.wLand = Math.max(0, st.wLand - dt * 3.5);
+    st.wLand = Math.max(0, st.wLand - dt / (this.visual.anims.landRecover ?? 0.29));
     st.lookYaw = THREE.MathUtils.radToDeg(wrapAngle(this.aimYaw - this.facing));
     st.lookPitch = THREE.MathUtils.radToDeg(-this.aimPitch);
     st.aim = damp(st.aim, this.ctrl.aim, 12, dt);
-    // free to vibe: standing still, nothing to do
-    const free = this.alive && this.grounded && hspeed < 0.6 && this.stun <= 0 && !this.anim.action.active && st.aim < 0.1 && this.ctrl.aim === 0;
-    st.groove = damp(st.groove, free ? 1 : 0, free ? 1.5 : 10, dt);
+    // free to vibe: standing still, nothing to do. After a few calm seconds the champion relaxes
+    // (weapon on the shoulder...) and grooves to the music; anything happening snaps it back
+    const free = this.alive && this.grounded && hspeed < 0.6 && this.stun <= 0 && !this.anim.action.active && st.aim < 0.1 && this.ctrl.aim === 0 && this.hitFlash <= 0;
+    this.calmT = free ? this.calmT + dt : 0;
+    const relaxed = !!this.visual.anims.relaxed;
+    const relaxT = relaxed && this.calmT > 2.5 ? 1 : 0;
+    st.relax = relaxT > st.relax ? Math.min(1, st.relax + dt / 0.6) : Math.max(0, st.relax - dt / 0.14);
+    st.groove = damp(st.groove, free ? (relaxed ? st.relax : 1) : 0, free ? 1.5 : 10, dt);
     // strafing: local movement relative to facing
     if (faceAim && this.grounded && hspeed > 0.5) {
       rightOf(this.facing, _r);
@@ -1101,7 +1115,7 @@ export class Fighter {
     this.visPrevVel.copy(this.vel);
     // Persona-style white hit flash
     if (this.hitFlash > 0 || this.flashing) {
-      const k = this.hitFlash > 0 ? Math.min(1, this.hitFlash / 0.12) * 0.75 : 0;
+      const k = this.hitFlash > 0 ? Math.min(1, this.hitFlash / 0.12) * 0.75 * this.flashK : 0;
       for (const fm of this.flashMats) fm.m.emissive.copy(fm.base).lerp(WHITE, k);
       this.flashing = this.hitFlash > 0;
     }
@@ -1115,7 +1129,7 @@ export class Fighter {
       const p = this.pos.clone().addScaledVector(_f, 0.6);
       m.vfx.landing(p, this.champ.colors[0], 0.5);
       m.vfx.hitSpark(p.setY(p.y + 0.1), UP, this.champ.colors[0], false);
-      m.audio.play('block', this.pos, 0.7);
+      m.audio.play('taunt.plant', this.pos);
       m.shake(0.15, this.pos);
     } else if (ev === 'sparkle') {
       const h = this.head(new THREE.Vector3());
@@ -1123,7 +1137,7 @@ export class Fighter {
         const a = (i / 14) * Math.PI * 2;
         m.vfx.add.emit({ pos: h.clone(), vel: new THREE.Vector3(Math.cos(a) * 3, 2 + Math.random() * 2, Math.sin(a) * 3), life: 0.6, size: 0.12, color: i % 2 ? this.champ.colors[0] : this.champ.colors[1], shape: 2, drag: 2 });
       }
-      m.audio.play('note', this.pos, 0.6);
+      m.audio.play('taunt.sparkle', this.pos);
     }
   }
 

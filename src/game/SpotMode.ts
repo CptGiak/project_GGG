@@ -230,7 +230,7 @@ export class SpotMode {
     const at = new THREE.Vector3(z.c[0], z.c[1] + 0.2, z.c[2]);
     m.vfx.shockwave(at, z.r * 1.2, z.finale ? '#ffc94a' : '#ffffff');
     m.vfx.ring(at, new THREE.Vector3(0, 1, 0), '#ffe7a3', 0.5, z.r, 0.6);
-    m.audio.play(z.finale ? 'chord' : 'alarm', undefined, 0.7);
+    m.audio.play(z.finale ? 'spot.finale' : 'spot.move');
     m.hud?.banner(z.finale ? `GRAN FINALE · ${z.name} · PUNTI X${SPOT.finaleMult}` : prev.idx < 0 ? `RIFLETTORE SU: ${z.name}` : `IL RIFLETTORE SI SPOSTA: ${z.name}`, 'mode');
   }
 

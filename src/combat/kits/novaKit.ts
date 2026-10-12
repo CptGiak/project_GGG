@@ -56,7 +56,7 @@ export class NovaKit extends BaseKit {
   onTakedown(f: Fighter, _victim: Fighter, m: MatchContext): void {
     this.cd.sec = 0;
     this.cd.abi *= 0.5;
-    m.audio.play('chord', f.pos, 0.7);
+    m.audio.play('nova.reset', f.pos);
     m.vfx.ring(f.chest(new THREE.Vector3()), new THREE.Vector3(0, 1, 0), f.champ.colors[0], 0.4, 2.4, 0.35);
   }
 
@@ -169,8 +169,7 @@ export class NovaKit extends BaseKit {
       });
     }
     m.vfx.ring(from.clone().addScaledVector(dir, 0.7), dir, c0, 0.1, 0.8, 0.18);
-    m.audio.play('kunai', from, 0.8);
-    m.audio.play('swing', from, 0.7);
+    m.audio.play('nova.cross', f.pos);
   }
 
   /** instant blink along the move (or aim) direction, damaging enemies crossed */
@@ -201,6 +200,7 @@ export class NovaKit extends BaseKit {
     }
     this.afterimage(f, m, from, to);
     f.pos.copy(to).setY(to.y - 1);
+    m.audio.play('nova.glitch', f.pos);
     f.vel.copy(dir).multiplyScalar(14);
     f.invuln = Math.max(f.invuln, 0.25);
     this.faceYaw = Math.atan2(dir.x, dir.z);
@@ -222,7 +222,6 @@ export class NovaKit extends BaseKit {
     m.vfx.ring(from, to.clone().sub(from).normalize(), c0, 0.3, 1.6, 0.3);
     m.vfx.ring(to, to.clone().sub(from).normalize(), c1, 1.6, 0.2, 0.3);
     m.vfx.beam(from, to, c0, 0.08, 0.2);
-    m.audio.play('teleport', to, 1);
   }
 
   /** Glitch Step momentum: the speed Nova carried into the blink (the blink itself is instant) */
@@ -253,14 +252,14 @@ export class NovaKit extends BaseKit {
   private phantom(f: Fighter, m: MatchContext): boolean {
     const pick = this.phantomPick(f, m);
     if (!pick) {
-      m.audio.play('uiBack', f.pos, 0.6);
+      m.audio.play('nova.fizzle', f.pos);
       return false;
     }
     const t = pick.t;
     this.cd.abi = this.data.abilities.abi.cooldown * (pick.marked ? 0.5 : 1);
     if (pick.marked) {
       this.marks.delete(t);
-      m.audio.play('glitch', f.pos, 0.8);
+      m.audio.play('nova.mark', f.pos);
     }
     const from = f.chest(new THREE.Vector3());
     forwardOf(t.facing, _v);
@@ -269,6 +268,7 @@ export class NovaKit extends BaseKit {
     if (m.world.overlapsSphere(_w.copy(dest).setY(dest.y + 1), 0.45)) dest.copy(t.pos).addScaledVector(_a.subVectors(f.pos, t.pos).setY(0).normalize(), 1.5);
     this.afterimage(f, m, from, dest.clone().setY(dest.y + 1));
     f.pos.copy(dest);
+    m.audio.play('nova.phantom', f.pos);
     f.vel.set(0, Math.min(0, f.vel.y), 0);
     f.hooks.forEach((h) => {
       if (h.state !== 'idle') h.state = 'retract';
@@ -289,7 +289,7 @@ export class NovaKit extends BaseKit {
     this.barrageT = 0.05;
     this.barrageIdx = 0;
     f.invuln = Math.max(f.invuln, 1.8);
-    m.audio.play('ult', f.pos, 1);
+    m.audio.play('nova.ult', f.pos);
     m.vfx.ring(f.pos.clone().setY(f.pos.y + 0.1), new THREE.Vector3(0, 1, 0), f.champ.colors[1], 0.5, 5, 0.5);
     m.broadcastAction(f, { a: 'ult' });
   }
@@ -317,7 +317,7 @@ export class NovaKit extends BaseKit {
     this.barrageIdx++;
     f.anim.play(clipName, { speed: 1.8, fadeIn: 0.0 });
     this.setTrail(f, true);
-    m.audio.play('swing', f.pos, 0.9);
+    m.audio.play('nova.barrage', f.pos);
     if (!enemies.length) {
       this.spin = (this.spin + 120) % 360;
       return;
@@ -354,7 +354,10 @@ export class NovaKit extends BaseKit {
     }
     if (ev === 'swing') {
       this.setTrail(f, true);
-      m.audio.play('swing', f.pos, 0.8);
+      // one sound per moment: Cross Fade, Phantom Cut and the local barrage strikes play their own
+      const clip = f.anim.action.name;
+      if (this.act === 'ultRemote') m.audio.play('nova.barrage', f.pos);
+      else if (this.act !== 'ult' && clip !== 'cross' && clip !== 'phantom') m.audio.play(clip === 'c4' ? 'nova.swingBig' : clip === 'air' ? 'nova.rise' : 'nova.swing', f.pos);
     } else if (ev === 'hitOn') {
       if (this.act === 'phantom') {
         const t = this.phantomTarget;
@@ -398,12 +401,15 @@ export class NovaKit extends BaseKit {
         break;
       case 'glitch':
         if (e.p && e.d) this.afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d));
+        if (e.d) m.audio.play('nova.glitch', new THREE.Vector3(...e.d), 1, f);
         f.anim.play('glitch', { fadeIn: 0, fadeOut: 0.12 });
         // the puppet is invulnerable too, so attackers here don't predict a hit the server rejects
         f.invuln = Math.max(f.invuln, 0.25);
         break;
       case 'phantom':
         if (e.p && e.d) this.afterimage(f, m, new THREE.Vector3(...e.p), new THREE.Vector3(...e.d));
+        // at the arrival, behind the target, where the cut lands (the puppet may not be there yet)
+        if (e.d) m.audio.play('nova.phantom', new THREE.Vector3(...e.d), 1, f);
         f.anim.play('phantom', { fadeIn: 0 });
         f.invuln = Math.max(f.invuln, 0.2);
         this.act = 'remote';
@@ -412,7 +418,7 @@ export class NovaKit extends BaseKit {
         break;
       case 'ult':
         f.invuln = Math.max(f.invuln, 1.8);
-        m.audio.play('ult', f.pos, 1);
+        m.audio.play('nova.ult', f.pos);
         this.act = 'ultRemote';
         this.actT = 0;
         this.actDur = 1.75;
