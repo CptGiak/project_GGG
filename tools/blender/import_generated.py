@@ -282,11 +282,18 @@ def needs_tpose(fit: rig_fit.Fit, tol_deg: float = 3.0) -> bool:
     return False
 
 
-def straighten(ob, fit: rig_fit.Fit, voxel: float) -> rig_fit.Fit:
-    """provisional rig + weights, arms along X and legs vertical, applied to the mesh"""
+def straighten(ob, fit: rig_fit.Fit, voxel: float, hold: list | None = None) -> rig_fit.Fit:
+    """provisional rig + weights, arms along X and legs vertical, applied to the mesh. `hold`:
+    (vertex mask, bone) pairs kept rigid on that bone (hanging parts must not follow an arm)"""
     tmp = armature_from_fit('fit_rig', fit)
     bones = K.GAME_BONES + FINGERS
     heat_weights(ob, tmp, bones, voxel)
+    if hold:
+        tab = K.weights_table(ob)
+        for mask, bone in hold:
+            for vi in np.nonzero(mask)[0]:
+                tab[vi] = {bone: 1.0}
+        K.set_weights(ob, tab)
     for s, sx in (('L', 1.0), ('R', -1.0)):
         align(tmp, 'upperArm' + s, 'upperArm' + s, 'foreArm' + s, (sx, 0, 0))
         align(tmp, 'foreArm' + s, 'foreArm' + s, 'hand' + s, (sx, 0, 0))
@@ -340,6 +347,166 @@ def on_formula(fit: rig_fit.Fit, spec: dict) -> rig_fit.Fit:
     extra = [{**e, 'head': e['head'] + d['hand' + e['name'][-1]], 'tail': e['tail'] + d['hand' + e['name'][-1]]}
              for e in fit.extra]
     return rig_fit.Fit(jf, tails, extra, {**fit.measures, 'formula_shift_cm': round(shift * 100, 1)}, fit.notes)
+
+
+# =============================================================================================
+# Hanging parts (ponytails, scarf tails, coat flaps): bone chains that swing in the game
+# =============================================================================================
+
+def vertex_rgb(ob, tex_path: str) -> np.ndarray:
+    """base colour (0..1) of every vertex, sampled from the texture at its UV"""
+    from PIL import Image
+    img = np.asarray(Image.open(tex_path).convert('RGB'), dtype=np.float32) / 255.0
+    h, w, _ = img.shape
+    me = ob.data
+    li = np.empty(len(me.loops), np.int64)
+    me.loops.foreach_get('vertex_index', li)
+    luv = np.empty(len(me.loops) * 2, np.float32)
+    me.uv_layers.active.data.foreach_get('uv', luv)
+    uv = np.zeros((len(me.vertices), 2), np.float32)
+    uv[li] = luv.reshape(-1, 2)
+    px = np.clip((uv[:, 0] % 1.0) * (w - 1), 0, w - 1).astype(np.int64)
+    py = np.clip((1.0 - uv[:, 1] % 1.0) * (h - 1), 0, h - 1).astype(np.int64)
+    return img[py, px]
+
+
+def hue_mask(rgb: np.ndarray, hues, s_min: float = 0.25, v_min: float = 0.45) -> np.ndarray:
+    mx, mn = rgb.max(1), rgb.min(1)
+    d = np.maximum(mx - mn, 1e-6)
+    r, g, b = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+    h = np.where(mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4)) * 60.0
+    sat = np.where(mx > 0, (mx - mn) / np.maximum(mx, 1e-6), 0)
+    ok = np.zeros(len(rgb), bool)
+    for lo, hi in hues:
+        ok |= (h >= lo) & (h <= hi) if lo <= hi else (h >= lo) | (h <= hi)
+    return ok & (sat >= s_min) & (mx >= v_min)
+
+
+def polyline_project(P: np.ndarray, path: np.ndarray):
+    """distance of every point to the polyline and the arc length of its closest point"""
+    best_d = np.full(len(P), np.inf)
+    best_s = np.zeros(len(P))
+    s0 = 0.0
+    for a, b in zip(path[:-1], path[1:]):
+        ab = b - a
+        L2 = float(ab @ ab)
+        t = np.clip((P - a) @ ab / max(L2, 1e-12), 0, 1)
+        d = np.linalg.norm(P - (a + t[:, None] * ab), axis=1)
+        better = d < best_d
+        best_d[better] = d[better]
+        best_s[better] = s0 + t[better] * math.sqrt(L2)
+        s0 += math.sqrt(L2)
+    return best_d, best_s
+
+
+def select_chains(ob, chains: list, tex_path: str | None) -> list:
+    """per chain: soft membership of every vertex (0..1). Tube around the brief's path, the
+    chain's colours (texture), only the parts connected to its far half, then smoothed over 1.5 cm
+    so dark strand lines in the texture do not leave holes"""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+    V, F = mesh_arrays(ob)
+    rgb = vertex_rgb(ob, tex_path) if tex_path else None
+    e = np.concatenate([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]])
+    tree = cKDTree(V)
+    out = []
+    for c in chains:
+        path = np.asarray(c['path'], float)
+        d, s = polyline_project(V, path)
+        L = float(np.sum(np.linalg.norm(np.diff(path, axis=0), axis=1)))
+        m = d < c.get('radius', 0.08)
+        if rgb is not None and c.get('hues'):
+            m &= hue_mask(rgb, c['hues'], c.get('s_min', 0.25), c.get('v_min', 0.45))
+        # keep the pieces that reach the hanging half (drops trims and patches near the root)
+        keep_e = m[e[:, 0]] & m[e[:, 1]]
+        A = coo_matrix((np.ones(int(keep_e.sum())), (e[keep_e, 0], e[keep_e, 1])), shape=(len(V), len(V)))
+        _, lab = connected_components(A, directed=False)
+        far = np.unique(lab[m & (s > 0.4 * L)])
+        m &= np.isin(lab, far)
+        # soft membership: share of selected vertices within 1.5 cm
+        w = np.zeros(len(V))
+        idx = np.nonzero(d < c.get('radius', 0.08) * 1.15)[0]
+        for i, nb in zip(idx, tree.query_ball_point(V[idx], 0.015)):
+            w[i] = float(np.mean(m[nb])) if nb else 0.0
+        w = np.clip((w - 0.15) / 0.5, 0, 1)
+        out.append({'cfg': c, 'w': w, 's': s, 'L': L})
+        print(f'[chain] {c["name"]}: {int((w > 0.5).sum())} vertices, path {L:.2f} m', flush=True)
+    return out
+
+
+def chain_joints(V: np.ndarray, ch: dict) -> np.ndarray:
+    """medial line of the chain's vertices along its path, resampled to bones + 1 joints"""
+    c, w, s = ch['cfg'], ch['w'], ch['s']
+    root = np.asarray(c['path'][0], float)
+    sel = w > 0.5
+    smax = float(np.percentile(s[sel], 99.5)) if sel.any() else ch['L']
+    nb = 24
+    pts = [root]
+    for k in range(nb):
+        lo, hi = smax * k / nb, smax * (k + 1) / nb
+        bm = sel & (s >= lo) & (s < hi)
+        if bm.sum() > 5:
+            pts.append((V[bm] * w[bm, None]).sum(0) / w[bm].sum())
+    pts = np.array(pts)
+    if len(pts) > 4:
+        sm = pts.copy()
+        sm[1:-1] = (pts[:-2] + 2 * pts[1:-1] + pts[2:]) / 4
+        pts = sm
+    arc = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))])
+    n = int(c.get('bones', 4))
+    return np.array([np.array([np.interp(t, arc, pts[:, i]) for i in range(3)]) for t in np.linspace(0, arc[-1], n + 1)])
+
+
+def chain_bones(chains: list, V: np.ndarray) -> list:
+    out = []
+    for ch in chains:
+        c = ch['cfg']
+        J = chain_joints(V, ch)
+        ch['joints'] = J
+        ch['names'] = [f'{c["name"]}_{i}' for i in range(len(J) - 1)]
+        for i, b in enumerate(ch['names']):
+            out.append({'name': b, 'head': V_(J[i]), 'tail': V_(J[i + 1]), 'parent': c['parent'] if i == 0 else ch['names'][i - 1]})
+    return out
+
+
+def V_(p):
+    return V((float(p[0]), float(p[1]), float(p[2])))
+
+
+def apply_chain_weights(ob, chains: list) -> None:
+    """chain vertices: their bone heat weights fade into the chain bones past the root (8 cm), by
+    their position along the chain"""
+    Vw, _ = mesh_arrays(ob)
+    tab = K.weights_table(ob)
+    for ch in chains:
+        J, names, w = ch['joints'], ch['names'], ch['w']
+        blend = float(ch['cfg'].get('root_blend', 0.08))
+        d, s = polyline_project(Vw, J)
+        seg = np.linalg.norm(np.diff(J, axis=0), axis=1)
+        cum = np.concatenate([[0], np.cumsum(seg)])
+        for vi in np.nonzero(w > 0.01)[0]:
+            x = np.clip(s[vi] / blend, 0, 1)
+            wc = w[vi] * x * x * (3 - 2 * x)
+            if wc <= 0.01:
+                continue
+            f = np.clip(np.searchsorted(cum, s[vi]) - 1, 0, len(names) - 1)
+            fr = np.clip((s[vi] - cum[f]) / max(seg[f], 1e-6), 0, 1)
+            new = {k: v * (1 - wc) for k, v in tab[vi].items()}
+            # the joint at the start of bone f belongs to bone f-1's end: blend across it
+            if fr < 0.5 and f > 0:
+                a = 0.5 + fr
+                new[names[f]] = new.get(names[f], 0) + wc * a
+                new[names[f - 1]] = new.get(names[f - 1], 0) + wc * (1 - a)
+            elif fr >= 0.5 and f + 1 < len(names):
+                a = 1.5 - fr
+                new[names[f]] = new.get(names[f], 0) + wc * a
+                new[names[f + 1]] = new.get(names[f + 1], 0) + wc * (1 - a)
+            else:
+                new[names[f]] = new.get(names[f], 0) + wc
+            tab[vi] = new
+    K.set_weights(ob, tab)
+    K.clean_weights(ob)
 
 
 # =============================================================================================
@@ -459,12 +626,15 @@ def compare_truth(fit: rig_fit.Fit, truth_path: str, info: dict) -> dict:
     return errs
 
 
-def from_brief(name: str) -> tuple:
-    """(model GLB of the latest finished 'model' task, the brief's import settings, job.json)"""
+def from_brief(name: str, need_model: bool = True) -> tuple:
+    """(model GLB of the latest finished 'model' task, the brief's import settings, job.json);
+    with need_model False (the GLB is given on the command line) only the settings are needed"""
     meshy = os.path.join(ROOT, 'tools', 'meshy')
     brief = json.load(open(os.path.join(meshy, 'briefs', f'{name}.json')))
     job_path = os.path.join(meshy, 'jobs', brief['name'], 'job.json')
     if not os.path.exists(job_path):
+        if not need_model:
+            return None, brief.get('import', {}), None
         sys.exit(f'no Meshy job for "{name}" yet ({job_path}): run tools/meshy/meshy.py model {name} first')
     job = json.load(open(job_path))
     done = [t for t in job['tasks'] if t['step'] == 'model' and t['status'] == 'SUCCEEDED']
@@ -498,12 +668,13 @@ def main():
 
     settings = {}
     if a.brief:
-        model, settings, job_path = from_brief(a.brief)
+        model, settings, job_path = from_brief(a.brief, need_model=not a.model)
         a.model = a.model or model
         a.source = a.source or job_path
         a.id = a.id or a.brief
         a.glb = a.glb or os.path.join(ROOT, 'public', 'models', 'generated', f'{a.id}.glb')
-        a.render = a.render or os.path.join(os.path.dirname(job_path), 'import')
+        a.render = a.render or os.path.join(ROOT, 'tools', 'meshy', 'jobs', a.brief, 'import')
+        a.tris = a.tris or settings.get('tris', 0)
     if not a.model:
         ap.error('give the model GLB or --brief')
     a.id = a.id or 'rex'
@@ -530,7 +701,12 @@ def main():
         for p in ob.data.polygons:
             p.material_index = 0
 
+    # hanging parts (brief: import.chains) are found first and left out of the skeleton fit
+    chains = select_chains(ob, settings.get('chains', []), tex) if settings.get('chains') else []
     Vw, F = mesh_arrays(ob)
+    if chains:
+        on_chain = np.max([ch['w'] for ch in chains], axis=0) > 0.3
+        F = F[~on_chain[F].any(axis=1)]
     fit = rig_fit.fit(Vw, F, hand_frac=a.hand)
     for n in fit.notes:
         print('  note:', n)
@@ -538,15 +714,24 @@ def main():
     if a.truth:
         compare_truth(fit, a.truth, info)
     if needs_tpose(fit):
-        fit = straighten(ob, fit, a.voxel)
+        fit = straighten(ob, fit, a.voxel, hold=[(ch['w'] > 0.05, ch['cfg']['parent']) for ch in chains])
 
     spec = rig_fit.fit_spec(fit.joints, female, bulk)
     print('[spec]', spec, flush=True)
     fit = on_formula(fit, spec)
+    if chains:
+        Vw, _ = mesh_arrays(ob)
+        fit.extra = fit.extra + chain_bones(chains, Vw)
     arm = armature_from_fit(f'{a.id}_rig', fit)
     heat_weights(ob, arm, K.GAME_BONES + FINGERS, a.voxel)
+    if chains:
+        apply_chain_weights(ob, chains)
     arm['ggg_spec'] = json.dumps(spec)
-    arm['ggg_chains'] = json.dumps([])
+    arm['ggg_chains'] = json.dumps([
+        {'bones': ch['names'], 'parent': ch['cfg']['parent'],
+         'joints': [[round(float(c), 5) for c in K.b2g(V_(j))] for j in ch['joints']],
+         **({'opts': ch['cfg']['dynamics']} if ch['cfg'].get('dynamics') else {})}
+        for ch in chains])
     arm['ggg_sockets'] = json.dumps(sockets(spec, fit.joints))
     src = {'generator': 'meshy', 'file': os.path.relpath(os.path.abspath(a.model), ROOT), 'height': height}
     if a.source and os.path.exists(a.source):

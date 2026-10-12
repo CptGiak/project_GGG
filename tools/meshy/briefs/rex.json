@@ -1,6 +1,6 @@
 {
   "name": "rex",
-  "_about": "REX, The Headliner. Prompts from docs/art/character-prompts.md; design references are the in-game renders in docs/art/refs. Keys starting with _ are notes and are not sent.",
+  "_about": "REX, The Headliner. Prompts from docs/art/character-prompts.md; design references are the in-game renders in docs/art/refs. Keys starting with _ are notes and are not sent. The first model (Meshy_AI_Purple_Beat_Vanguard) was made in the Meshy web app.",
   "concept": [
     {
       "shot": "front",
@@ -8,7 +8,10 @@
       "body": {
         "ai_model": "nano-banana-pro",
         "prompt": "I'm uploading two renders of the current in-game model of REX (front and back). Use them as the design reference: keep the outfit, the color palette, the hairstyle and the accessories, but redraw the character as a refined, higher-detail anime design with better proportions and cleaner shapes. Ignore the weapon.\n\nFull-body character model sheet, front view, of REX, an original character for a stylish anime action game. A relaxed confident young man, about 1.80 m, with dark brown skin, short black spiky hair on top and teal shaved undercut sides. He wears purple holographic shades with a thin gold frame; his teal eyes are visible behind the lenses. Oversized open purple hoodie with gold zipper trim, white drawstrings and the hood bunched at the back of the neck, sleeves pushed to the elbows; black t-shirt with a gold music-note print; a gold chain; large black DJ headphones resting around his neck with gold rings and violet centers. Black cargo trousers with side pockets, white sneakers, a black tech bracer with a small violet light on the left forearm, a gold ring bracelet on the right wrist. A compact mechanical grappling-gear belt around the hips with two dark gas canisters accented in violet.\n\nThe character stands in a clean T-pose facing the camera: arms held straight out to the sides at shoulder height, palms facing down, fingers together, legs straight and slightly apart, feet flat on the ground, neutral expression. The whole figure is visible from the top of the hair to the soles of the shoes, centered with a small margin. Empty hands, no weapon.\n\nModern anime cel-shaded rendering like a polished Japanese action-RPG character model sheet: crisp clean lineart, flat vivid colors with simple two-tone shading, soft even studio lighting. Plain light grey background. Portrait 3:4 format.",
-        "reference_image_urls": ["@docs/art/refs/rex_front.png", "@docs/art/refs/rex_back.png"]
+        "reference_image_urls": [
+          "@docs/art/refs/rex_front.png",
+          "@docs/art/refs/rex_back.png"
+        ]
       }
     },
     {
@@ -17,7 +20,10 @@
       "body": {
         "ai_model": "nano-banana-pro",
         "prompt": "The first image is the character sheet of REX (front view). Using it as strict reference (same design, colors, proportions and line style), draw the same character from directly behind, in the same T-pose, with the same soft even lighting and plain light grey background. The second image is a render of the old in-game model from behind, for the back details only. Show every back detail clearly: the hood bunched at the back of the neck and a large back print on the hoodie: a gold crown above a big gold music note, with a short violet neon line underneath. Empty hands, no weapon. Portrait 3:4 format.",
-        "reference_image_urls": ["@concept:front", "@docs/art/refs/rex_back.png"]
+        "reference_image_urls": [
+          "@concept:front",
+          "@docs/art/refs/rex_back.png"
+        ]
       }
     }
   ],
@@ -25,7 +31,10 @@
     "_why": "front + back views (fewer guesses on the back), T-pose for the rig, Meshy's own remesh to a game budget so the texture is baked on the final mesh, no lighting baked into the colors, no 'enhancement' of the anime style",
     "endpoint": "multi-image-to-3d",
     "body": {
-      "image_urls": ["@concept:front", "@concept:back"],
+      "image_urls": [
+        "@concept:front",
+        "@concept:back"
+      ],
       "ai_model": "latest",
       "pose_mode": "t-pose",
       "should_texture": true,
@@ -40,7 +49,8 @@
     "_why": "settings for tools/blender/import_generated.py --brief rex: height from the soles to the tip of the hair (about 1.80 m of body + the spikes), the 'heavy' build of the procedural Rex",
     "height": 1.87,
     "bulk": 1.12,
-    "female": false
+    "female": false,
+    "tris": 40000
   },
   "rig": {
     "_why": "optional (5 credits): Meshy's skin weights, mapped onto the game bones by tools/blender/import_generated.py",

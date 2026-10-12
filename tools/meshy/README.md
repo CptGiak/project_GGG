@@ -63,6 +63,43 @@ Prompt, riferimenti e parametri stanno in `briefs/rex.json`:
 Le chiavi che iniziano con `_` sono note e non vengono inviate. Una stringa `"@percorso"` è
 un'immagine locale; `"@concept:front"` è l'immagine generata da quello scatto.
 
+## Modelli fatti nell'app web di Meshy
+
+Un GLB scaricato dall'app web di Meshy entra nel gioco allo stesso modo, senza passare
+dall'API. La scheda dà altezza, corporatura, budget di triangoli e catene:
+
+```bash
+PY=/root/blender-venv/bin/python
+$PY tools/blender/import_generated.py Meshy_AI_Purple_Beat_Vanguard_texture.glb --brief rex --render <cartella>
+$PY tools/blender/import_generated.py Meshy_AI_Neon_Pulse_Warrior_texture.glb --brief nova --render <cartella>
+```
+
+Il risultato va in `public/models/generated/<id>.glb` e si vede con `?rex=meshy` e `?nova=meshy`.
+I due modelli attuali sono fatti così: gli originali (650–730 mila triangoli, texture 2048) restano
+fuori dal repository e vengono ridotti a 40.000 triangoli.
+
+![Rex e Nova da Meshy](../../docs/art/meshy/meshy_rex_nova.jpg)
+
+### Catene: coda di cavallo, sciarpe, falde
+
+Una parte lunga che pende va dichiarata nella scheda (`import.chains`, esempio in
+`briefs/nova.json`), altrimenti i pesi automatici la incollano a cosce e braccia:
+
+- `path`: la linea della catena nel modello inquadrato, in metri, con X a sinistra del
+  personaggio, Y verso la schiena e Z in alto. Si misura sulle viste con la griglia.
+- `radius`: quanto lontano dalla linea prendere i vertici.
+- `hues`: i colori della texture che appartengono alla catena, per non prendere il corpo che sta
+  vicino.
+- `parent`: l'osso a cui è appesa.
+- `bones`: quante ossa ha.
+- `dynamics`: le molle nel gioco (`stiffness`, `falloff`, `damping`, `gravity`).
+
+La catena deve partire dove la stoffa o i capelli si staccano dal corpo. Il tratto appoggiato su
+schiena o petto resta rigido: dentro le sfere di collisione del gioco una catena verrebbe spinta
+fuori e la stoffa si stirerebbe ad ala. Le catene vengono escluse dalla ricerca dello scheletro;
+le loro ossa seguono la linea centrale dei vertici, e il peso passa dall'osso padre alla catena
+nei primi 8 cm.
+
 ## Cosa fa l'importatore
 
 `tools/blender/import_generated.py` prende il GLB di Meshy così com'è (forma e texture) e
@@ -74,12 +111,18 @@ aggiunge quello che serve al gioco:
 2. **Scheletro dalla forma** (`tools/blender/rig_fit.py`), dalla sagoma frontale e dalla
    profondità del corpo:
    - cavallo, caviglie (dove il piede si stringe nello stinco) e ginocchia;
-   - ascelle, linea mediana delle braccia e polsi, dove la sezione tonda dell'avambraccio
-     diventa la mano piatta;
+   - ascelle, linea mediana delle braccia, nocche e polsi;
    - colonna, collo e testa con le proporzioni del Rig.
 
-   Un braccio che pende viene rimisurato dopo averlo ruotato in orizzontale. Il palmo si
-   riconosce dal lato del pollice.
+   Dettagli:
+   - **Braccio:** viene seguito colonna per colonna dalla mano verso il busto, in una fetta
+     di profondità attorno alle mani, così ciocche sopra e capelli dietro non contano.
+   - **Ascella:** sta dove il bordo inferiore cade sul busto o scende di un gradino netto,
+     per esempio l'orlo di una giacca corta.
+   - **Polso:** a una lunghezza di dita dalle nocche, nel punto più stretto. Le nocche sono il
+     calo di spessore dal palmo alle dita.
+   - **Braccio che pende:** viene rimisurato dopo averlo ruotato in orizzontale.
+   - **Palmo:** si riconosce dal lato del pollice.
 3. **T-pose.** Se le braccia pendono, i gomiti o le gambe sono piegati, o i palmi non guardano
    in basso, un rig provvisorio raddrizza il modello come i GLB del gioco: braccia lungo X,
    gambe verticali, palmi in giù.
@@ -113,8 +156,8 @@ Prove fatte:
 
 ![sostituto](../../docs/art/meshy/importatore_sostituto.jpg)
 
-Il sostituto **non** è un modello Meshy e non è nel repository come tale. La prima generazione
-vera va controllata col foglio in `jobs/rex/import/` e nel gioco.
+Il sostituto **non** è un modello Meshy e non è nel repository come tale. I modelli veri di Rex
+e Nova, fatti nell'app web, sono quelli dell'immagine qui sopra.
 
 ## Limiti
 

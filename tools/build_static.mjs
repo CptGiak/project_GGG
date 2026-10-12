@@ -69,7 +69,9 @@ fs.rmSync(tmp, { recursive: true, force: true });
 const pack = (files) => JSON.stringify(Object.fromEntries(files.map((p) => [p, fs.readFileSync(path.join(root, 'public', p)).toString('base64')])));
 const glbs = (dir, pre) =>
   fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? glbs(path.join(dir, d.name), `${pre}${d.name}/`) : d.name.endsWith('.glb') ? [`${pre}${d.name}`] : []));
-fs.writeFileSync(path.join(out, 'models.json'), pack(glbs(path.join(root, 'public/models'), 'models/').filter((p) => !p.startsWith('models/arenas/'))));
+// (models/generated/: the Meshy models are opt-in, ?rex=meshy / ?nova=meshy, so they stay out of
+// the one file every static build downloads)
+fs.writeFileSync(path.join(out, 'models.json'), pack(glbs(path.join(root, 'public/models'), 'models/').filter((p) => !p.startsWith('models/arenas/') && !p.startsWith('models/generated/'))));
 // arena art (textures and kits of public/models/arenas) -> arenas.json, read by src/world/ArenaArt.ts
 const arenaFiles = fs.readdirSync(path.join(root, 'public/models/arenas')).filter((f) => /\.(png|glb)$/.test(f));
 fs.writeFileSync(path.join(out, 'arenas.json'), pack(arenaFiles.map((f) => `models/arenas/${f}`)));

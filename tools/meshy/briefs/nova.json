@@ -1,0 +1,171 @@
+{
+  "name": "nova",
+  "_about": "NOVA, Glitch Ronin. Prompts from docs/art/character-prompts.md; design references are the in-game renders in docs/art/refs. Keys starting with _ are notes and are not sent. The first model (Meshy_AI_Neon_Pulse_Warrior) was made in the Meshy web app.",
+  "concept": [
+    {
+      "shot": "front",
+      "endpoint": "image-to-image",
+      "body": {
+        "ai_model": "nano-banana-pro",
+        "prompt": "I'm uploading two renders of the current in-game model of NOVA (front and back). Use them as the design reference: keep the outfit, the color palette, the hairstyle and the accessories, but redraw the character as a refined, higher-detail anime design with better proportions and cleaner shapes. Ignore the weapons.\n\nFull-body character model sheet, front view, of NOVA, an original character for a stylish anime action game. A slim agile young woman, about 1.68 m, with hot-pink spiky hair tied in a high ponytail whose long tail fades from pink to cyan, and a side-swept bang. A thin cyan holographic visor band sits across her eyes; her magenta eyes are visible through it. Cropped black bomber jacket with glowing cyan neon piping on the seams and cuffs, black crop top, bare midriff, black shorts over dark purple tights with small cyan glowing knee accents, white sneakers with hot-pink soles. A long scarf fading from pink to cyan around her neck, fingerless black gloves with white wrist wraps, small gold earrings. A compact mechanical grappling-gear belt around the hips with two dark gas canisters accented in cyan.\n\nThe character stands in a clean T-pose facing the camera: arms held straight out to the sides at shoulder height, palms facing down, fingers together, legs straight and slightly apart, feet flat on the ground, neutral expression. The ponytail and the scarf hang freely away from the arms. The whole figure is visible from the top of the hair to the soles of the shoes, centered with a small margin. Empty hands, no weapons.\n\nModern anime cel-shaded rendering like a polished Japanese action-RPG character model sheet: crisp clean lineart, flat vivid colors with simple two-tone shading, soft even studio lighting. Plain light grey background. Portrait 3:4 format.",
+        "reference_image_urls": [
+          "@docs/art/refs/nova_front.png",
+          "@docs/art/refs/nova_back.png"
+        ]
+      }
+    },
+    {
+      "shot": "back",
+      "endpoint": "image-to-image",
+      "body": {
+        "ai_model": "nano-banana-pro",
+        "prompt": "The first image is the character sheet of NOVA (front view). Using it as strict reference (same design, colors, proportions and line style), draw the same character from directly behind, in the same T-pose, with the same soft even lighting and plain light grey background. The second image is a render of the old in-game model from behind, for the back details only. Show every back detail clearly: the ponytail hanging down the spine, the scarf tails, and a small glitched letter \"N\" patch on the right shoulder blade of the jacket (white letter with offset cyan and magenta copies and a few thin horizontal glitch bars). Empty hands, no weapons. Portrait 3:4 format.",
+        "reference_image_urls": [
+          "@concept:front",
+          "@docs/art/refs/nova_back.png"
+        ]
+      }
+    }
+  ],
+  "model": {
+    "endpoint": "multi-image-to-3d",
+    "body": {
+      "image_urls": [
+        "@concept:front",
+        "@concept:back"
+      ],
+      "ai_model": "latest",
+      "pose_mode": "t-pose",
+      "should_texture": true,
+      "should_remesh": true,
+      "topology": "triangle",
+      "target_polycount": 40000,
+      "remove_lighting": true,
+      "image_enhancement": false
+    }
+  },
+  "import": {
+    "_why": "height from the soles to the tip of the hair (about 1.68 m of body + the spikes); the 'female' body of the procedural Nova. Chains: the hanging parts that swing in the game, paths in the framed model (metres, X = her left, Y = back, Z = up) measured on the grid renders, starting where the part leaves the body (the stretch lying on the back or chest stays rigid on the chest: inside the game's collision spheres a chain is pushed out); hues pick the pink-lilac-cyan gradient of hair and scarf; stiff springs keep the modelled shape and swing around it",
+    "height": 1.76,
+    "bulk": 0.86,
+    "female": true,
+    "tris": 40000,
+    "chains": [
+      {
+        "name": "ponytail",
+        "parent": "head",
+        "path": [
+          [
+            0.06,
+            0.12,
+            1.62
+          ],
+          [
+            0.16,
+            0.26,
+            1.5
+          ],
+          [
+            0.26,
+            0.3,
+            1.25
+          ],
+          [
+            0.3,
+            0.28,
+            1.08
+          ],
+          [
+            0.26,
+            0.27,
+            0.93
+          ]
+        ],
+        "radius": 0.09,
+        "bones": 5,
+        "hues": [
+          [
+            165,
+            355
+          ]
+        ],
+        "dynamics": {
+          "stiffness": 0.2,
+          "falloff": 0.6,
+          "damping": 0.9,
+          "gravity": 6
+        }
+      },
+      {
+        "name": "scarfBack",
+        "parent": "chest",
+        "path": [
+          [
+            -0.17,
+            0.15,
+            1.08
+          ],
+          [
+            -0.27,
+            0.17,
+            0.82
+          ],
+          [
+            -0.35,
+            0.17,
+            0.62
+          ]
+        ],
+        "radius": 0.08,
+        "bones": 3,
+        "hues": [
+          [
+            165,
+            355
+          ]
+        ],
+        "dynamics": {
+          "stiffness": 0.18,
+          "falloff": 0.6,
+          "damping": 0.92,
+          "gravity": 6
+        }
+      },
+      {
+        "name": "scarfFront",
+        "parent": "chest",
+        "path": [
+          [
+            -0.03,
+            -0.13,
+            1.1
+          ],
+          [
+            -0.03,
+            -0.13,
+            0.9
+          ],
+          [
+            -0.02,
+            -0.13,
+            0.68
+          ]
+        ],
+        "radius": 0.06,
+        "bones": 3,
+        "hues": [
+          [
+            165,
+            355
+          ]
+        ],
+        "dynamics": {
+          "stiffness": 0.18,
+          "falloff": 0.6,
+          "damping": 0.92,
+          "gravity": 6
+        }
+      }
+    ]
+  }
+}

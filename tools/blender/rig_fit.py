@@ -103,6 +103,37 @@ class Silhouette:
             break
         return top, k
 
+    def runs(self, i: int, gap: int = 2) -> list:
+        """(top, bottom) rows of every run of filled pixels in column i, top first (gaps <= gap
+        bridged)"""
+        rows = np.nonzero(self.occ[i])[0]
+        if len(rows) == 0:
+            return []
+        out = []
+        start = prev = int(rows[0])
+        for r in rows[1:]:
+            r = int(r)
+            if r - prev > gap + 1:
+                out.append((prev, start))
+                start = r
+            prev = r
+        out.append((prev, start))
+        return out[::-1]
+
+    def track(self, i: int, prev: tuple | None):
+        """the run of column i that continues `prev` (largest overlap, else the nearest); the
+        topmost run when there is no previous one"""
+        rs = self.runs(i)
+        if not rs:
+            return None
+        if prev is None:
+            return rs[0]
+        pt, pb = prev
+        best = max(rs, key=lambda r: (min(r[0], pt) - max(r[1], pb), -abs((r[0] + r[1]) - (pt + pb))))
+        if min(best[0], pt) - max(best[1], pb) < -3:
+            best = min(rs, key=lambda r: abs((r[0] + r[1]) - (pt + pb)))
+        return best
+
     def depth_mid(self, i: int, k0: int, k1: int) -> tuple:
         lo = self.ymin[i, k0:k1 + 1]
         hi = self.ymax[i, k0:k1 + 1]
@@ -177,15 +208,20 @@ def fit(V: np.ndarray, F: np.ndarray, hand_frac: float = 0.09) -> Fit:
         T['shin' + s] = J['foot' + s]
 
     # ---- arms -----------------------------------------------------------------------------------
+    # the arms are read in a slab of depth around the hands: hair or a scarf hanging behind or in
+    # front of an arm would otherwise merge with it in the frontal silhouette
+    reach = np.abs(P[:, 0]) > 0.85 * np.abs(P[:, 0]).max()
+    y_arm = float(np.median(P[reach, 1])) if reach.any() else 0.0
+    SA = Silhouette(P[np.abs(P[:, 1] - y_arm) < 0.065 * H], S.c)
     arm_info = {}
     for s, sx in (('L', 1.0), ('R', -1.0)):
-        side, tip_i = arm_side(S, P, sx, H)
-        if abs(S.x(tip_i) - S.x(side)) < 0.2 * H:
-            notes.append(f'arm {s}: short ({abs(S.x(tip_i) - S.x(side)):.2f} m from the torso side): arms close to the body?')
-        x_side = float(S.x(side))
+        side, tip_i, arm_runs = arm_side(SA, P, sx, H)
+        if abs(SA.x(tip_i) - SA.x(side)) < 0.2 * H:
+            notes.append(f'arm {s}: short ({abs(SA.x(tip_i) - SA.x(side)):.2f} m from the torso side): arms close to the body?')
+        x_side = float(SA.x(side))
         step = 1 if sx > 0 else -1
-        L, th, dp = medial_line(S, range(side + step, tip_i + step, step))
-        a = arm_joints(L, th, dp, x_side, sx, H, hand_frac, float(S.x(tip_i)), S.c)
+        L, th, dp = medial_line(SA, range(side + step, tip_i + step, step), arm_runs)
+        a = arm_joints(L, th, dp, x_side, sx, H, hand_frac, float(SA.x(tip_i)), SA.c)
         drop = math.degrees(math.atan2(a['sh'][2] - a['tip'][2], abs(a['tip'][0] - a['sh'][0])))
         if abs(drop) > 12:
             # hanging arm: measure it again turned horizontal about the shoulder (the columns then
@@ -194,7 +230,7 @@ def fit(V: np.ndarray, F: np.ndarray, hand_frac: float = 0.09) -> Fit:
             d = a['tip'] - sh
             seg_t = np.clip((P - sh) @ d / (d @ d), 0, 1)
             near = np.linalg.norm(P - (sh + seg_t[:, None] * d), axis=1) < 0.1 * H
-            Q = P[near & ((P - sh) @ d > -0.01 * H)] - sh
+            Q = P[near & ((P - sh) @ d > -0.01 * H) & (np.abs(P[:, 1] - y_arm) < 0.065 * H)] - sh
             phi = -sx * math.radians(drop)
             R = np.array([[math.cos(phi), 0, math.sin(phi)], [0, 1, 0], [-math.sin(phi), 0, math.cos(phi)]])
             Qr = Q @ R.T + sh
@@ -209,8 +245,9 @@ def fit(V: np.ndarray, F: np.ndarray, hand_frac: float = 0.09) -> Fit:
             a['hand_len'], a['bent'], a['wrist_found'], a['palm'] = a2['hand_len'], a2['bent'], a2['wrist_found'], a2['palm']
             notes.append(f'arm {s}: hanging {drop:.0f} deg, measured again turned horizontal')
         meas[f'arm_bend{s}'] = round(a['bent'] / H * 100, 1)
+        meas[f'wrist_by{s}'] = a['wrist_found'] or 'narrowest'
         if not a['wrist_found']:
-            notes.append(f'arm {s}: wrist from the narrowest section (no flat hand found)')
+            notes.append(f'arm {s}: wrist from the narrowest section (no knuckles or flat hand found)')
         J['upperArm' + s] = a['sh']
         J['foreArm' + s] = a['elbow']
         J['hand' + s] = a['wrist']
@@ -263,32 +300,59 @@ def fit(V: np.ndarray, F: np.ndarray, hand_frac: float = 0.09) -> Fit:
 
 
 def arm_side(S: Silhouette, P: np.ndarray, sx: float, H: float):
-    """(torso side column, fingertip column): from the fingertips inwards the topmost run of each
-    column is the arm's section; at the torso it suddenly reaches far down (below the armpit)"""
+    """(torso side column, fingertip column, the arm's run per column). From the fingertips
+    inwards the arm's section is followed run to run (hair spikes above it or things hanging
+    below are other runs). The torso starts where the underside of that run
+    - drops far down (the body continues below the armpit), or
+    - steps down by more than half the arm's thickness and stays down (a cropped jacket over a
+      narrower waist)."""
     tip_i = S.i(float(P[:, 0].max())) if sx > 0 else S.i(float(P[:, 0].min()))
     step = 1 if sx > 0 else -1
-    side, prev, prev_bot = None, None, None
+    cols, prev, runs = [], None, {}
     for i in range(tip_i, S.i(0.0), -step):
-        r = S.top_run(i)
+        r = S.track(i, runs.get(prev))
         if not r:
             continue
-        bot = float(S.z(r[1]))
-        if prev is not None and bot < prev_bot - 0.1 * H:
-            side = prev
+        runs[i] = r
+        cols.append(i)
+        if prev is not None and S.z(r[1]) < S.z(runs[prev][1]) - 0.1 * H:
             break
-        prev, prev_bot = i, bot
-    if side is None or abs(S.x(side)) < 0.08 * H:
+        prev = i
+    bot = np.array([float(S.z(runs[i][1])) for i in cols])
+    thick = np.array([float((runs[i][0] - runs[i][1] + 1) * S.c) for i in cols])
+    out = np.abs(np.array([float(S.x(i)) for i in cols]) - float(S.x(tip_i)))
+    w = max(3, int(0.05 * H / S.c))
+    hold = max(2, int(0.02 * H / S.c))
+    side = None
+    for k in range(w, len(cols)):
+        if bot[k] < bot[k - 1] - 0.1 * H:
+            side = cols[k - 1]
+            break
+        # the step-down test only past the hand and forearm (fingers to palm is a step too)
+        if out[k] < 0.15 * H:
+            continue
+        ref = float(np.median(bot[k - w:k]))
+        th = float(np.median(thick[(out > 0.1 * H) & (out <= out[k])]))
+        drop = max(0.6 * th, 0.025 * H)
+        if len(bot[k:k + hold]) == hold and (bot[k:k + hold] < ref - drop).all():
+            side = cols[k - 1]
+            break
+    if side is None or abs(S.x(side)) < 0.04 * H:
         raise RuntimeError('an arm does not separate from the torso (arms down or touching the body?)')
-    return side, tip_i
+    return side, tip_i, {i: runs[i] for i in cols if (i - side) * step > 0}
 
 
-def medial_line(S: Silhouette, cols):
-    """per column: middle of the topmost run (x, y, z), its height and its depth"""
+def medial_line(S: Silhouette, cols, runs: dict | None = None):
+    """per column: middle of the arm's run (x, y, z), its height and its depth. `runs`: the run of
+    each column found by arm_side; else the run is followed from the first column"""
     line = []
+    prev = None
     for i in cols:
-        r = S.top_run(i)
+        r = runs.get(i) if runs else None
+        r = r or S.track(i, prev)
         if not r:
             continue
+        prev = r
         top, bot = r
         y, depth = S.depth_mid(i, bot, top)
         line.append((float(S.x(i)), y, float(S.z((top + bot) / 2)), float((top - bot + 1) * S.c), depth))
@@ -310,25 +374,42 @@ def arm_joints(L, th, dp, x_side: float, sx: float, H: float, hand_frac: float, 
     # ball sits above the armpit, halfway up the arm's section)
     j0 = int(np.argmin(np.abs(out - 0.006 * H)))
     sh = L[j0].copy()
-    # wrist: where the round section of the forearm flattens into the hand (palm down: thin in z
-    # and wide in y; palm forward: the other way round), searched around the expected hand
-    # length; else the narrowest section there
     d_tip = arc[-1] - arc
     want = hand_frac * H
     ratio = np.log(np.maximum(dp, 1e-6) / np.maximum(th, 1e-6))
-    fore = (d_tip > 1.6 * want) & (d_tip < 2.6 * want)
-    base = float(np.median(ratio[fore])) if fore.sum() > 3 else float(np.median(ratio))
-    flat = np.abs(ratio - base) > math.log(1.2)
-    run = max(2, int(0.012 * H / cell))
-    wi, found = None, True
-    for i in np.nonzero((d_tip < 1.6 * want) & (d_tip > 0.5 * want))[0]:
-        if flat[i:i + run].all():
-            wi = max(int(i) - 1, 0)
-            break
+    area = th * np.where(dp > 0, dp, th)
+    thick = np.minimum(th, np.where(dp > 0, dp, th))       # the hand's thickness, palm down or forward
+    k = max(2, int(0.01 * H / cell))
+    wi, found, knuckle_i = None, 'knuckles', None
+    # 1. knuckles: the thickness drops sharply from the palm to the fingers held together; the
+    #    wrist is about one finger length further in (palm ~ 1.1 x fingers), at the narrowest
+    #    section there
+    cand = [i for i in range(k, len(L) - k) if 0.03 * H < d_tip[i] < 0.085 * H]
+    if cand:
+        drop = np.array([np.median(thick[i - k:i]) / max(np.median(thick[i + 1:i + 1 + k]), 1e-6) for i in cand])
+        j = int(np.argmax(drop))
+        if drop[j] > 1.5:
+            knuckle_i = cand[j]
+            target = d_tip[knuckle_i] * 2.1
+            near = np.nonzero(np.abs(d_tip - target) < 0.012 * H)[0]
+            if len(near):
+                wi = int(near[np.argmin(area[near])])
+    # 2. where the round forearm section flattens into the hand (palm down: thin in z and wide in y;
+    #    palm forward: the other way round), around the expected hand length
     if wi is None:
-        found = False
+        found = 'flattening'
+        fore = (d_tip > 1.6 * want) & (d_tip < 2.6 * want)
+        base = float(np.median(ratio[fore])) if fore.sum() > 3 else float(np.median(ratio))
+        flat = np.abs(ratio - base) > math.log(1.2)
+        run = max(2, int(0.012 * H / cell))
+        for i in np.nonzero((d_tip < 1.6 * want) & (d_tip > 0.5 * want))[0]:
+            if flat[i:i + run].all():
+                wi = max(int(i) - 1, 0)
+                break
+    # 3. the narrowest section around the expected hand length
+    if wi is None:
+        found = ''
         win = (d_tip > 0.6 * want) & (d_tip < 1.45 * want)
-        area = th * np.where(dp > 0, dp, th)
         score = area * (1 + 1.5 * ((d_tip - want) / want) ** 2)
         wi = int(np.nonzero(win)[0][np.argmin(score[win])]) if win.any() else int(np.argmin(np.abs(d_tip - want)))
     wrist = L[wi].copy()
@@ -353,8 +434,9 @@ def arm_joints(L, th, dp, x_side: float, sx: float, H: float, hand_frac: float, 
     rel = L[:wi + 1] - sh
     t = np.clip(rel @ chord / max(chord @ chord, 1e-9), 0, 1)
     bent = float(np.linalg.norm(rel - t[:, None] * chord[None], axis=1).max())
-    return {'sh': sh, 'elbow': elbow, 'wrist': wrist, 'tip': tip, 'knuckle': wrist + 0.6 * (tip - wrist),
-            'ftip': wrist + 0.8 * (tip - wrist), 'armpit_z': armpit_z, 'th0': float(th[j0]),
+    knuckle = L[knuckle_i].copy() if knuckle_i is not None else wrist + 0.6 * (tip - wrist)
+    return {'sh': sh, 'elbow': elbow, 'wrist': wrist, 'tip': tip, 'knuckle': knuckle,
+            'ftip': knuckle + 0.5 * (tip - knuckle), 'armpit_z': armpit_z, 'th0': float(th[j0]),
             'hand_len': float(d_tip[wi]), 'bent': bent, 'wrist_found': found, 'palm': palm}
 
 

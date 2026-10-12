@@ -4,6 +4,7 @@ import type { ChampionVisual } from './types';
 import { buildKaiser } from './kaiser';
 import { buildKaiserGlb } from './kaiserGlb';
 import { buildRexGlb } from './rexGlb';
+import { buildNovaGlb } from './novaGlb';
 import { buildNova } from './nova';
 import { buildRex } from './rex';
 import { buildSera } from './sera';
@@ -25,6 +26,7 @@ export const VISUAL_BUILDERS: Record<string, () => ChampionVisual> = {
 const GLB_BUILDERS: Record<string, (gltf: GLTF) => ChampionVisual> = {
   kaiser: buildKaiserGlb,
   rex: buildRexGlb,
+  nova: buildNovaGlb,
   akali: (g) => buildLolGlb('akali', g),
   qiyana: (g) => buildLolGlb('qiyana', g),
   locke: (g) => buildLolGlb('locke', g),

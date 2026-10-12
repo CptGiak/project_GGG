@@ -30,11 +30,12 @@ const MODEL_PATHS: Record<string, string> = {
 };
 /**
  * models tried only on request, with ?<id>=<variant> in the URL, while the procedural one stays
- * the game's default: the sculpted Rex (tools/blender/build_rex.py, ?rex=glb) and the Rex made
- * with Meshy (tools/meshy + tools/blender/import_generated.py, ?rex=meshy)
+ * the game's default: the sculpted Rex (tools/blender/build_rex.py, ?rex=glb) and the models made
+ * with Meshy (tools/meshy + tools/blender/import_generated.py: ?rex=meshy, ?nova=meshy)
  */
 const OPT_IN_PATHS: Record<string, Record<string, string>> = {
   rex: { glb: 'models/rex.glb', meshy: 'models/generated/rex.glb' },
+  nova: { meshy: 'models/generated/nova.glb' },
 };
 const cache = new Map<string, GLTF>();
 
@@ -182,7 +183,13 @@ export function instantiateGlb(gltf: GLTF, cfg: GlbChampionConfig): GlbInstance 
   const arm = found[0];
   if (!arm) throw new Error('GLB without ggg_spec extras');
   const spec = JSON.parse(arm.userData.ggg_spec as string) as BodySpec;
-  const chainData = JSON.parse((arm.userData.ggg_chains as string) ?? '[]') as Array<{ bones: string[]; joints: number[][]; parent?: string }>;
+  const chainData = JSON.parse((arm.userData.ggg_chains as string) ?? '[]') as Array<{
+    bones: string[];
+    joints: number[][];
+    parent?: string;
+    /** spring settings of this chain (models made with tools/blender/import_generated.py) */
+    opts?: Partial<{ stiffness: number; falloff: number; damping: number; gravity: number }>;
+  }>;
   const socketData = JSON.parse((arm.userData.ggg_sockets as string) ?? '{}') as Record<string, number[]>;
   const rig = new Rig(spec);
 
@@ -258,7 +265,10 @@ export function instantiateGlb(gltf: GLTF, cfg: GlbChampionConfig): GlbInstance 
     .map((c) => {
       const anchor = bone(c.parent ?? 'hips');
       const bindInv = new THREE.Matrix4().copy(anchor.matrixWorld).invert();
-      return new BoneChain(anchor, c.bones.map(bone), c.joints.map((j) => new THREE.Vector3(j[0], j[1], j[2]).applyMatrix4(bindInv)));
+      const joints = c.joints.map((j) => new THREE.Vector3(j[0], j[1], j[2]).applyMatrix4(bindInv));
+      return c.opts
+        ? new BoneChain(anchor, c.bones.map(bone), joints, { stiffness: 0.12, falloff: 0.55, damping: 0.92, gravity: 9.8, ...c.opts })
+        : new BoneChain(anchor, c.bones.map(bone), joints);
     });
   const extras: Record<string, unknown> = {};
   for (const [k, val] of Object.entries(arm.userData)) {

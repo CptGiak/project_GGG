@@ -54,3 +54,10 @@ Istruzioni e limiti in `tools/meshy/README.md`. In attesa dell'accesso, l'import
 provato su un sostituto: il Rex scolpito fuso in un'unica superficie con una texture.
 
 ![importatore sul sostituto](importatore_sostituto.jpg)
+
+### Rex e Nova veri
+
+Rex e Nova generati nell'app web di Meshy e importati così (`?rex=meshy`, `?nova=meshy`). Coda di
+cavallo e sciarpa di Nova sono catene di ossa che oscillano nel gioco.
+
+![Rex e Nova da Meshy](meshy_rex_nova.jpg)

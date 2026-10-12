@@ -52,10 +52,12 @@ farlo diventare il Rex di default basta spostare `rex` da `OPT_IN_PATHS` a `MODE
 ## Rex da Meshy (`?rex=meshy`)
 
 Il modello scolpito non ha la geometria di un modello Meshy: per quella serve il generatore. Il
-percorso con l'API di Meshy (concept, modello 3D, scheletro trovato dalla forma, pesi) è in
-`tools/meshy/README.md`. Il risultato va in `public/models/generated/rex.glb` e si attiva con
-`?rex=meshy`; finché il file non c'è, il parametro lascia il Rex procedurale. Usa la stessa arma,
-le stesse animazioni e gli stessi socket di questa versione (`src/champions/rexGlb.ts`).
+Rex fatto nell'app web di Meshy (Purple Beat Vanguard) è in `public/models/generated/rex.glb` e si
+attiva con `?rex=meshy`. Lo scheletro è trovato dalla forma, i pesi sono automatici e i triangoli
+40.000 (`tools/meshy/README.md`). Usa la stessa arma, le stesse animazioni e gli stessi socket di
+questa versione (`src/champions/rexGlb.ts`).
+
+![Rex e Nova da Meshy](../meshy/meshy_rex_nova.jpg)
 
 ## Anteprima con lo shader toon
 
