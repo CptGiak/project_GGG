@@ -29,11 +29,12 @@ const MODEL_PATHS: Record<string, string> = {
   locke: 'models/lol/locke.glb',
 };
 /**
- * models tried only on request, with ?<id>=glb in the URL: the sculpted Rex
- * (tools/blender/build_rex.py) stays opt-in while the procedural one is the game's default
+ * models tried only on request, with ?<id>=<variant> in the URL, while the procedural one stays
+ * the game's default: the sculpted Rex (tools/blender/build_rex.py, ?rex=glb) and the Rex made
+ * with Meshy (tools/meshy + tools/blender/import_generated.py, ?rex=meshy)
  */
-const OPT_IN_PATHS: Record<string, string> = {
-  rex: 'models/rex.glb',
+const OPT_IN_PATHS: Record<string, Record<string, string>> = {
+  rex: { glb: 'models/rex.glb', meshy: 'models/generated/rex.glb' },
 };
 const cache = new Map<string, GLTF>();
 
@@ -76,7 +77,10 @@ export async function preloadChampionModels(params?: URLSearchParams, timeoutMs 
   const base = import.meta.env.BASE_URL ?? '/';
   const packed = await packedModels(base);
   const paths = { ...MODEL_PATHS };
-  for (const [id, path] of Object.entries(OPT_IN_PATHS)) if (params?.get(id) === 'glb') paths[id] = path;
+  for (const [id, variants] of Object.entries(OPT_IN_PATHS)) {
+    const v = params?.get(id);
+    if (v && Object.hasOwn(variants, v)) paths[id] = variants[v];
+  }
   await Promise.all(
     Object.entries(paths).map(async ([id, path]) => {
       try {

@@ -40,3 +40,17 @@ di fronte e retro di Kaiser.
   slavati. Il GLB del gioco non è stato cambiato.
 
 ![nel gioco](kaiser_nel_gioco_prima_dopo.jpg)
+
+## La geometria: Meshy vero tramite API
+
+Per la forma serve il generatore. `tools/meshy/` lo usa tramite l'API di Meshy (piano Pro, gli
+stessi crediti del piano):
+1. concept di Rex fronte e retro;
+2. modello 3D in T-pose con texture;
+3. `tools/blender/import_generated.py`, che trova lo scheletro dalla forma, calcola i pesi e lo
+   porta nel gioco dietro `?rex=meshy`.
+
+Istruzioni e limiti in `tools/meshy/README.md`. In attesa dell'accesso, l'importatore è stato
+provato su un sostituto: il Rex scolpito fuso in un'unica superficie con una texture.
+
+![importatore sul sostituto](importatore_sostituto.jpg)

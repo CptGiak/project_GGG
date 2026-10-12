@@ -49,6 +49,14 @@ L'arma di `rexGlb.ts` è inoltre la copia di quella procedurale di prima di quel
 farlo diventare il Rex di default basta spostare `rex` da `OPT_IN_PATHS` a `MODEL_PATHS` in
 `src/champions/glbModels.ts`. Prima conviene unire i due lavori.
 
+## Rex da Meshy (`?rex=meshy`)
+
+Il modello scolpito non ha la geometria di un modello Meshy: per quella serve il generatore. Il
+percorso con l'API di Meshy (concept, modello 3D, scheletro trovato dalla forma, pesi) è in
+`tools/meshy/README.md`. Il risultato va in `public/models/generated/rex.glb` e si attiva con
+`?rex=meshy`; finché il file non c'è, il parametro lascia il Rex procedurale. Usa la stessa arma,
+le stesse animazioni e gli stessi socket di questa versione (`src/champions/rexGlb.ts`).
+
 ## Anteprima con lo shader toon
 
 ![toon](rex_toon.jpg)

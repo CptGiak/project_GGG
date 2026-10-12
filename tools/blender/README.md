@@ -118,3 +118,17 @@ Le skin, la scala, le armi (impugnatura e assi) e gli eventuali pezzi da nascond
 Nel gioco `src/champions/lolGlb.ts` usa lo stesso retarget di Kaiser (`glbModels.ts`). Le armi stanno
 su perni attaccati alle mani del modello (`handPivot`), così restano nel pugno visibile. Le falde e
 la coda sono catene verlet che collidono con le sfere del corpo.
+
+## Modelli generati (Meshy)
+
+`import_generated.py` porta nel gioco un personaggio fatto da un generatore immagine→3D: la mesh e
+la texture del generatore restano com'erano. Aggiunge lo scheletro del gioco, trovato dalla forma
+(`rig_fit.py`), la T-pose, i pesi automatici calcolati su una copia rifatta a voxel e gli extras.
+Il flusso completo con l'API di Meshy (concept, modello, import) è in `tools/meshy/README.md`.
+
+```bash
+PY=/root/blender-venv/bin/python
+$PY tools/blender/import_generated.py --brief rex          # ultimo modello del lavoro Meshy "rex"
+$PY tools/blender/import_generated.py <model.glb> --height 1.87 --bulk 1.12 --glb <out.glb> --render <cartella>
+$PY tools/blender/standin_generated.py --out <cartella>/standin.glb --drop 12   # sostituto di prova
+```

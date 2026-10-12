@@ -10,8 +10,11 @@ import { rexAnims } from './rex';
 import type { ChampionVisual } from './types';
 
 /**
- * REX from public/models/rex.glb (tools/blender/build_rex.py): the sculpted model (SDF + hand
- * pass) on the 'heavy' skeleton, with the procedural model's HEADLINER, animations and sockets.
+ * REX from a GLB, with the procedural model's HEADLINER, animations and sockets:
+ * - public/models/rex.glb (?rex=glb, tools/blender/build_rex.py): the sculpted model (SDF + hand
+ *   pass) on the 'heavy' skeleton, flat colours per material;
+ * - public/models/generated/rex.glb (?rex=meshy, tools/meshy + tools/blender/import_generated.py):
+ *   the model made with Meshy, one textured material, bones on the Rig formula for its proportions.
  */
 const REX_GLB: GlbChampionConfig = {
   gripHands: ['R', 'L'],
@@ -31,6 +34,8 @@ const REX_GLB: GlbChampionConfig = {
     gear: { spec: 0.4, rim: 0.5 },
     neon: { neon: 2.8, outline: 0 },
     lens: { neon: 1.4, outline: 0.6 },
+    // the Meshy model: its colour map already carries the detail, the toon adds light and rim
+    generated: { rim: 0.4, rimCut: 0.66, spec: 0.12, specSize: 0.94 },
   },
 };
 
