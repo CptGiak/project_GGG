@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import type { Fighter } from '../game/Fighter';
+import { TINY_Y, type Fighter } from '../game/Fighter';
 import type { HitInfo, MatchContext } from '../game/types';
 import { neon, toon, addOutline } from '../render/toon';
 import { noteGeometry } from '../fighter/shapes';
 import { Shape } from '../vfx/Particles';
+import { makeBeehive, makeHoneyPot } from '../champions/pooh';
 
-export type ProjKind = 'bolt' | 'orb' | 'note' | 'grenade' | 'blade' | 'star';
+export type ProjKind = 'bolt' | 'orb' | 'note' | 'grenade' | 'blade' | 'star' | 'pot' | 'hive' | 'bat';
 
 export interface ProjectileSpec {
   owner: Fighter;
@@ -27,6 +28,10 @@ export interface ProjectileSpec {
   slow?: number;
   /** explode with this radius on impact / expiry (area damage) */
   explode?: number;
+  /** explosions: upward knockback at the centre (default 6) */
+  kbUp?: number;
+  /** explosions: the generic fireball, boom and camera shake (default true; false = onBurst draws it) */
+  blast?: boolean;
   headshots?: boolean;
   /** damage falloff with distance travelled: full up to `from` m, down to `min` at `to` m */
   falloff?: { from: number; to: number; min: number };
@@ -104,8 +109,13 @@ export function segSegDist2(p1: THREE.Vector3, q1: THREE.Vector3, p2: THREE.Vect
   return c1.distanceToSquared(c2);
 }
 
-/** Capsule of a fighter (world): returns endpoints */
+/** Capsule of a fighter (world): returns endpoints (a tiny shapeshifted fighter is a sphere) */
 export function capsule(f: Fighter, a: THREE.Vector3, b: THREE.Vector3): void {
+  if (f.tiny) {
+    a.set(f.pos.x, f.pos.y + TINY_Y, f.pos.z);
+    b.copy(a);
+    return;
+  }
   a.set(f.pos.x, f.pos.y + 0.45, f.pos.z);
   b.set(f.pos.x, f.pos.y + 1.5, f.pos.z);
 }
@@ -210,6 +220,47 @@ export class Projectiles {
       glow.userData = { tint: 1, k: 1.3 };
       g.add(star, glow);
       g.userData.twirl = 1;
+    } else if (kind === 'pot') {
+      // Pooh's HUNNY pot, tumbling end over end
+      g.add(makeHoneyPot());
+      g.userData.spin = 1;
+    } else if (kind === 'hive') {
+      g.add(makeBeehive());
+      g.userData.spin = 1;
+    } else if (kind === 'bat') {
+      // Elisabbat's bat: fuzzy body, two flapping wings, glowing eyes, a coloured haze
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), toon({ color: 0x2d1a3d, rim: 0.8 }));
+      body.scale.set(1, 0.9, 1.45);
+      addOutline(body, 1.4);
+      g.add(body);
+      const wingShape = new THREE.Shape();
+      wingShape.moveTo(0, 0.04);
+      wingShape.quadraticCurveTo(0.12, 0.08, 0.26, 0.02);
+      wingShape.quadraticCurveTo(0.2, -0.02, 0.2, -0.07);
+      wingShape.quadraticCurveTo(0.14, -0.04, 0.12, -0.1);
+      wingShape.quadraticCurveTo(0.07, -0.05, 0, -0.06);
+      wingShape.closePath();
+      const wingGeo = new THREE.ShapeGeometry(wingShape, 4);
+      wingGeo.rotateX(-Math.PI / 2);
+      wingGeo.scale(1.3, 1, 1.3);
+      const wingMat = toon({ color: 0x46216c, side: THREE.DoubleSide, rim: 0.6 });
+      for (const sx of [1, -1]) {
+        const wing = new THREE.Group();
+        wing.userData.flap = sx;
+        wing.position.x = sx * 0.05;
+        const m = new THREE.Mesh(wingGeo, wingMat);
+        m.scale.x = sx;
+        wing.add(m);
+        g.add(wing);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 4), neon(0xffffff, 2.6));
+        eye.position.set(sx * 0.028, 0.03, 0.095);
+        eye.userData = { tint: 2, k: 2.6 };
+        g.add(eye);
+      }
+      const haze = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), neon(0xffffff, 1.2, { additive: true, opacity: 0.12 }));
+      haze.userData = { tint: 1, k: 0.8 };
+      g.add(haze);
+      g.userData.bat = 1;
     } else {
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), toon({ color: 0x1b1622, spec: 0.6 }));
       addOutline(body, 1.6);
@@ -323,9 +374,13 @@ export class Projectiles {
       if (!p.dead && !worldHit) p.pos.copy(to);
       // visuals
       p.obj.position.copy(p.pos);
-      if (p.kind === 'bolt' || p.kind === 'note' || p.kind === 'blade') {
+      if (p.kind === 'bolt' || p.kind === 'note' || p.kind === 'blade' || p.kind === 'bat') {
         _n.copy(p.vel).normalize();
         if (_n.lengthSq() > 0) p.obj.quaternion.setFromUnitVectors(Z, _n);
+      }
+      if (p.obj.userData.bat) {
+        const flap = Math.sin(p.age * 34 + p.origin.x * 7);
+        for (const c of p.obj.children) if (c.userData.flap) c.rotation.z = c.userData.flap * (0.15 + flap * 0.9);
       }
       if (p.obj.userData.twirl) p.obj.rotation.y += dt * 24;
       p.obj.children.forEach((c) => {
@@ -334,7 +389,7 @@ export class Projectiles {
       if (p.obj.userData.spin) p.obj.rotation.x += dt * 10;
       // trail sparks
       if (p.kind !== 'grenade' && Math.random() < 0.8) {
-        m.vfx.add.emit({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.05), life: 0.2, size: p.kind === 'bolt' ? 0.12 : 0.16, size1: 0.02, color: p.color2 ?? p.color, shape: Shape.glow, alpha: 0.8 });
+        m.vfx.add.emit({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.05), life: 0.2, size: p.kind === 'bolt' ? 0.12 : p.kind === 'bat' ? 0.07 : 0.16, size1: 0.02, color: p.color2 ?? p.color, shape: Shape.glow, alpha: 0.8 });
       }
     }
     // cleanup
@@ -348,9 +403,11 @@ export class Projectiles {
 
   private detonate(p: Proj, m: MatchContext): void {
     const r = p.explode ?? 3;
-    m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
-    m.audio.play('explosion', p.pos, 0.9);
-    m.shake(0.25, p.pos);
+    if (p.blast !== false) {
+      m.vfx.explosion(p.pos, r, p.color, p.color2 ?? p.color);
+      m.audio.play('explosion', p.pos, 0.9);
+      m.shake(0.25, p.pos);
+    }
     p.onBurst?.(p.pos.clone());
     if (p.visualOnly || !m.isAuthority(p.owner)) return;
     for (const f of m.fighters) {
@@ -362,7 +419,7 @@ export class Projectiles {
       const core = p.corePart && d <= (p.coreRadius ?? 0) + CAPSULE_R;
       const fall = core ? 1 : THREE.MathUtils.clamp(1 - Math.max(0, d - 1) / (r + 0.5), 0.35, 1);
       const kb = _b.subVectors(_a, p.pos).setY(0).normalize().multiplyScalar((p.kb ?? 10) * fall);
-      kb.y = 6 * fall;
+      kb.y = (p.kbUp ?? 6) * fall;
       m.reportHit(p.owner, f, { slot: p.slot, part: core ? p.corePart! : p.part, scale: fall, kb: kb.clone(), stun: p.stun, slow: p.slow, at: _a.clone(), blockable: false });
       p.onHit?.(f);
     }

@@ -44,6 +44,16 @@ export interface ChampionVisual {
   offhandGrip: THREE.Object3D | null;
   /** muzzle / projectile spawn point */
   muzzle: THREE.Object3D | null;
+  /**
+   * Where the stock meets the shoulder, along the main weapon's barrel axis (weapon-local z, m):
+   * recoil kicks hinge there. Default -0.3.
+   */
+  stockZ?: number;
+  /**
+   * Kit -> model cues for prop / weapon detail animation that is not a bone pose: a shot pumps
+   * the speaker rings, a charge spins the drum ('shot', 'charge' with a 0..1 level, ...).
+   */
+  cue?(id: string, value?: number): void;
   /** every toon material of the model (hit flash, dissolve) */
   materials: THREE.Material[];
   /** called every frame for champion-specific idle effects (weapon glow, floating rings...) */
@@ -51,6 +61,10 @@ export interface ChampionVisual {
   anims: ChampionAnimSet;
   /** tints the weapon glow (element enchantments...), null = back to normal */
   weaponGlow?(color: THREE.ColorRepresentation | null): void;
+  /** shows or hides a named prop of the model (Pooh's throwing pot...) */
+  prop?(name: string, on: boolean): void;
+  /** sees every animation event of its clips first (facial swaps such as Pooh shutting his eyes) */
+  onAnimEvent?(ev: string): void;
   /**
    * Scales the positional parts of the animations (weapon targets, hip offsets) when a body
    * uses the clips of a champion with different proportions (imported models). Default 1.

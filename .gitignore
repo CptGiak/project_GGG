@@ -17,6 +17,9 @@ tools/blender/lol/_cache/
 # League of Legends renders (derived from Riot assets): local only
 docs/art/lol/
 
+# listening previews rendered by .claude/skills/game-sfx/scripts/render.mjs
+audio-previews/
+
 # Meshy client (tools/meshy): job folders are committed (paid outputs, kept 3 days by Meshy);
 # test-key runs and partial downloads are not
 tools/meshy/jobs/*_test/

@@ -1,9 +1,11 @@
 import type { ChampionId } from '../../../shared/champions';
 import type { Kit } from '../../game/types';
 import { AkaliKit } from './akaliKit';
+import { ElisabbatKit } from './elisabbatKit';
 import { KaiserKit } from './kaiserKit';
 import { LockeKit } from './lockeKit';
 import { NovaKit } from './novaKit';
+import { PoohKit } from './poohKit';
 import { QiyanaKit } from './qiyanaKit';
 import { RexKit } from './rexKit';
 import { SeraKit } from './seraKit';
@@ -22,6 +24,10 @@ export function createKit(id: ChampionId): Kit {
       return new QiyanaKit();
     case 'locke':
       return new LockeKit();
+    case 'pooh':
+      return new PoohKit();
+    case 'elisabbat':
+      return new ElisabbatKit();
     case 'kaiser':
     default:
       return new KaiserKit();

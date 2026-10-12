@@ -361,6 +361,7 @@ export class OnlineSession implements NetBridge {
         if (m && m.state !== 'ended') {
           m.state = 'ended';
           m.celebrate(msg.winner ? m.getFighter(msg.winner) ?? null : null);
+          m.audio.matchEnd(msg.winner === this.myId);
         }
         this.onEnd?.(msg.winner, msg.players, msg.next);
         break;
